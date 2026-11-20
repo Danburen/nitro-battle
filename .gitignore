@@ -158,4 +158,13 @@ vite.config.ts.timestamp-*
 
 # qoder
 *.qoder.site
-*.idea/
+
+# code-ide
+.idea/
+.vscode/
+
+# agent
+.ai/
+.codegraph/
+.omo/
+.mcp-playwright/
