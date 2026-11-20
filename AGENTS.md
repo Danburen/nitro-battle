@@ -1,11 +1,11 @@
 # AGENTS.md · Nitro Battle
 
-项目上下文见 `.ai/`（先读 `.ai/README.md`）。以下为硬约束，冲突时以 `.ai/CONVENTIONS.md` 为准。
+项目上下文见 `.ai/PROJECT.md`（唯一协作文档）。以下为硬约束，冲突时以 `.ai/PROJECT.md` 为准。
 
 ## 开发前
 
-- 动跨模块代码前读 `.ai/ARCHITECTURE.md`；改玩法前读 `.ai/PROJECT.md`。
-- 桌面化（Electron）相关决策见 `.ai/ELECTRON.md`，不要另起方案。
+- 动跨模块代码或改玩法前先读 `.ai/PROJECT.md`（架构、约定、Electron 评估都在其中）。
+- 桌面化（Electron）相关决策见 `.ai/PROJECT.md` §8，不要另起方案。
 
 ## 不可破坏的约束
 
@@ -20,11 +20,12 @@
 
 ```bash
 npm run typecheck
+npm run lint
 npm test
 npm run build
 ```
 
-当前基线：`typecheck` 通过，`node --test` 226 个用例全绿（2026-11-21）。
+当前基线：`typecheck` 通过，`lint` 0 问题，`node --test` 226 个用例全绿（2026-11-21）。
 
 ## 文档同步
 

@@ -48,7 +48,7 @@ export function escapeHtml(value: string): string {
 }
 
 export function escapeGameText(value: string): string {
-    return value.replace(/[\\\[]/g, "\\$&");
+    return value.replace(/[\\[]/g, "\\$&");
 }
 
 export function textToken(key: TextKey, value?: number | string): string {

@@ -264,7 +264,8 @@ function harness(t: TestContext, state = fixture()) {
     const ctx = new Proxy(properties, {
         get: (target, key) => target[key as string] ?? (() => {}),
     }) as unknown as CanvasRenderingContext2D;
-    type Listener = (event: any) => void;
+    type TestEvent = { type: string } & Record<string, unknown>;
+    type Listener = (event: TestEvent) => void;
     const eventHub = () => {
         const handlers = new Map<string, Set<Listener>>();
         return {
@@ -274,7 +275,7 @@ function harness(t: TestContext, state = fixture()) {
                 handlers.get(name)!.add(fn);
             },
             removeEventListener(name: string, fn: Listener) { handlers.get(name)?.delete(fn); },
-            dispatchEvent(event: { type: string }) {
+            dispatchEvent(event: TestEvent) {
                 for (const fn of handlers.get(event.type) ?? []) fn(event);
                 return true;
             },
@@ -332,7 +333,7 @@ function harness(t: TestContext, state = fixture()) {
     const documentEvents = eventHub();
     const windowEvents = eventHub();
     const mapRequests: MapTooltipRequest[] = [];
-    documentEvents.addEventListener(MAP_TOOLTIP_EVENT, (event: CustomEvent<MapTooltipRequest>) => mapRequests.push(event.detail));
+    documentEvents.addEventListener(MAP_TOOLTIP_EVENT, (event) => mapRequests.push(event.detail as MapTooltipRequest));
     let pointTarget: TestElement | null = canvasElement;
     let frame: FrameRequestCallback;
     let resize: () => void;
