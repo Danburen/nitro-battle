@@ -954,8 +954,9 @@ test("province and nation names are escaped; intel keeps ownership, claims, defe
     province.coreNation = -1;
     province.garrison = 13;
     province.garrisonMax = 79;
-    h.state.nations[1].name = '[[hostile]] <script>bad()</script>';
-    h.state.states[0].name = '[[industry]] <b>State</b>';
+    // 名称在类型上是只读的；测试故意改写以验证渲染转义。
+    (h.state.nations[1] as unknown as { name: string }).name = '[[hostile]] <script>bad()</script>';
+    (h.state.states[0] as unknown as { name: string }).name = '[[industry]] <b>State</b>';
     h.state.claims.push({ nation: 1, stateId: 0 }, { nation: 0, stateId: 1 });
     h.renderer.setMapMode("province");
     h.renderer.camera.centerOn(50, 200);

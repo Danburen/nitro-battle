@@ -65,7 +65,7 @@ test("profiles, malformed commands and insufficient PP are validated without fee
         assert.equal(claimState(core, 0, bad), false);
         assert.equal(canDeclareWar(state, 0, bad), false);
     }
-    for (const kind of ["unknown", "toString", "__proto__", "frontier"] as DiplomaticActionKind[]) {
+    for (const kind of ["unknown", "toString", "__proto__", "frontier"] as unknown as DiplomaticActionKind[]) {
         assert.equal(prepareDiplomaticAction(core, 0, kind, target, region.id), false);
     }
     assert.equal(prepareDiplomaticAction(core, 0, "annex", target, region.id), false);

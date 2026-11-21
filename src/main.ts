@@ -5,12 +5,18 @@ import { MapRenderer } from "./render/renderer.ts";
 import { GameUI } from "./ui/index.ts";
 import { mountLayout } from "./ui/layout.ts";
 import { SoundManager } from "./audio.ts";
+import { desktop } from "./desktop.ts";
 import { initGuide } from "./guide.ts";
 import type { MapSizeId } from "./game/types.ts";
 import { armyAt, isHostileProvince, marchPath } from "./game/rules.ts";
 
 const app = document.querySelector<HTMLDivElement>("#app") as HTMLDivElement;
 mountLayout(app);
+
+if (desktop) {
+    document.documentElement.classList.add("is-desktop");
+    document.documentElement.dataset.platform = desktop.platform;
+}
 
 const sound = new SoundManager();
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas") as HTMLCanvasElement;

@@ -93,6 +93,19 @@ body {
     height: 100dvh;
 }
 
+/* 桌面端（Electron）：禁掉滚动回弹与整页拖拽选择，输入框仍可选。 */
+html.is-desktop body {
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+html.is-desktop input,
+html.is-desktop textarea {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 button {
     font-family: inherit;
 }

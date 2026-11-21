@@ -1,0 +1,52 @@
+# electron-builder 配置：只打包 dist/ + electron/，不带 node_modules，安装包尽量小。
+appId: com.nitrobattle.app
+productName: Nitro Battle
+copyright: Copyright © 2026 Nitro Battle
+
+directories:
+  output: release
+  buildResources: build
+
+# 运行时只需外壳脚本与前端产物；package.json 提供 main 入口与版本号。
+files:
+  - electron/**/*
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.md"
+
+asar: true
+compression: maximum
+# 只保留中文与英文语言包，砍掉其余 Electron 本地化资源（约省 10 MB+）。
+electronLanguages:
+  - zh-CN
+  - en-US
+publish: null
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nitro Battle
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.strategy-games
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+  category: Game
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
