@@ -559,7 +559,7 @@ test("seeded worlds start with capped farms/factories, capital admin, infra1 and
     }
 });
 
-test("standard 1000-cell world completes construction across 24 real AI turns", () => {
+test("standard 1500-cell world completes construction across 24 real AI turns", () => {
     const core = GameEngine.create(2026, "standard", 4);
     let completed = 0;
     core.subscribe((event) => { if (event.type === "build") completed++; });
@@ -571,7 +571,7 @@ test("standard 1000-cell world completes construction across 24 real AI turns", 
             assert.ok(region.infrastructure <= 8);
         }
     }
-    assert.equal(core.state.provinces.length, 1000);
+    assert.equal(core.state.provinces.length, 1500);
     assert.equal(core.state.day, 25);
     assert.ok(completed > 0);
 });

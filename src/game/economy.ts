@@ -1,8 +1,7 @@
 import {
-    BUILDING_PROFILES, CONSCRIPTION_POLICIES, ECONOMY_POLICIES,
-    FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, INDUSTRY_BASE_CAP, INDUSTRY_CAP_PER_CITY,
+    BUILDING_PROFILES, FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, INDUSTRY_BASE_CAP, INDUSTRY_CAP_PER_CITY,
     INFRASTRUCTURE_MAX, MANPOWER_BASE_CAP, MANPOWER_CAP_PER_POP, NEUTRAL,
-    OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN, OCCUPATION_POLICIES, PP_CAP,
+    OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN, PP_CAP,
     STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS,
     SUPPLY_RANGE_CAPITAL, SUPPLY_RANGE_CITY, SUPPLY_RANGE_CENTER, UNIT_PROFILES, UnitKind,
 } from "./types.ts";
@@ -10,25 +9,12 @@ import type {
     BuildingKind, ConstructionOrder, GameState, Nation, PolicyModifiers, Province,
     ProvinceBuildingKind, StateBuildingKind, StateRegion,
 } from "./types.ts";
+import { policyModifiers } from "./policy.ts";
 
 export function occupationFactor(province: Province, nationId: number): number {
     if (province.owner !== nationId) return 0;
     if (province.coreNation === nationId) return 1;
     return OCCUPATION_FACTOR_MIN + (1 - OCCUPATION_FACTOR_MIN) * (province.occupation / 100);
-}
-
-export function policyModifiers(nation: Nation): PolicyModifiers {
-    const economy = ECONOMY_POLICIES[nation.policies.economy];
-    const conscription = CONSCRIPTION_POLICIES[nation.policies.conscription];
-    const occupation = OCCUPATION_POLICIES[nation.policies.occupation];
-    return {
-        fundsMult: economy.fundsMult * conscription.fundsMult,
-        industryMult: economy.industryMult,
-        manpowerMult: conscription.manpowerMult,
-        growthMult: occupation.growthMult * conscription.growthMult,
-        occupiedIncomeMult: occupation.occupiedIncomeMult,
-        ppModifier: occupation.ppModifier,
-    };
 }
 
 function clampInfrastructure(level: number): number {
@@ -202,12 +188,36 @@ export interface ResourceRates {
     industryCap: number;
 }
 
-export function resourceRates(state: GameState, nationId: number): ResourceRates {
+/** Per-source totals before policy multipliers, shared by rates and hover breakdowns. */
+interface EconomyTotals {
+    mods: PolicyModifiers;
+    provinceIncome: number;
+    farmFunds: number;
+    factoryFunds: number;
+    infrastructureFunds: number;
+    manpowerPopulation: number;
+    manpowerFarm: number;
+    industryCities: number;
+    industryFactory: number;
+    industryInfrastructure: number;
+    upkeep: number;
+    adminActive: number;
+    effectivePopulation: number;
+    effectiveCities: number;
+}
+
+function economyTotals(state: GameState, nationId: number): EconomyTotals {
     const nation = state.nations[nationId];
-    const mods = policyModifiers(nation);
-    let fundsGross = 0;
-    let manpower = 0;
-    let industry = 0;
+    const mods = policyModifiers(nation, state.day);
+    let provinceIncome = 0;
+    let farmFunds = 0;
+    let factoryFunds = 0;
+    let infrastructureFunds = 0;
+    let manpowerPopulation = 0;
+    let manpowerFarm = 0;
+    let industryCities = 0;
+    let industryFactory = 0;
+    let industryInfrastructure = 0;
     let effectivePopulation = 0;
     let effectiveCities = 0;
     let adminActive = 0;
@@ -216,9 +226,9 @@ export function resourceRates(state: GameState, nationId: number): ResourceRates
         if (province.owner !== nationId) continue;
         const factor = occupationFactor(province, nationId);
         const occupiedMult = province.coreNation === nationId ? 1 : mods.occupiedIncomeMult;
-        fundsGross += province.income * factor * occupiedMult;
-        manpower += province.population * 0.5 * factor;
-        industry += ((province.isCity ? 3 : 0) + (province.isCapital ? 2 : 0)) * factor;
+        provinceIncome += province.income * factor * occupiedMult;
+        manpowerPopulation += province.population * 0.5 * factor;
+        industryCities += ((province.isCity ? 3 : 0) + (province.isCapital ? 2 : 0)) * factor;
         effectivePopulation += province.population * factor;
         effectiveCities += (province.isCity ? 1 : 0) * factor;
     }
@@ -229,38 +239,104 @@ export function resourceRates(state: GameState, nationId: number): ResourceRates
         const factor = occupationFactor(center, nationId);
         const occupiedMult = center.coreNation === nationId ? 1 : mods.occupiedIncomeMult;
         const farms = buildingCount(region, "farm");
-        const production = region.prodFactories * infrastructureOutputMultiplier(infrastructureLevel(state, region.center));
-        fundsGross += (farms * 2 + production * FACTORY_PROD_FUNDS) * factor * occupiedMult;
-        manpower += farms * 0.5 * factor;
-        industry += production * FACTORY_PROD_INDUSTRY * factor;
+        const output = infrastructureOutputMultiplier(infrastructureLevel(state, region.center));
+        const production = region.prodFactories * output;
+        const baseline = region.prodFactories;
+        farmFunds += farms * 2 * factor * occupiedMult;
+        factoryFunds += baseline * FACTORY_PROD_FUNDS * factor * occupiedMult;
+        infrastructureFunds += (production - baseline) * FACTORY_PROD_FUNDS * factor * occupiedMult;
+        manpowerFarm += farms * 0.5 * factor;
+        industryFactory += baseline * FACTORY_PROD_INDUSTRY * factor;
+        industryInfrastructure += (production - baseline) * FACTORY_PROD_INDUSTRY * factor;
         if (region.buildings.includes("admin") && (center.coreNation === nationId || center.occupation >= 50)) adminActive++;
     }
 
-    fundsGross *= mods.fundsMult;
-    manpower *= mods.manpowerMult;
-    industry *= mods.industryMult;
     let upkeep = 0;
     for (const army of state.armies.values()) {
         if (army.nation !== nationId) continue;
         for (const regiment of army.regiments) upkeep += UNIT_PROFILES[regiment.kind].upkeep;
     }
+
     return {
-        fundsGross, upkeep, fundsNet: fundsGross - upkeep, manpower, industry,
-        politicalPower: 2 + adminActive + mods.ppModifier,
-        manpowerCap: MANPOWER_BASE_CAP + MANPOWER_CAP_PER_POP * effectivePopulation,
-        industryCap: INDUSTRY_BASE_CAP + INDUSTRY_CAP_PER_CITY * effectiveCities,
+        mods, provinceIncome, farmFunds, factoryFunds, infrastructureFunds,
+        manpowerPopulation, manpowerFarm, industryCities, industryFactory, industryInfrastructure,
+        upkeep, adminActive, effectivePopulation, effectiveCities,
     };
+}
+
+export function resourceRates(state: GameState, nationId: number): ResourceRates {
+    const totals = economyTotals(state, nationId);
+    const fundsGross = (totals.provinceIncome + totals.farmFunds + totals.factoryFunds
+        + totals.infrastructureFunds) * totals.mods.fundsMult;
+    const manpower = (totals.manpowerPopulation + totals.manpowerFarm) * totals.mods.manpowerMult;
+    const industry = (totals.industryCities + totals.industryFactory
+        + totals.industryInfrastructure) * totals.mods.industryMult;
+    return {
+        fundsGross, upkeep: totals.upkeep, fundsNet: fundsGross - totals.upkeep, manpower, industry,
+        politicalPower: 2 + totals.adminActive + totals.mods.ppModifier,
+        manpowerCap: MANPOWER_BASE_CAP + MANPOWER_CAP_PER_POP * totals.effectivePopulation,
+        industryCap: INDUSTRY_BASE_CAP + INDUSTRY_CAP_PER_CITY * totals.effectiveCities,
+    };
+}
+
+/** Hover-detail breakdown: each source before policy multipliers, then the multiplier and net values. */
+export interface ResourceBreakdown {
+    funds: {
+        provinces: number; farms: number; factories: number; infrastructure: number;
+        policyMult: number; upkeep: number; net: number;
+    };
+    manpower: { population: number; farms: number; policyMult: number; total: number; cap: number };
+    industry: { cities: number; factories: number; infrastructure: number; policyMult: number; total: number; cap: number };
+    political: { base: number; admin: number; policy: number; total: number };
+}
+
+export function resourceBreakdown(state: GameState, nationId: number): ResourceBreakdown {
+    const totals = economyTotals(state, nationId);
+    return {
+        funds: {
+            provinces: totals.provinceIncome,
+            farms: totals.farmFunds,
+            factories: totals.factoryFunds,
+            infrastructure: totals.infrastructureFunds,
+            policyMult: totals.mods.fundsMult,
+            upkeep: totals.upkeep,
+            net: (totals.provinceIncome + totals.farmFunds + totals.factoryFunds
+                + totals.infrastructureFunds) * totals.mods.fundsMult - totals.upkeep,
+        },
+        manpower: {
+            population: totals.manpowerPopulation,
+            farms: totals.manpowerFarm,
+            policyMult: totals.mods.manpowerMult,
+            total: (totals.manpowerPopulation + totals.manpowerFarm) * totals.mods.manpowerMult,
+            cap: MANPOWER_BASE_CAP + MANPOWER_CAP_PER_POP * totals.effectivePopulation,
+        },
+        industry: {
+            cities: totals.industryCities,
+            factories: totals.industryFactory,
+            infrastructure: totals.industryInfrastructure,
+            policyMult: totals.mods.industryMult,
+            total: (totals.industryCities + totals.industryFactory + totals.industryInfrastructure)
+                * totals.mods.industryMult,
+            cap: INDUSTRY_BASE_CAP + INDUSTRY_CAP_PER_CITY * totals.effectiveCities,
+        },
+        political: {
+            base: 2,
+            admin: totals.adminActive,
+            policy: totals.mods.ppModifier,
+            total: 2 + totals.adminActive + totals.mods.ppModifier,
+        },
+    };
+}
+
+export function occupationGrowth(state: GameState, province: Province, nationId: number): number {
+    if (province.coreNation === nationId) return 0;
+    return OCCUPATION_BASE_GROWTH * policyModifiers(state.nations[nationId], state.day).growthMult;
 }
 
 export function clampResources(nation: Nation, rates: ResourceRates): void {
     nation.manpower = Math.min(nation.manpower, rates.manpowerCap);
     nation.industry = Math.min(nation.industry, rates.industryCap);
     nation.politicalPower = Math.min(nation.politicalPower, PP_CAP);
-}
-
-export function occupationGrowth(state: GameState, province: Province, nationId: number): number {
-    if (province.coreNation === nationId) return 0;
-    return OCCUPATION_BASE_GROWTH * policyModifiers(state.nations[nationId]).growthMult;
 }
 
 export function economicValue(state: GameState, province: Province): number {

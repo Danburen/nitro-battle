@@ -10,6 +10,9 @@ import { BIOME_ZH, ownerColor, ownerName } from "../common.ts";
 import { BIOME_PROFILES } from "../../terrain/biome.ts";
 import { escapeGameText, escapeHtml as escapeText, renderGameText, signClass, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
+import { panelHead } from "../panel.ts";
+
+const INTEL_TIP = `点击地图查询省份或州。\n省份：地形、城市防御、通行、天气、[[supply]]水平、控制国与正式归属、[[occupation]]进度、驻军军团与省份设施。\n州：州中心、控制范围、[[factory]]/[[farm]]/[[infrastructure]]/[[admin]]建筑容量与增益。\n带 i 或「地区修正」按钮可查看详细修正，建筑图标上悬停显示产量与建造条件。`;
 
 function infrastructureEffects(level: number): string {
     return `产出系数 ×${infrastructureOutputMultiplier(level).toFixed(2)}\n[[construction]]系数 ×${infrastructureBuildMultiplier(level).toFixed(2)}\n[[movement]]成本系数 ×${infrastructureMoveMultiplier(level).toFixed(2)}\n[[supply]]系数 ×${infrastructureSupplyMultiplier(level).toFixed(2)}`;
@@ -27,8 +30,7 @@ export class IntelPanel {
         const state = this.engine.state;
         const site = state.selected;
         if (site === null) {
-            this.el.innerHTML = `
-                <div class="panel-head"><h2>${mode === "state" ? "州情报" : "省份"}</h2></div>
+            this.el.innerHTML = `${panelHead({ title: mode === "state" ? "州情报" : "省份", help: { title: "情报面板", body: INTEL_TIP } })}
                 <div class="panel-body empty-hint">${renderGameText(`点击地图查看${mode === "state" ? "州" : "省份"}。左上「建造」管理州属[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]与省份[[supply]]中心、[[fort]]；点击军团接管指挥。`)}</div>`;
             return;
         }
@@ -49,7 +51,11 @@ export class IntelPanel {
             const region = state.states[province.stateId];
             const center = state.provinces[region.center];
             this.el.innerHTML = `
-                <div class="panel-head"><h2>州情报</h2><span class="owner-pill" style="--pc:${escapeText(ownerColor(state, center.owner))}">${escapeText(ownerName(state, center.owner))}</span></div>
+                ${panelHead({
+                    title: "州情报",
+                    help: { title: "情报面板", body: INTEL_TIP },
+                    extras: `<span class="owner-pill" style="--pc:${escapeText(ownerColor(state, center.owner))}">${escapeText(ownerName(state, center.owner))}</span>`,
+                })}
                 <div class="panel-body">
                     <div class="prov-title">${escapeText(region.name)}<span class="prov-kind">${region.provinces.length} 省</span></div>
                     <div class="intel-selection"><span>选中省份：${escapeText(province.name)} · 控制国：${escapeText(ownerName(state, province.owner))} · 正式归属：${escapeText(ownerName(state, province.legalOwner))}</span>${this.modifiersHtml(province)}</div>
@@ -84,7 +90,11 @@ export class IntelPanel {
             </div>` : "";
 
         this.el.innerHTML = `
-            <div class="panel-head"><h2>省份</h2><span class="owner-pill" style="--pc:${escapeText(color)}">${escapeText(ownerName(state, province.owner))}</span></div>
+            ${panelHead({
+                title: "省份",
+                help: { title: "情报面板", body: INTEL_TIP },
+                extras: `<span class="owner-pill" style="--pc:${escapeText(color)}">${escapeText(ownerName(state, province.owner))}</span>`,
+            })}
             <div class="panel-body">
                 <div class="prov-title">${escapeText(province.name)}<span class="prov-kind">${kindLabel}</span></div>
                 <div class="tag-row">

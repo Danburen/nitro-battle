@@ -420,7 +420,7 @@ export function cellFillColor(map: BiomeMap, site: number, season = -1): string 
     return `rgb(${rgb[0] | 0}, ${rgb[1] | 0}, ${rgb[2] | 0})`;
 }
 
-/** Fill Voronoi cells with their biome color, shaded by elevation. */
+/** Fill Voronoi cells with their biome color, shaded by elevation. The range allows frame-sliced rebuilds. */
 export function drawBiomes(
     ctx: CanvasRenderingContext2D,
     graph: VoronoiGraph,
@@ -428,8 +428,11 @@ export function drawBiomes(
     width: number,
     height: number,
     season = -1,
+    from = 0,
+    to = graph.cells.length,
 ): void {
-    for (const cell of graph.cells) {
+    for (let index = from; index < to; index++) {
+        const cell = graph.cells[index];
         if (!cell.bounded) continue;
 
         ctx.fillStyle = cellFillColor(map, cell.site, season);

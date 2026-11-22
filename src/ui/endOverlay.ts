@@ -1,5 +1,5 @@
 import type { GameEngine } from "../game/engine.ts";
-import type { SoundManager } from "../audio.ts";
+import type { SoundManager } from "../audio/index.ts";
 import { nationProvinceCount } from "../game/rules.ts";
 
 /** Victory / defeat overlay with campaign statistics. */

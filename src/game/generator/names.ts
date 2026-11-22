@@ -184,6 +184,7 @@ const NAME_MAX = 5;
 const TEMPLATE_ATTEMPTS = 24;
 const POOL_SIZE = 64;
 const POOL_REBUILDS = 6;
+const NATION_SUFFIXES = ["联邦", "帝国", "共和国", "公国", "王国", "汗国", "同盟", "自治领"] as const;
 
 interface MarkovModel {
     starts: string[];
@@ -251,6 +252,24 @@ export class NameGenerator {
 
     regionName(culture: number, terrain: TerrainClass): string {
         return this.generate(culture, terrain, NAME_MIN, NAME_MAX - 1, "州");
+    }
+
+    /** Random polity name: culture-flavored stem plus a government suffix, unique per world. */
+    nationName(): string {
+        for (let attempt = 0; attempt < TEMPLATE_ATTEMPTS * 2; attempt++) {
+            const culture = CULTURES[this.rand.nextInt(0, CULTURES.length)];
+            const stem = culture.prefixes[this.rand.nextInt(0, culture.prefixes.length)] +
+                culture.roots[this.rand.nextInt(0, culture.roots.length)];
+            const suffix = NATION_SUFFIXES[this.rand.nextInt(0, NATION_SUFFIXES.length)];
+            if (this.accept(stem + suffix, 4, 9)) return stem + suffix;
+        }
+        for (let index = 1; index < 1000; index++) {
+            const fallback = `新邦${index}`;
+            if (this.accept(fallback, 2, 9)) return fallback;
+        }
+        const fallback = `新邦${this.used.size + 1}`;
+        this.used.add(fallback);
+        return fallback;
     }
 
     private generate(culture: number, terrain: TerrainClass, min: number, max: number, tail: string): string {

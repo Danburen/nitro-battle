@@ -3,6 +3,9 @@ import { battleForecast } from "../../game/battle.ts";
 import { armyCap, armyMp, nationArmyCount, redeployTargets, regimentHp } from "../../game/rules.ts";
 import { MAX_HP, ORG_MAX, REGIMENT_CAP, UNIT_PROFILES } from "../../game/types.ts";
 import { orgClass, orgPct, statusPill } from "../common.ts";
+import { panelHead } from "../panel.ts";
+
+const ARMY_DETAIL_TIP = `勾选团后点击拆分编组，新军团进驻相邻空省；合并需移动到友军省份，或在右侧军团列表 Ctrl+多选后合并。\n组织度每日按[[supply]]恢复，低于 15 溃退；欠饷会降低全军组织度。\n进攻相邻敌军省份前需先宣战；按钮上的战力对比按攻击/防御与地形估算。\n战略转移将未行动军团撤往后方；待命结束本回合行动。\n解散军团后所属团复员，无法恢复。`;
 
 /** Per-regiment command window (top-left, command mode only). */
 export class ArmyDetailPanel {
@@ -74,11 +77,11 @@ export class ArmyDetailPanel {
         }).join("");
 
         this.el.innerHTML = `
-            <div class="panel-head">
-                <h2>${army.name}</h2>
-                ${statusPill(state, army, false)}
-                <button class="detail-close" data-action="detail-close" title="关闭详情" aria-label="关闭详情">✕</button>
-            </div>
+            ${panelHead({
+                title: army.name,
+                help: { title: "指挥窗口", body: ARMY_DETAIL_TIP },
+                extras: `${statusPill(state, army, false)}<button class="detail-close" data-action="detail-close" title="关闭详情" aria-label="关闭详情">✕</button>`,
+            })}
             <div class="panel-body">
                 <div class="detail-org">
                     <span class="org-v big ${orgClass(army.org)}" title="组织度 ${Math.round(army.org)}/${ORG_MAX}"><i style="height:${orgPct(army.org)}%"></i></span>

@@ -9,12 +9,12 @@ import type { Vec2 } from "../terrain/voronoi/index.ts";
 import { claimableStateIds, isAtWar, stateSummary } from "../game/diplomacy.ts";
 import { pathTo } from "../game/rules.ts";
 import { BUILDING_PROFILES, MAX_HP, NEUTRAL, NEUTRAL_COLOR } from "../game/types.ts";
-import type { Army, BuildingKind, EngineEvent, UnitKind } from "../game/types.ts";
+import type { Army, BuildingKind, EngineEvent, Province, UnitKind } from "../game/types.ts";
 import type { GameEngine } from "../game/engine.ts";
 import { Camera } from "./camera.ts";
 import { buildConstructionOverlay, PROVINCE_CAPACITY_MIN_ZOOM } from "./constructionOverlay.ts";
 import type { ConstructionOverlay } from "./constructionOverlay.ts";
-import { drawTerrainDecor, drawTerrainDecorCell } from "./terrainDecor.ts";
+import { drawTerrainDecorCell } from "./terrainDecor.ts";
 import { BIOME_ZH, garrisonRelation, ownerName } from "../ui/common.ts";
 import { chipToken, escapeGameText, textToken } from "../ui/text.ts";
 import { MAP_TOOLTIP_DISMISS_EVENT, MAP_TOOLTIP_EVENT } from "../ui/tooltip.ts";
@@ -65,8 +65,11 @@ export class MapRenderer {
     private readonly canvas: HTMLCanvasElement;
     private readonly ctx: CanvasRenderingContext2D;
     private readonly engine: GameEngine;
-    private readonly base: HTMLCanvasElement;
-    private readonly baseCtx: CanvasRenderingContext2D;
+    private base: HTMLCanvasElement;
+    private baseCtx: CanvasRenderingContext2D;
+    private spare: HTMLCanvasElement;
+    private spareCtx: CanvasRenderingContext2D;
+    private baseBuild: Generator<void, void, void> | null = null;
     private readonly onCellClick: (site: number) => void;
 
     private currentMapMode: MapMode = "province";
@@ -143,6 +146,10 @@ export class MapRenderer {
         this.base.width = width;
         this.base.height = height;
         this.baseCtx = this.base.getContext("2d") as CanvasRenderingContext2D;
+        this.spare = document.createElement("canvas");
+        this.spare.width = width;
+        this.spare.height = height;
+        this.spareCtx = this.spare.getContext("2d") as CanvasRenderingContext2D;
         this.lastSeason = engine.state.seasonIndex;
 
         this.unsubscribe = engine.subscribe((event) => this.onEngineEvent(event));
@@ -304,6 +311,18 @@ export class MapRenderer {
         const point = this.engine.state.graph.sites[site];
         this.camera.centerOn(point.x, point.y);
         this.camera.zoom = Math.max(this.camera.zoom, 1.4);
+    }
+
+    public isSiteVisible(site: number): boolean {
+        if (this.viewW <= 0 || this.viewH <= 0) return true;
+        const point = this.engine.state.graph.sites[site];
+        const delta = periodicDelta(
+            { x: this.camera.x, y: this.camera.y },
+            point,
+            this.engine.state.graph.domain,
+        );
+        return Math.abs(delta.x) <= this.viewW / (2 * this.camera.zoom) &&
+            Math.abs(delta.y) <= this.viewH / (2 * this.camera.zoom);
     }
 
     zoomBy(factor: number): void {
@@ -688,38 +707,117 @@ export class MapRenderer {
 
     // ---- base layer ----
 
-    private rebuildBase(): void {
-        const { graph, terrain, provinces } = this.engine.state;
+    /** Frame slices stay small enough to keep input and combat FX responsive. */
+    private static readonly BASE_BUDGET_MS = 4;
+    private static readonly CELL_CHUNK = 24;
+    private static readonly PROVINCE_CHUNK = 32;
+
+    private beginBaseRebuild(): void {
+        this.baseDirty = false;
+        this.dirtySites.clear();
+        this.baseBuild = this.rebuildBaseSteps(this.spareCtx);
+    }
+
+    /** Advance the staged rebuild within a frame budget; swap buffers only when complete. */
+    private advanceBaseRebuild(): void {
+        if (!this.baseBuild) return;
+        const deadline = performance.now() + MapRenderer.BASE_BUDGET_MS;
+        do {
+            if (this.baseBuild.next().done) {
+                this.baseBuild = null;
+                const base = this.base;
+                this.base = this.spare;
+                this.spare = base;
+                const ctx = this.baseCtx;
+                this.baseCtx = this.spareCtx;
+                this.spareCtx = ctx;
+                this.frontlineDirty = true;
+                return;
+            }
+        } while (performance.now() < deadline);
+    }
+
+    private *rebuildBaseSteps(ctx: CanvasRenderingContext2D): Generator<void, void, void> {
+        const { graph, terrain, provinces, seasonIndex } = this.engine.state;
         const { width, height } = graph.domain;
-        const ctx = this.baseCtx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, width, height);
 
-        drawBiomes(ctx, graph, terrain, width, height, this.engine.state.seasonIndex);
+        for (let from = 0; from < graph.cells.length; from += MapRenderer.CELL_CHUNK) {
+            drawBiomes(ctx, graph, terrain, width, height, seasonIndex, from, Math.min(graph.cells.length, from + MapRenderer.CELL_CHUNK));
+            yield;
+        }
+
         if (this.currentMapMode === "state") {
-            // Opaque political fills replace land terrain, but leave the sea intact.
-            this.drawStateLand(ctx);
+            for (let from = 0; from < provinces.length; from += MapRenderer.PROVINCE_CHUNK) {
+                const to = Math.min(provinces.length, from + MapRenderer.PROVINCE_CHUNK);
+                for (let i = from; i < to; i++) this.paintStateProvince(ctx, provinces[i]);
+                yield;
+            }
+            this.drawClaimLand(ctx);
         } else {
-            drawTerrainDecor(ctx, graph, terrain);
-            for (const province of provinces) {
-                if (province.owner === NEUTRAL || !terrain.passable[province.site]) continue;
-                const cell = graph.cells[province.site];
-                if (!cell.bounded) continue;
-                ctx.globalAlpha = this.tintAlpha();
-                ctx.fillStyle = this.engine.state.nations[province.owner].color;
-                fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+            ctx.save();
+            ctx.globalAlpha = 0.8;
+            for (let from = 0; from < graph.cells.length; from += MapRenderer.CELL_CHUNK) {
+                const to = Math.min(graph.cells.length, from + MapRenderer.CELL_CHUNK);
+                for (let i = from; i < to; i++) drawTerrainDecorCell(ctx, graph, terrain, graph.cells[i].site);
+                yield;
+            }
+            ctx.restore();
+            for (let from = 0; from < provinces.length; from += MapRenderer.PROVINCE_CHUNK) {
+                const to = Math.min(provinces.length, from + MapRenderer.PROVINCE_CHUNK);
+                for (let i = from; i < to; i++) this.paintProvinceTint(ctx, provinces[i]);
+                yield;
             }
             ctx.globalAlpha = 1;
         }
 
         this.drawConstructionLand(ctx);
+        yield;
         this.drawEdges(ctx, provinces.map((province) => province.site));
-        for (const province of provinces) this.drawProvinceMarkers(ctx, province.site);
-        // Region buildings and labels are drawn fresh above the base each frame.
+        yield;
+        for (let from = 0; from < provinces.length; from += MapRenderer.PROVINCE_CHUNK) {
+            const to = Math.min(provinces.length, from + MapRenderer.PROVINCE_CHUNK);
+            for (let i = from; i < to; i++) this.drawProvinceMarkers(ctx, provinces[i].site);
+            yield;
+        }
+    }
 
-        this.baseDirty = false;
-        this.dirtySites.clear();
-        this.frontlineDirty = true;
+    private paintStateProvince(ctx: CanvasRenderingContext2D, province: Province): void {
+        const { graph, terrain, provinces, states } = this.engine.state;
+        const { width, height } = graph.domain;
+        const cell = graph.cells[province.site];
+        if (!terrain.passable[province.site] || !cell.bounded) return;
+        const region = states[province.stateId];
+        const occupied = region && province.owner !== provinces[region.center].owner;
+        const owner = occupied || !region ? province.owner : provinces[region.center].owner;
+        ctx.fillStyle = this.stateColor(owner, province.stateId, this.landFactor());
+        fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+        if (!occupied) return;
+        ctx.save();
+        ctx.beginPath();
+        this.addWrappedPolygonPath(ctx, cell.polygon, width, height);
+        ctx.clip();
+        ctx.strokeStyle = "rgba(13, 17, 23, 0.28)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let x = -height; x < width; x += 12) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x + height, height);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    private paintProvinceTint(ctx: CanvasRenderingContext2D, province: Province): void {
+        const { graph, terrain, nations } = this.engine.state;
+        const { width, height } = graph.domain;
+        if (province.owner === NEUTRAL || !terrain.passable[province.site]) return;
+        const cell = graph.cells[province.site];
+        if (!cell.bounded) return;
+        ctx.globalAlpha = this.tintAlpha();
+        ctx.fillStyle = nations[province.owner].color;
+        fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
     }
 
     private stateColor(owner: number, stateId: number, factor = 1): string {
@@ -732,35 +830,6 @@ export class MapRenderer {
             return Math.round(shaded * factor);
         };
         return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
-    }
-
-    private drawStateLand(ctx: CanvasRenderingContext2D): void {
-        const { graph, terrain, provinces, states } = this.engine.state;
-        const { width, height } = graph.domain;
-        for (const province of provinces) {
-            const cell = graph.cells[province.site];
-            if (!terrain.passable[province.site] || !cell.bounded) continue;
-            const region = states[province.stateId];
-            const occupied = region && province.owner !== provinces[region.center].owner;
-            const owner = occupied || !region ? province.owner : provinces[region.center].owner;
-            ctx.fillStyle = this.stateColor(owner, province.stateId, this.landFactor());
-            fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
-            if (!occupied) continue;
-            ctx.save();
-            ctx.beginPath();
-            this.addWrappedPolygonPath(ctx, cell.polygon, width, height);
-            ctx.clip();
-            ctx.strokeStyle = "rgba(13, 17, 23, 0.28)";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            for (let x = -height; x < width; x += 12) {
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x + height, height);
-            }
-            ctx.stroke();
-            ctx.restore();
-        }
-        this.drawClaimLand(ctx);
     }
 
     private drawClaimLand(ctx: CanvasRenderingContext2D): void {
@@ -853,7 +922,7 @@ export class MapRenderer {
      */
     private repaintDirty(): void {
         if (this.currentMapMode === "state" || this.constructionActive) {
-            this.rebuildBase();
+            this.baseDirty = true;
             return;
         }
         const { graph, terrain, provinces, nations } = this.engine.state;
@@ -1364,8 +1433,15 @@ export class MapRenderer {
             this.colorLevel = level;
             this.baseDirty = true;
         }
-        if (this.baseDirty) this.rebuildBase();
-        else if (this.dirtySites.size > 0) this.repaintDirty();
+        if (this.baseDirty && !this.baseBuild) this.beginBaseRebuild();
+        if (this.baseBuild) this.advanceBaseRebuild();
+        else if (this.dirtySites.size > 0) {
+            this.repaintDirty();
+            if (this.baseDirty && !this.baseBuild) {
+                this.beginBaseRebuild();
+                this.advanceBaseRebuild();
+            }
+        }
         if (this.frontlineDirty) this.rebuildFrontline();
 
         const dt = this.lastFrame === 0 ? 16 : Math.min(50, now - this.lastFrame);

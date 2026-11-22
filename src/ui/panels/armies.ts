@@ -1,7 +1,10 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { armyCap, nationDeploymentCount, regimentCountByKind } from "../../game/rules.ts";
-import { ORG_MAX, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
+import { ORG_MAX, REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
 import { orgClass, orgPct, statusPill } from "../common.ts";
+import { panelHead, renderPanel } from "../panel.ts";
+
+const ARMY_LIST_TIP = `点击军团接管指挥（左侧详情窗下达命令）。\nCtrl+点击可多选，随后在顶部合并条中合并；合并要求各军团未行动、未交战，合计不超过 ${REGIMENT_CAP} 团。\n组织度低于 15 时军团溃退；每日按[[supply]]水平恢复。\n行内标签为编制：兵种与团数。`;
 
 /** Compact army list (top-right): quick selection + ctrl multi-select merge. */
 export class ArmyListPanel {
@@ -56,14 +59,16 @@ export class ArmyListPanel {
             : "";
 
         const collapsed = this.el.classList.contains("army-collapsed");
-        this.el.innerHTML = `
-            <div class="panel-head"><h2>军团</h2><span class="objective">${armies.length}/${cap}</span>
-                <button class="army-toggle" data-action="army-toggle" aria-expanded="${!collapsed}" aria-label="${collapsed ? "展开军团列表" : "收起军团列表"}">${collapsed ? "▸" : "▾"}</button>
-            </div>
-            <div class="panel-body army-body">
-                ${mergeBar}
+        renderPanel(this.el, {
+            head: panelHead({
+                title: "军团",
+                help: { title: "军团列表", body: ARMY_LIST_TIP },
+                extras: `<span class="objective">${armies.length}/${cap}</span><button class="army-toggle" data-action="army-toggle" aria-expanded="${!collapsed}" aria-label="${collapsed ? "展开军团列表" : "收起军团列表"}">${collapsed ? "▸" : "▾"}</button>`,
+            }),
+            bodyClass: "army-body",
+            body: `${mergeBar}
                 ${rows || `<div class="empty-hint">暂无军团。到「部署」页签训练部队，完成后自动编成。</div>`}
-                <p class="micro-hint">点击接管指挥 · Ctrl+点击多选合并${queued > 0 ? ` · 训练中 ${queued} 个团` : ""}</p>
-            </div>`;
+                <p class="micro-hint">点击接管指挥 · Ctrl+点击多选合并${queued > 0 ? ` · 训练中 ${queued} 个团` : ""}</p>`,
+        });
     }
 }

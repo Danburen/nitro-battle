@@ -368,7 +368,10 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
         if (army.nation === aggressor || army.nation === defender) army.march = null;
     }
     core.invalidateReach();
-    core.log(`${core.nationChip(aggressor)} 宣战 ${core.nationChip(defender)}（${DIPLOMATIC_PROFILES[action.kind].label}）`, "diplo", aggressor);
+    core.log(`${core.nationChip(aggressor)} 宣战 ${core.nationChip(defender)}（${DIPLOMATIC_PROFILES[action.kind].label}）`, "diplo", aggressor, true, {
+        kind: "war",
+        nation: aggressor,
+    });
     core.emit({ type: "war", aggressor, defender });
     core.emit({ type: "state" });
     return true;

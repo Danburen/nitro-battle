@@ -1,7 +1,6 @@
 import type { UIContext } from "./context.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
-import { POLICY_SWITCH_COST, REGIMENT_CAP } from "../game/types.ts";
-import type { ConscriptionPolicy, EconomyPolicy, OccupationPolicy } from "../game/types.ts";
+import { REGIMENT_CAP } from "../game/types.ts";
 
 /** Training, construction and policy switches (dock panels). */
 export function handleEconomyAction(ctx: UIContext, action: string, target: HTMLElement): boolean {
@@ -37,24 +36,6 @@ export function handleEconomyAction(ctx: UIContext, action: string, target: HTML
             ctx.toast("已取消施工并返还半数资源");
         } else {
             ctx.sound.play("error");
-        }
-        return true;
-    }
-
-    if (action === "policy") {
-        const category = target.dataset.category as "economy" | "conscription" | "occupation";
-        const value = target.dataset.value ?? "";
-        const ok = category === "economy"
-            ? ctx.engine.setPolicy("economy", value as EconomyPolicy)
-            : category === "conscription"
-                ? ctx.engine.setPolicy("conscription", value as ConscriptionPolicy)
-                : ctx.engine.setPolicy("occupation", value as OccupationPolicy);
-        if (ok) {
-            ctx.sound.play("select");
-            ctx.toast(`政策已调整（-${POLICY_SWITCH_COST} 政治点）`);
-        } else {
-            ctx.sound.play("error");
-            ctx.toast(`政治点不足 ${POLICY_SWITCH_COST}，或政策未变化`);
         }
         return true;
     }
@@ -217,13 +198,21 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
         ctx.engine.waitArmy(army.id);
         ctx.sound.play("select");
     } else if (action === "disband") {
-        if (ctx.engine.disbandArmy(army.id)) {
-            ctx.sound.play("select");
-            ctx.toast("军团已解散，所属团复员");
-        } else {
-            ctx.sound.play("error");
-            ctx.toast("交战中的军团无法解散");
-        }
+        ctx.confirm({
+            title: `解散 ${army.name}`,
+            body: `军团解散后所属 ${army.regiments.length} 个团将复员，无法恢复。`,
+            confirmLabel: "解散军团",
+            danger: true,
+            onConfirm: () => {
+                if (ctx.engine.disbandArmy(army.id)) {
+                    ctx.sound.play("select");
+                    ctx.toast("军团已解散，所属团复员");
+                } else {
+                    ctx.sound.play("error");
+                    ctx.toast("交战中的军团无法解散");
+                }
+            },
+        });
     } else if (action === "redeploy") {
         if (ctx.engine.beginRedeploy(army.id)) {
             ctx.sound.play("select");

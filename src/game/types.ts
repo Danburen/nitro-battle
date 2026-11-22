@@ -96,7 +96,12 @@ export const MANPOWER_CAP_PER_POP = 5;
 export const INDUSTRY_BASE_CAP = 100;
 export const INDUSTRY_CAP_PER_CITY = 5;
 export const PP_CAP = 100;
-export const POLICY_SWITCH_COST = 20;
+/** Upfront political points paid when a policy switch begins. */
+export const POLICY_SWITCH_COST = 8;
+/** Turns a policy switch takes before the new policy is committed. */
+export const POLICY_SWITCH_DAYS = 3;
+/** Daily political upkeep while a policy switch is in progress. */
+export const POLICY_SWITCH_UPKEEP = 3;
 export const UNPAID_UPKEEP_ORG_PENALTY = 5;
 export const REINFORCE_MIN_SUPPLY = 0.5;
 
@@ -166,11 +171,22 @@ export const FACTORY_PROD_INDUSTRY = 2;
 export type EconomyPolicy = "balanced" | "market" | "planned";
 export type ConscriptionPolicy = "volunteer" | "service" | "total";
 export type OccupationPolicy = "lenient" | "balanced" | "harsh";
+export type PolicyCategory = "economy" | "conscription" | "occupation";
 
 export interface Policies {
     economy: EconomyPolicy;
     conscription: ConscriptionPolicy;
     occupation: OccupationPolicy;
+}
+
+/** A policy switch in progress: gain modifiers ramp from `from` toward `to` over `readyDay - startedDay`. */
+export interface PolicyTransition {
+    readonly category: PolicyCategory;
+    readonly from: string;
+    readonly to: string;
+    readonly startedDay: number;
+    readonly readyDay: number;
+    upkeepSpent: number;
 }
 
 export interface PolicyModifiers {
@@ -215,6 +231,8 @@ export interface Nation {
     industry: number;
     politicalPower: number;
     policies: Policies;
+    /** In-progress switches per category; the committed value lives in `policies`. */
+    policyTransitions?: Partial<Record<PolicyCategory, PolicyTransition>>;
     alive: boolean;
 }
 
@@ -270,6 +288,9 @@ export interface Battle {
     /** Defending army id, or null when only the garrison defends. */
     defenderId: number | null;
     rounds: number;
+    /** Cumulative casualties across every round of this battle. */
+    attackLoss?: number;
+    defenseLoss?: number;
 }
 
 export type DeploymentStatus = "training" | "ready" | "blocked";
@@ -330,10 +351,12 @@ export interface MapSizeProfile {
 }
 
 export const MAP_SIZES: Readonly<Record<MapSizeId, MapSizeProfile>> = {
-    small: { label: "小型 · 600 省", cells: 600, width: 1280, height: 800 },
-    standard: { label: "标准 · 1000 省", cells: 1000, width: 1600, height: 1000 },
-    large: { label: "大型 · 1600 省", cells: 1600, width: 1920, height: 1200 },
+    small: { label: "小型 · 900 省", cells: 900, width: 1400, height: 900 },
+    standard: { label: "标准 · 1500 省", cells: 1500, width: 1800, height: 1100 },
+    large: { label: "大型 · 2400 省", cells: 2400, width: 2200, height: 1400 },
 };
+
+export const NATION_COUNT_MAX = 8;
 
 export interface GameSettings {
     readonly seed: number;
@@ -343,11 +366,53 @@ export interface GameSettings {
 
 export type LogTone = "info" | "combat" | "capture" | "econ" | "diplo" | "system";
 
+export type BattleOutcome = "ongoing" | "repelled" | "captured";
+
+/** One resolved battle round, kept on the log so the feed can digest multi-day battles. */
+export interface BattleReport {
+    readonly attacker: number;
+    readonly defender: number;
+    readonly rounds: number;
+    readonly attackLoss: number;
+    readonly defenseLoss: number;
+    /** Battle-to-date casualties; capture reports use these so the result line is not just the last round. */
+    readonly totalAttackLoss?: number;
+    readonly totalDefenseLoss?: number;
+    readonly breach: boolean;
+    readonly outcome: BattleOutcome;
+}
+
+export type LogEventKind = "capture" | "battle-round" | "production" | "season" | "war" | "peace" | "annex" | "global";
+
+export interface LogItemCount {
+    readonly label: string;
+    readonly count: number;
+}
+
+/** Structured payload behind a log line; the feed aggregates these instead of raw text. */
+export interface LogEvent {
+    readonly kind: LogEventKind;
+    readonly nation?: number;
+    readonly site?: number;
+    readonly province?: string;
+    readonly stateName?: string;
+    readonly stateFlipped?: boolean;
+    readonly battle?: BattleReport;
+    readonly action?: "train" | "build" | "deploy";
+    readonly stage?: "start" | "done";
+    readonly items?: readonly LogItemCount[];
+    readonly places?: readonly string[];
+    readonly season?: string;
+}
+
 export interface LogEntry {
     readonly day: number;
     readonly text: string;
     readonly tone: LogTone;
     readonly nationId: number;
+    /** State-changing events worth surfacing in the live battle feed. */
+    readonly major?: boolean;
+    readonly event?: LogEvent;
 }
 
 export interface GameStats {
@@ -446,7 +511,8 @@ export type EngineEvent =
           attackerOrg: number;
           defenderOrg: number;
       }
-    | { type: "capture"; province: number; nationId: number; eliminated: number | null }
+    | { type: "capture"; province: number; nationId: number; eliminated: number | null; stateFlipped?: boolean }
+    | { type: "army-lost"; armyId: number; province: number; nationId: number }
     | { type: "deploy"; province: number; armyId: number; nationId: number; kind: UnitKind }
     | { type: "build"; province: number; kind: BuildingKind; nationId: number }
     | { type: "war"; aggressor: number; defender: number }
@@ -455,12 +521,5 @@ export type EngineEvent =
     | { type: "gameover"; winner: number };
 
 export const NEUTRAL = -1;
-
-export const NATION_PRESETS: readonly { name: string; color: string }[] = [
-    { name: "蔚蓝联邦", color: "#1f6feb" },
-    { name: "赤色帝国", color: "#da3633" },
-    { name: "紫晶共和国", color: "#8957e5" },
-    { name: "橙焰公国", color: "#d29922" },
-];
 
 export const NEUTRAL_COLOR = "#6e7781";

@@ -6,6 +6,7 @@ import { attack, resolveBattles } from "./combat.ts";
 import { advanceDiplomacy, runAIDiplomacy, tickDiplomaticUpkeep } from "./diplomacy.ts";
 import { resolveWarOutcomes } from "./settlement.ts";
 import { clampResources, occupationGrowth, resourceRates } from "./economy.ts";
+import { advancePolicySwitches, tickPolicyUpkeep } from "./policy.ts";
 import { enqueueBuild, enqueueProvinceBuild, enqueueTrain, processConstruction, processDeployments, reinforceArmy, setFactoryProduction } from "./production.ts";
 import { computeSupply, supplyLevel, supplyOrgFactor } from "./supply.ts";
 import {
@@ -79,13 +80,17 @@ function advanceDay(core: GameCore): void {
     const state = core.state;
     state.day++;
     advanceDiplomacy(core);
+    advancePolicySwitches(core);
     const seasonIndex = Math.floor((state.day - 1) / DAYS_PER_SEASON) % SEASONS.length;
     const seasonChanged = seasonIndex !== state.seasonIndex;
     state.seasonIndex = seasonIndex;
     state.terrain.updateWeather(SEASONS[seasonIndex].value);
     state.supplyDirty = true;
     if (seasonChanged) {
-        core.log(`季节更替 ${SEASONS[seasonIndex].name}`, "system", NEUTRAL);
+        core.log(`季节更替 ${SEASONS[seasonIndex].name}`, "system", NEUTRAL, false, {
+            kind: "season",
+            season: SEASONS[seasonIndex].name,
+        });
     }
     core.emit({ type: "day", day: state.day, seasonIndex });
 
@@ -118,6 +123,7 @@ function advanceDay(core: GameCore): void {
         clampResources(nation, rates);
     }
     tickDiplomaticUpkeep(core);
+    tickPolicyUpkeep(core);
 
     processConstruction(core);
     state.supply = computeSupply(state);

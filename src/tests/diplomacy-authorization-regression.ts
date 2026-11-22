@@ -10,8 +10,8 @@ import {
 import { MAX_HP, REGIMENT_CAP, UnitKind } from "../game/types.ts";
 import type { DiplomaticActionKind, GameState } from "../game/types.ts";
 
-function engine(): GameEngine {
-    const core = GameEngine.create(42, "small", 4);
+function engine(seed = 42, mapSize: "small" | "standard" = "small", nationCount = 4): GameEngine {
+    const core = GameEngine.create(seed, mapSize, nationCount);
     core.controllers.length = 0;
     for (const nation of core.state.nations) nation.politicalPower = 100;
     return core;
@@ -310,10 +310,15 @@ test("preparation upkeep drains daily PP and is not refunded on cancellation", (
 });
 
 test("annexation needs no claim but requires a neighbor, 35 PP and eight full days", () => {
-    const core = engine();
+    const core = engine(0, "standard", 4);
     const state = core.state;
     const { target } = foreignRegion(state);
-    assert.equal(prepareDiplomaticAction(core, 0, "annex", 1, null), false); // Fixed-seed nation 1 is not adjacent.
+    const distant = state.nations.find((nation) => nation.id !== 0 && nation.id !== target &&
+        !state.states.some((entry) => entry.provinces.some((site) =>
+            state.provinces[site].legalOwner === nation.id &&
+            state.graph.adjacency[site].some((edge) => state.provinces[edge.site].owner === 0))));
+    assert.ok(distant, "expected at least one non-neighboring nation");
+    assert.equal(prepareDiplomaticAction(core, 0, "annex", distant.id, null), false);
     state.nations[0].politicalPower = 34;
     assert.equal(prepareDiplomaticAction(core, 0, "annex", target, null), false);
     state.nations[0].politicalPower++;

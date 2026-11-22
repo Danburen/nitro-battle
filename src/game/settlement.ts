@@ -77,7 +77,10 @@ function retireLandlessNations(core: GameCore): void {
         for (let i = state.construction.length - 1; i >= 0; i--) {
             if (state.construction[i].nation === nation.id) state.construction.splice(i, 1);
         }
-        core.log(`${core.nationChip(nation.id)} 失去全部正式领土，被吞并`, "system", nation.id);
+        core.log(`${core.nationChip(nation.id)} 失去全部正式领土，被吞并`, "system", nation.id, true, {
+            kind: "annex",
+            nation: nation.id,
+        });
     }
 }
 
@@ -178,7 +181,10 @@ export function settlePeace(core: GameCore, a: number, b: number): void {
     const capitals = state.provinces.map((province) => province.isCapital);
     endPairWar(core, a, b);
     restorePairTerritory(core, a, b);
-    core.log(`${core.nationChip(a)} 白和平 ${core.nationChip(b)}`, "diplo", a);
+    core.log(`${core.nationChip(a)} 白和平 ${core.nationChip(b)}`, "diplo", a, true, {
+        kind: "peace",
+        nation: a,
+    });
     finishTreaty(core, owners, capitals, a, b);
 }
 
@@ -201,7 +207,10 @@ export function enforceWarGoal(core: GameCore, nation: number, target: number): 
     }
     restorePairTerritory(core, nation, target);
     core.log(war.goal === "annex" ? `${core.nationChip(nation)} 吞并 ${core.nationChip(target)}`
-        : `${core.nationChip(nation)} 夺取 ${state.states[war.stateId!].name}`, "diplo", nation);
+        : `${core.nationChip(nation)} 夺取 ${state.states[war.stateId!].name}`, "diplo", nation, true, {
+        kind: "annex",
+        nation,
+    });
     finishTreaty(core, owners, capitals, nation, target);
     return true;
 }
@@ -211,7 +220,10 @@ export function resolveWarOutcomes(core: GameCore): void {
         if (!isAtWar(core.state, war.aggressor, war.defender)) continue;
         if (warGoalProgress(core.state, war).canEnforce) enforceWarGoal(core, war.aggressor, war.defender);
         else if (capitulated(core.state, war.aggressor, war.defender)) {
-            core.log(`${core.nationChip(war.aggressor)} 进攻失败 ${core.nationChip(war.defender)}`, "diplo", war.defender);
+            core.log(`${core.nationChip(war.aggressor)} 进攻失败 ${core.nationChip(war.defender)}`, "diplo", war.defender, true, {
+                kind: "peace",
+                nation: war.defender,
+            });
             settlePeace(core, war.aggressor, war.defender);
         }
     }

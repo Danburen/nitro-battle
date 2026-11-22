@@ -3,7 +3,7 @@ import { resolveBattleRound } from "./battle.ts";
 import { claimProvince } from "./conquest.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { armyAt, isHostileProvince } from "./rules.ts";
-import type { Army, Battle } from "./types.ts";
+import type { Army, Battle, BattleReport } from "./types.ts";
 
 export function attack(core: GameCore, armyId: number, target: number): boolean {
     const state = core.state;
@@ -38,6 +38,8 @@ export function attack(core: GameCore, armyId: number, target: number): boolean 
         attackerId: army.id,
         defenderId: defenderArmy ? defenderArmy.id : null,
         rounds: 0,
+        attackLoss: 0,
+        defenseLoss: 0,
     };
     state.battles.push(battle);
     state.stats.battles++;
@@ -120,6 +122,8 @@ export function resolveBattles(core: GameCore): void {
         const defenderBefore = defender ? defender.regiments.length : 0;
 
         const result = resolveBattleRound(state, battle, core.rand);
+        battle.attackLoss = (battle.attackLoss ?? 0) + result.attackerLoss;
+        battle.defenseLoss = (battle.defenseLoss ?? 0) + result.defenderLoss;
 
         if (attacker.nation === 0) state.stats.losses += attackerBefore - attacker.regiments.length;
         if (defender && defender.nation === 0) state.stats.losses += defenderBefore - defender.regiments.length;
@@ -139,7 +143,18 @@ export function resolveBattles(core: GameCore): void {
             } else {
                 core.placeArmy(attacker, battle.province);
                 if (state.selectedArmyId === attacker.id) state.selected = battle.province;
-                claimProvince(core, battle.province, attacker.nation, defenderNation);
+                const report: BattleReport = {
+                    attacker: attacker.nation,
+                    defender: defenderNation,
+                    rounds: battle.rounds,
+                    attackLoss: result.attackerLoss,
+                    defenseLoss: result.defenderLoss,
+                    totalAttackLoss: battle.attackLoss,
+                    totalDefenseLoss: battle.defenseLoss,
+                    breach: true,
+                    outcome: "captured",
+                };
+                claimProvince(core, battle.province, attacker.nation, defenderNation, report);
             }
         } else if (outcome === "repelled" && attacker.regiments.length === 0) {
             core.removeArmy(attacker, true);
@@ -150,15 +165,34 @@ export function resolveBattles(core: GameCore): void {
             if (index >= 0) state.battles.splice(index, 1);
         }
 
-        const suffix = outcome === "captured" ? " · 防线崩溃"
-            : outcome === "repelled" ? " · 进攻击退"
-            : "";
-        core.log(
-            `${core.nationChip(attacker.nation)} ${province.name} 会战第 ${battle.rounds} 日 · 攻 -${result.attackerLoss} 守 -${result.defenderLoss}` +
-                suffix,
-            outcome === "captured" ? "capture" : "combat",
-            attacker.nation,
-        );
+        // A capture already carries this round inside its single event-chain line.
+        if (outcome !== "captured") {
+            const suffix = outcome === "repelled" ? " · 进攻击退" : result.defenderBroken ? " · 防线崩溃" : "";
+            const report: BattleReport = {
+                attacker: attacker.nation,
+                defender: defenderNation,
+                rounds: battle.rounds,
+                attackLoss: result.attackerLoss,
+                defenseLoss: result.defenderLoss,
+                totalAttackLoss: battle.attackLoss,
+                totalDefenseLoss: battle.defenseLoss,
+                breach: result.defenderBroken,
+                outcome: outcome === "broken" ? "repelled" : outcome,
+            };
+            core.log(
+                `${core.nationChip(attacker.nation)} ${province.name} 会战第 ${battle.rounds} 日 · 攻损${result.attackerLoss}/守损${result.defenderLoss}${suffix}`,
+                "combat",
+                attacker.nation,
+                false,
+                {
+                    kind: "battle-round",
+                    nation: attacker.nation,
+                    site: battle.province,
+                    province: province.name,
+                    battle: report,
+                },
+            );
+        }
         core.emit({
             type: "combat",
             province: battle.province,

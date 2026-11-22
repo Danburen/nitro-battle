@@ -44,6 +44,14 @@ export function enqueueTrain(core: GameCore, nationId: number, kind: UnitKind, d
         `${core.nationChip(nationId)} 训练 ${profile.name}`,
         "econ",
         nationId,
+        false,
+        {
+            kind: "production",
+            nation: nationId,
+            action: "train",
+            stage: "start",
+            items: [{ label: profile.name, count: 1 }],
+        },
     );
     core.emit({ type: "state" });
     return true;
@@ -119,6 +127,16 @@ export function processDeployments(core: GameCore): void {
             `${core.nationChip(order.nation)} 部署 ${UNIT_PROFILES[order.kind].name} ${state.provinces[site].name}`,
             "econ",
             order.nation,
+            false,
+            {
+                kind: "production",
+                nation: order.nation,
+                action: "deploy",
+                stage: "done",
+                site,
+                items: [{ label: UNIT_PROFILES[order.kind].name, count: 1 }],
+                places: [state.provinces[site].name],
+            },
         );
         core.emit({ type: "deploy", province: site, armyId, nationId: order.nation, kind: order.kind });
     }
@@ -147,7 +165,15 @@ function createConstruction(core: GameCore, nationId: number, site: number, kind
         remainingPoints: profile.constructionPoints,
         paidFunds: profile.costFunds, paidIndustry: profile.costIndustry,
     });
-    core.log(`${core.nationChip(nationId)} 建造 ${profile.name} ${state.provinces[site].name}`, "econ", nationId);
+    core.log(`${core.nationChip(nationId)} 建造 ${profile.name} ${state.provinces[site].name}`, "econ", nationId, false, {
+        kind: "production",
+        nation: nationId,
+        action: "build",
+        stage: "start",
+        site,
+        items: [{ label: profile.name, count: 1 }],
+        places: [state.provinces[site].name],
+    });
     core.emit({ type: "state" });
     return true;
 }
@@ -246,7 +272,15 @@ export function processConstruction(core: GameCore): void {
     }
     // Notify only after the entire completion batch is committed.
     for (const order of completed) {
-        core.log(`${core.nationChip(order.nation)} 建成 ${BUILDING_PROFILES[order.kind].name} ${state.provinces[order.site].name}`, "econ", order.nation);
+        core.log(`${core.nationChip(order.nation)} 建成 ${BUILDING_PROFILES[order.kind].name} ${state.provinces[order.site].name}`, "econ", order.nation, false, {
+            kind: "production",
+            nation: order.nation,
+            action: "build",
+            stage: "done",
+            site: order.site,
+            items: [{ label: BUILDING_PROFILES[order.kind].name, count: 1 }],
+            places: [state.provinces[order.site].name],
+        });
         core.emit({ type: "build", province: order.site, kind: order.kind, nationId: order.nation });
     }
     if (changed) core.emit({ type: "state" });

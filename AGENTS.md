@@ -16,6 +16,7 @@
 5. 导入必须带 `.ts` 后缀，类型导入用 `import type`，只用具名导出，不用 `enum`。
 6. 玩家可见文案用中文 + `ui/text.ts` 的 token（`[[funds:+2]]`、`chipToken`），不要手拼数值 HTML。
 7. 桌面端：渲染进程零 Node 能力（`contextIsolation` + `sandbox`，不开 `nodeIntegration`）；桌面能力只经 `window.nitro`（`src/desktop.ts`）可选调用，浏览器版必须继续可用；不要把游戏逻辑搬进主进程。
+8. **音效统一入口**：业务代码只调用 `sound.play(name, context?)` / `ctx.sound.play(name)`；模板、并发/优先级/超限策略在 `src/audio/strategy.ts`，合成与压缩/限制器总线在 `src/audio/mix.ts`，不要在其他地方另建 `AudioContext` 或直接播放声音。
 
 ## 提交前
 
@@ -26,7 +27,7 @@ npm test
 npm run build
 ```
 
-当前基线：`typecheck` 通过，`lint` 0 问题，`node --test` 226 个用例全绿；`electron:build` 可出 NSIS 安装包（2026-11-21）。
+当前基线：`typecheck` 通过，`lint` 0 问题，`node --test` 238 个用例全绿；`electron:build` 可出 NSIS 安装包（2026-11-22）。
 
 ## 文档同步
 

@@ -1,5 +1,7 @@
-import { MAP_SIZES } from "../game/types.ts";
+import { MAP_SIZES, NATION_COUNT_MAX } from "../game/types.ts";
 import { renderGameText } from "./text.ts";
+
+const NATION_COUNT_LABELS = ["双雄对决", "三足鼎立", "四国争霸", "五强并立", "六方混战", "七国纵横", "八国乱世"];
 
 export const DEFAULT_HINT = "点击省份查看 · 点击军团接管指挥 · 军团列表 Ctrl+点击多选合并 · 拖拽平移 · 滚轮缩放 · 右键取消";
 
@@ -52,7 +54,9 @@ export function mountLayout(app: HTMLElement): void {
                 </div>
             </div>
 
-            <div class="settings-pop hidden" id="settings-pop" role="dialog" aria-label="配置">
+                <div class="claim-manage-banner hidden" id="claim-manage-banner" role="status">当前正处在宣称管理界面，按ESC退出</div>
+
+                <div class="settings-pop hidden" id="settings-pop" role="dialog" aria-label="配置">
                 <div class="settings-head"><span>配置</span><button class="settings-x" data-action="settings-close" aria-label="关闭配置">×</button></div>
                 <div class="settings-row">
                     <span class="settings-label">染色模式</span>
@@ -91,6 +95,7 @@ export function mountLayout(app: HTMLElement): void {
                     <section class="panel dock-panel hidden" id="diplomacy-panel"></section>
                     <section class="panel dock-panel hidden" id="expansion-panel"></section>
                 </div>
+                <section class="panel map-legend hidden" id="map-legend" aria-label="地图图例"></section>
             </div>
 
             <section class="panel army-detail hidden" id="army-detail"></section>
@@ -167,9 +172,9 @@ export function mountLayout(app: HTMLElement): void {
                     <div class="field">
                         <label for="nation-select">国家数量</label>
                         <select id="nation-select">
-                            <option value="2">2 国 · 快速对决</option>
-                            <option value="3" selected>3 国 · 标准战役</option>
-                            <option value="4">4 国 · 大陆混战</option>
+                            ${Array.from({ length: NATION_COUNT_MAX - 1 }, (_, index) => index + 2)
+                                .map((count) => `<option value="${count}"${count === 3 ? " selected" : ""}>${count} 国 · ${NATION_COUNT_LABELS[count - 2]}</option>`)
+                                .join("")}
                         </select>
                     </div>
                 </div>
@@ -183,6 +188,29 @@ export function mountLayout(app: HTMLElement): void {
                     <li><b>便捷指挥</b>顶部资源栏 + 可收起页签；选中军团自动进入指挥模式，列表多选合并、详情窗拆分编组。</li>
                 </ul>
                 <p class="start-note">完整规则与操作见「玩法说明」。</p>
+            </div>
+        </div>
+    </div>
+    <div class="overlay overlay-top hidden" id="gen-overlay">
+        <div class="start-card gen-card">
+            <div class="gen-inner">
+                <div class="gen-spinner" aria-hidden="true"></div>
+                <h2>正在生成世界</h2>
+                <p class="start-sub" id="gen-status">绘制大陆、划分州郡、推演列国……</p>
+            </div>
+        </div>
+    </div>
+    <div class="overlay hidden" id="nation-picker">
+        <div class="start-card picker-card">
+            <div class="start-strip"></div>
+            <div class="start-inner">
+                <h2 class="picker-title">选择你的国家</h2>
+                <p class="start-sub">世界已经生成。执掌一国，或把命运交给骰子。</p>
+                <div class="nation-options" id="nation-options"></div>
+                <div class="start-actions">
+                    <button id="btn-random-nation" class="btn btn-primary" type="button">随机选择</button>
+                    <button id="btn-back-start" class="btn" type="button">返回设置</button>
+                </div>
             </div>
         </div>
     </div>

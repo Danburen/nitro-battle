@@ -4,6 +4,9 @@ import { armyCap, nationArmyCount } from "../../game/rules.ts";
 import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
+import { panelHead, renderPanel } from "../panel.ts";
+
+const DEPLOY_TIP = `训练立即扣除[[funds]]/[[manpower]]/[[industry]]，完成后优先补充落点的未满军团（每军团 ${REGIMENT_CAP} 团），否则新建军团；军团满编时自动寻找其他落点。\n\n选中己方首都或城市可指定落点，否则自动优先首都/城市。\n队列中的项目可随时取消，返还半数资源。\n军团数量上限随控制的州增长。`;
 
 /** Training & deployment workbench (dock tab 2). */
 export class DeployPanel {
@@ -20,9 +23,14 @@ export class DeployPanel {
 
     render(): void {
         const state = this.engine.state;
-        this.el.innerHTML = `
-            <div class="panel-head"><h2>部署</h2><span class="objective">${nationArmyCount(state, 0)}/${armyCap(state, 0)} 军团</span></div>
-            <div class="panel-body">${this.trainSectionHtml()}</div>`;
+        renderPanel(this.el, {
+            head: panelHead({
+                title: "部署",
+                help: { title: "训练与部署", body: DEPLOY_TIP },
+                status: `${nationArmyCount(state, 0)}/${armyCap(state, 0)} 军团`,
+            }),
+            body: this.trainSectionHtml(),
+        });
     }
 
     private trainSectionHtml(): string {
@@ -33,7 +41,7 @@ export class DeployPanel {
         const queue = state.deployments.filter((order) => order.nation === 0);
         const selectedSite = state.selected;
         const ownSelected = selectedSite !== null && state.provinces[selectedSite].owner === 0;
-        const targetLabel = ownSelected && selectedSite !== null ? state.provinces[selectedSite].name : "自动（优先首都/城市）";
+        const targetLabel = ownSelected && selectedSite !== null ? state.provinces[selectedSite].name : "自动";
 
         const trainRows = UNIT_KINDS.map((kind) => {
             const up = UNIT_PROFILES[kind];
@@ -97,7 +105,7 @@ export class DeployPanel {
                         <div class="deploy-pane-body">${trainRows}</div>
                     </div>
                 </div>
-                <p class="micro-hint">${renderGameText(`训练立即扣除[[funds]]/[[manpower]]/[[industry]]。完成后优先补充落点的未满军团（每军团 ${REGIMENT_CAP} 团），否则新建军团；军团满编时自动寻找其他落点。`)}</p>
+                <p class="micro-hint">${renderGameText("点击兵种加入训练队列 · 选中己方首都/城市指定落点 · 取消返还半数资源")}</p>
             </div>`;
     }
 }

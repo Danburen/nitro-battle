@@ -1,5 +1,5 @@
 import type { GameEngine } from "../../game/engine.ts";
-import type { SoundManager } from "../../audio.ts";
+import type { SoundManager } from "../../audio/index.ts";
 import {
     DIPLOMATIC_PROFILES, canDeclareWar, canPrepareDiplomaticAction, cancelRefund,
     isAtWar, truceDays, warDuration,
@@ -9,6 +9,7 @@ import { warGoalProgress } from "../../game/settlement.ts";
 import type { DiplomaticAction, DiplomaticActionKind } from "../../game/types.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
+import { panelHead } from "../panel.ts";
 
 const OBJECTIVE_TIP = "目标：通过战争与议和吞并所有对手。\n首都失守不立即灭国，失去全部正式领土才战败。\n\n实际控制不等于正式归属；战争逐省争夺，攻占州中心或首都不会令全境易主。\n目标议和只转移约定领土；白和平返还双方临时占领区，不转移第三国土地。\n宣战需先在「扩张」页提出州宣称，再制造夺取或吞并借口；借口就绪后点击【宣战】选择战争目标。";
 
@@ -91,7 +92,12 @@ export class DiplomacyPanel {
         this.viewSignature = signature;
 
         this.el.innerHTML = `
-            <div class="panel-head"><h2>外交</h2><button type="button" class="intel-help" aria-label="战役目标与规则" data-diplo-focus="objective" ${tooltipAttrs("战役目标与规则", OBJECTIVE_TIP)}>i</button><span class="objective">${renderGameText(textToken("politics", Math.floor(player.politicalPower)))}</span></div>
+            ${panelHead({
+                title: "外交",
+                help: { title: "战役目标与规则", body: OBJECTIVE_TIP },
+                helpAttrs: 'data-diplo-focus="objective"',
+                status: renderGameText(textToken("politics", Math.floor(player.politicalPower))),
+            })}
             <div class="panel-body diplo-body">
                 ${this.relationsHtml()}
             </div>`;

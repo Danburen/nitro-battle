@@ -29,6 +29,8 @@ export const TEXT_TERMS = {
     production: { label: "生产", tone: "industry" },
     idle: { label: "闲置", tone: "construction" },
     garrison: { label: "驻军", tone: "keyword" },
+    turn: { label: "回合", tone: "keyword", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/>' },
+    days: { label: "天", tone: "keyword", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/>' },
     friendly: { label: "友方", tone: "friendly" },
     neutral: { label: "中立", tone: "neutral" },
     hostile: { label: "敌方", tone: "hostile" },

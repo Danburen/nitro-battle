@@ -1,8 +1,11 @@
 import type { GameEngine } from "../game/engine.ts";
-import { BUILDING_KINDS, BUILDING_PROFILES } from "../game/types.ts";
-import type { BuildingKind } from "../game/types.ts";
+import { BUILDING_KINDS, BUILDING_PROFILES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types.ts";
+import type { BuildingKind, PolicyCategory } from "../game/types.ts";
+import { POLICY_LABELS, policyOption } from "../game/policy.ts";
+import { CLAIM_COST } from "../game/diplomacy.ts";
 import { provinceBuildingCapacity, stateBuildingCapacity } from "../game/economy.ts";
-import type { SoundManager } from "../audio.ts";
+import { CONSTRUCTION_COLORS } from "../render/constructionOverlay.ts";
+import type { SoundManager } from "../audio/index.ts";
 import type { UIContext, UICallbacks } from "./context.ts";
 import { TopBar } from "./topbar.ts";
 import { GlobalTooltip } from "./tooltip.ts";
@@ -18,6 +21,10 @@ import { ExpansionPanel } from "./panels/expansion.ts";
 import { renderModeBar } from "./modeBar.ts";
 import { showEndOverlay } from "./endOverlay.ts";
 import { handleArmyAction, handleDiplomacyAction, handleEconomyAction } from "./actions.ts";
+import { ConfirmDialog } from "./confirm.ts";
+import type { ConfirmSpec } from "./confirm.ts";
+import { MapLegend } from "./mapLegend.ts";
+import { textToken } from "./text.ts";
 
 type TabId = "deploy" | "construction" | "policy" | "diplomacy" | "expansion";
 
@@ -35,6 +42,9 @@ export class GameUI implements UIContext {
     private mapMode: "province" | "state" = "province";
     private layersCollapsed = false;
     private settingsOpen = false;
+    private refreshFrame = 0;
+    private refreshTasks: (() => void)[] = [];
+    private refreshAgain = false;
 
     private readonly topbar: TopBar;
     private readonly tooltip: GlobalTooltip;
@@ -47,6 +57,8 @@ export class GameUI implements UIContext {
     private readonly policy: PolicyPanel;
     private readonly diplomacy: DiplomacyPanel;
     private readonly expansion: ExpansionPanel;
+    private readonly confirmDialog: ConfirmDialog;
+    private readonly legend: MapLegend;
 
     private readonly hud = document.querySelector<HTMLElement>("#hud") as HTMLElement;
     private readonly armyPanelEl = document.querySelector<HTMLElement>("#army-panel") as HTMLElement;
@@ -61,6 +73,7 @@ export class GameUI implements UIContext {
     private readonly homeBtn = document.querySelector<HTMLButtonElement>("#btn-home");
     private readonly settingsBtn = document.querySelector<HTMLButtonElement>("#btn-settings") as HTMLButtonElement;
     private readonly settingsPop = document.querySelector<HTMLElement>("#settings-pop") as HTMLElement;
+    private readonly claimBanner = document.querySelector<HTMLElement>("#claim-manage-banner") as HTMLElement;
 
     constructor(engine: GameEngine, sound: SoundManager, callbacks: UICallbacks) {
         this.engine = engine;
@@ -80,6 +93,8 @@ export class GameUI implements UIContext {
         this.expansion = new ExpansionPanel(engine, {
             focus: (stateId) => this.callbacks.onClaimFocus(stateId),
         });
+        this.confirmDialog = new ConfirmDialog(this.hud);
+        this.legend = new MapLegend(document.querySelector<HTMLElement>("#map-legend") as HTMLElement);
 
         this.topbar.endTurnBtn.addEventListener("click", this.handleEndTurn);
         this.topbar.soundBtn.addEventListener("click", this.handleSound);
@@ -100,7 +115,7 @@ export class GameUI implements UIContext {
 
         this.unsubscribe = engine.subscribe((event) => {
             if (event.type === "gameover") showEndOverlay(engine, sound, event.winner);
-            this.refresh();
+            this.scheduleRefresh();
         });
         this.setTab("diplomacy");
         this.refresh();
@@ -108,6 +123,8 @@ export class GameUI implements UIContext {
 
     destroy(): void {
         this.unsubscribe();
+        this.cancelRefreshFrame();
+        this.refreshTasks.length = 0;
         this.topbar.endTurnBtn.removeEventListener("click", this.handleEndTurn);
         this.topbar.soundBtn.removeEventListener("click", this.handleSound);
         this.menuBtn?.removeEventListener("click", this.handleMenu);
@@ -128,6 +145,11 @@ export class GameUI implements UIContext {
         this.topbar.destroy();
         this.construction.destroy();
         this.diplomacy.destroy();
+        this.expansion.cancelDraft();
+        this.claimBanner.classList.add("hidden");
+        this.hud.classList.remove("claim-managing");
+        this.confirmDialog.close();
+        this.legend.set(null);
         this.tooltip.destroy();
         window.clearTimeout(this.toastTimer);
         this.detail.hide();
@@ -146,7 +168,56 @@ export class GameUI implements UIContext {
         this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove("show"), 2200);
     }
 
+    confirm(spec: ConfirmSpec): void {
+        this.confirmDialog.show(spec);
+    }
+
+    /** Full synchronous refresh; used for direct UI actions that need an immediate result. */
     refresh(): void {
+        this.cancelRefreshFrame();
+        this.refreshTasks.length = 0;
+        this.refreshAgain = false;
+        for (const task of this.buildRefreshTasks()) task();
+    }
+
+    /**
+     * Engine events arrive in bursts (end turn resolves every army). Coalesce
+     * them to one refresh, then spread panels over frames under a time budget
+     * so a large war resolution never blocks a single frame.
+     */
+    private scheduleRefresh(): void {
+        if (this.refreshFrame !== 0) {
+            this.refreshAgain = true;
+            return;
+        }
+        this.refreshFrame = requestAnimationFrame(this.runRefreshSlice);
+    }
+
+    private cancelRefreshFrame(): void {
+        if (this.refreshFrame !== 0) cancelAnimationFrame(this.refreshFrame);
+        this.refreshFrame = 0;
+    }
+
+    private readonly runRefreshSlice = (): void => {
+        this.refreshFrame = 0;
+        if (this.refreshTasks.length === 0) this.refreshTasks = this.buildRefreshTasks();
+
+        const deadline = performance.now() + 5;
+        while (this.refreshTasks.length > 0) {
+            this.refreshTasks.shift()!();
+            if (performance.now() >= deadline) break;
+        }
+
+        if (this.refreshTasks.length > 0) {
+            this.refreshFrame = requestAnimationFrame(this.runRefreshSlice);
+        } else if (this.refreshAgain) {
+            this.refreshAgain = false;
+            this.refreshFrame = requestAnimationFrame(this.runRefreshSlice);
+        }
+    };
+
+    /** Housekeeping runs up front; panel renders are returned as individual slices. */
+    private buildRefreshTasks(): (() => void)[] {
         const state = this.engine.state;
         for (const id of [...this.multiSelect]) {
             if (!state.armies.has(id)) this.multiSelect.delete(id);
@@ -167,19 +238,27 @@ export class GameUI implements UIContext {
         this.hud.classList.toggle("command-mode", commandMode);
         if (commandMode && this.mapMode !== "province") this.changeMapMode("province");
 
-        this.topbar.render();
-        this.intel.render(this.mapMode);
-        if (this.activeTab === "construction") this.construction.render();
-        this.renderLayers();
-        this.armies.render();
-        this.detail.render();
-        this.deploy.render();
-        this.policy.render();
-        this.diplomacy.render();
-        this.expansion.render();
-        this.feed.render();
-        this.syncConstructionView();
-        this.tooltip.refresh();
+        const tasks: (() => void)[] = [
+            () => this.topbar.render(),
+            () => this.intel.render(this.mapMode),
+        ];
+        if (this.activeTab === "construction") tasks.push(() => this.construction.render());
+        tasks.push(
+            () => this.renderLayers(),
+            () => this.armies.render(),
+            () => this.detail.render(),
+            () => this.deploy.render(),
+            () => this.policy.render(),
+            () => this.diplomacy.render(),
+            () => {
+                this.expansion.render();
+                this.syncClaimBanner();
+            },
+            () => this.feed.render(),
+            () => this.syncConstructionView(),
+            () => this.tooltip.refresh(),
+        );
+        return tasks;
     }
 
     private readonly handleEndTurn = (): void => {
@@ -211,7 +290,12 @@ export class GameUI implements UIContext {
         if (stateId < 0) return;
         this.expansion.focusFromMap(stateId);
         this.engine.select(site);
-        const result = this.expansion.toggleClaim(stateId);
+        if (!this.expansion.isManaging()) {
+            this.sound.play("select");
+            this.toast("点击「管理宣称」进入管理：在地图上标记新增或取消");
+            return;
+        }
+        const result = this.expansion.toggleDraft(stateId);
         this.sound.play(result.ok ? "recruit" : "error");
         this.toast(result.message);
     }
@@ -230,7 +314,47 @@ export class GameUI implements UIContext {
         const area = this.mapMode === "state" ? "州" : "省份";
         if (kind) this.hintEl.textContent = `已选${BUILDING_PROFILES[kind].name} · 点击己方${area}加入队列 · 右键 / Esc 取消`;
         else if (this.isConstructionOpen() && this.engine.state.winner === null) this.hintEl.textContent = `先选择左侧建筑，再点击己方${area}加入队列`;
-        else if (this.isClaimsOpen() && this.engine.state.winner === null) this.hintEl.textContent = "扩张页：金色闪烁的州即可宣称 · 点击宣称，再点取消并返还政治点 · 已宣称州以我方颜色覆盖 · Esc 取消聚焦";
+        else if (this.isClaimsOpen() && this.engine.state.winner === null) this.hintEl.textContent = "扩张页：进入「管理宣称」后点击金色闪烁州标记新增 · 已宣称州以我方颜色覆盖 · Esc 确认退出";
+        this.syncMapLegend();
+    }
+
+    /** Legend mirrors whichever panel currently owns a special map render mode. */
+    private syncMapLegend(): void {
+        const state = this.engine.state;
+        if (state.winner !== null) {
+            this.legend.set(null);
+            return;
+        }
+        if (this.isClaimsOpen()) {
+            this.legend.set({
+                title: "扩张 · 州图例",
+                items: [
+                    { label: "可宣称", pulse: true },
+                    { label: "已宣称", overlay: state.nations[0].color },
+                    { label: "聚焦州", ring: true },
+                ],
+                note: "金色闪烁可点击宣称 · 再次点击取消并返还[[politics]]",
+            });
+            return;
+        }
+        const kind = this.construction.selectedKind;
+        if (this.isConstructionOpen() && kind !== null && BUILDING_PROFILES[kind].scope === this.mapMode) {
+            const local = BUILDING_PROFILES[kind].scope === "province";
+            this.legend.set({
+                title: `建造 · ${BUILDING_PROFILES[kind].name}`,
+                items: [
+                    { label: "空闲", color: CONSTRUCTION_COLORS.empty },
+                    ...(local ? [] : [
+                        { label: "较少", color: CONSTRUCTION_COLORS.low },
+                        { label: "较多", color: CONSTRUCTION_COLORS.high },
+                    ]),
+                    { label: "已满", color: CONSTRUCTION_COLORS.full },
+                ],
+                note: `地图＝已建＋在建 / 上限 · ${local ? "省份" : "州"}容量`,
+            });
+            return;
+        }
+        this.legend.set(null);
     }
 
     cancelConstructionSelection(): boolean {
@@ -288,7 +412,14 @@ export class GameUI implements UIContext {
         this.expansion.setHidden(tab !== "expansion");
         if (tab === "construction") this.changeMapMode(this.construction.scope);
         if (tab === "expansion") this.changeMapMode("state");
-        if (tab !== "expansion") this.expansion.clearFocus();
+        if (tab !== "expansion") {
+            this.expansion.clearFocus();
+            if (this.expansion.isManaging()) {
+                this.expansion.cancelDraft();
+                this.syncClaimBanner();
+                this.toast("已退出宣称管理，未确认的宣称变更已丢弃");
+            }
+        }
         this.syncConstructionView();
     }
 
@@ -427,6 +558,13 @@ export class GameUI implements UIContext {
         if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (tag === "BUTTON" && event.key === " ")) return;
         if (!document.querySelector("#start-overlay")?.classList.contains("hidden")) return;
         if (document.querySelector("#guide-overlay")?.classList.contains("open")) return;
+        if (this.confirmDialog.isOpen) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                this.confirmDialog.close();
+            }
+            return;
+        }
         if ((event.target as HTMLElement).dataset.action === "construction-scope" && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
             event.preventDefault();
             const mode = event.key === "ArrowLeft" ? "state" : "province";
@@ -441,6 +579,11 @@ export class GameUI implements UIContext {
             if (this.diplomacy.closeActionMenu()) return;
             if (this.closeSettings()) return;
             if (this.diplomacy.closeDeclare()) return;
+            if (this.expansion.isManaging()) {
+                event.preventDefault();
+                this.requestClaimExit();
+                return;
+            }
             if (this.cancelConstructionSelection()) return;
             if (this.isClaimsOpen() && this.expansion.clearFocus()) return;
             this.multiSelect.clear();
@@ -456,6 +599,112 @@ export class GameUI implements UIContext {
         this.armyPanelEl.classList.toggle("army-collapsed", event.matches);
         this.armies.render();
     };
+
+    /** Policy chips go through a confirm card; a pending target click cancels its switch. */
+    private requestPolicySwitch(target: HTMLElement): void {
+        const state = this.engine.state;
+        const player = state.nations[0];
+        const category = target.dataset.category as PolicyCategory | undefined;
+        const value = target.dataset.value ?? "";
+        if (!category || !value || !POLICY_LABELS[category] || state.winner !== null) return;
+        const currentName = policyOption(category, player.policies[category])?.name ?? player.policies[category];
+        const transition = player.policyTransitions?.[category];
+
+        if (transition) {
+            if (transition.to !== value) {
+                this.sound.play("error");
+                this.toast(`该组政策正在切换：先点击带时钟的「${policyOption(category, transition.to)?.name ?? transition.to}」取消`);
+                return;
+            }
+            const remaining = Math.max(0, transition.readyDay - state.day);
+            const targetName = policyOption(category, transition.to)?.name ?? transition.to;
+            this.confirmDialog.show({
+                title: `取消${POLICY_LABELS[category]}政策切换`,
+                body: `「${currentName} → ${targetName}」还需 ${textToken("turn", remaining)}。\n取消后回到「${currentName}」；已支付的 ${textToken("politics", POLICY_SWITCH_COST)} 与每日维护不返还，重新切换仍需 ${textToken("turn", POLICY_SWITCH_DAYS)}。`,
+                danger: true,
+                onConfirm: () => {
+                    if (this.engine.cancelPolicySwitch(category)) {
+                        this.sound.play("select");
+                        this.toast(`已取消${POLICY_LABELS[category]}政策切换，已花费政治点不返还`);
+                    } else {
+                        this.sound.play("error");
+                    }
+                },
+            });
+            return;
+        }
+
+        if (player.policies[category] === value) return;
+        if (player.politicalPower < POLICY_SWITCH_COST) {
+            this.sound.play("error");
+            this.toast(`政治点不足 ${POLICY_SWITCH_COST}，无法开始切换`);
+            return;
+        }
+        const nextName = policyOption(category, value)?.name ?? value;
+        this.confirmDialog.show({
+            title: `切换${POLICY_LABELS[category]}政策`,
+            body: `${currentName} → ${nextName}\n开始支付 ${textToken("politics", POLICY_SWITCH_COST)}，切换期间每日维护 ${textToken("politics", -POLICY_SWITCH_UPKEEP)}。\n需 ${textToken("turn", POLICY_SWITCH_DAYS)} 完成，增益按进度逐步生效；期间再次点击目标可取消，已花费政治点不返还。`,
+            onConfirm: () => {
+                if (this.engine.startPolicySwitch(category, value)) {
+                    this.sound.play("select");
+                    this.toast(`已开始${POLICY_LABELS[category]}政策切换（-${POLICY_SWITCH_COST} 政治点）`);
+                } else {
+                    this.sound.play("error");
+                    this.toast("无法开始切换：政治点不足或目标无效");
+                }
+            },
+        });
+    }
+
+    private enterClaimManagement(): void {
+        if (this.engine.state.winner !== null) {
+            this.sound.play("error");
+            this.toast("战役已结束，无法管理宣称");
+            return;
+        }
+        if (!this.expansion.enterManage()) return;
+        this.sound.play("select");
+        this.syncClaimBanner();
+        this.toast("已进入宣称管理：点击地图州标记新增 / 取消，按 Esc 确认退出");
+    }
+
+    /** Esc / exit button: summarize the cached claim changes before committing them. */
+    private requestClaimExit(): void {
+        if (!this.expansion.isManaging()) return;
+        const { adds, cancels } = this.expansion.draft();
+        const names = (ids: number[]): string => ids.map((id) => this.engine.state.states[id]?.name ?? "未知州").join("、");
+        if (adds.length === 0 && cancels.length === 0) {
+            this.confirmDialog.show({
+                title: "退出宣称管理",
+                body: "当前没有待确认的宣称变更。\n退出不会修改任何宣称。",
+                onConfirm: () => {
+                    this.expansion.cancelDraft();
+                    this.syncClaimBanner();
+                    this.toast("已退出宣称管理");
+                },
+            });
+            return;
+        }
+        const net = (adds.length - cancels.length) * CLAIM_COST;
+        this.confirmDialog.show({
+            title: "确认宣称变更",
+            body: `${adds.length ? `新增宣称：${names(adds)}` : ""}${adds.length && cancels.length ? "\n" : ""}${cancels.length ? `取消宣称：${names(cancels)}` : ""}\n\n确认后一次性提交；政治点 ${net > 0 ? `-${net}` : `+${-net}`}。取消的宣称每项返还 ${CLAIM_COST}，交战中可能取消失败。`,
+            onConfirm: () => {
+                const result = this.expansion.applyDraft();
+                this.syncClaimBanner();
+                this.sound.play(result.failed ? "error" : "select");
+                const parts = [`新增 ${result.added}`, `取消 ${result.cancelled}`];
+                if (result.failed) parts.push(`失败 ${result.failed}`);
+                this.toast(`宣称变更已提交：${parts.join(" · ")}`);
+            },
+        });
+    }
+
+    private syncClaimBanner(): void {
+        const managing = this.expansion.isManaging();
+        this.claimBanner.classList.toggle("hidden", !managing);
+        this.hud.classList.toggle("claim-managing", managing);
+    }
 
     private handleSidebarClick(event: Event): void {
         const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
@@ -566,8 +815,28 @@ export class GameUI implements UIContext {
             this.sound.play("select");
             return;
         }
+        if (action === "claim-manage") {
+            this.enterClaimManagement();
+            return;
+        }
+        if (action === "claim-manage-exit") {
+            this.requestClaimExit();
+            return;
+        }
+        if (action === "claim-draft") {
+            const stateId = Number(target.dataset.state);
+            if (!Number.isInteger(stateId)) return;
+            const result = this.expansion.toggleDraft(stateId);
+            this.sound.play(result.ok ? "recruit" : "error");
+            this.toast(result.message);
+            return;
+        }
         if (action === "feed-toggle") {
             this.feed.toggle();
+            return;
+        }
+        if (action === "policy") {
+            this.requestPolicySwitch(target);
             return;
         }
 

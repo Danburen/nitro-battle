@@ -2,9 +2,11 @@ import type { GameEngine } from "../../game/engine.ts";
 import { canBuild, canBuildProvince, constructionPlan, factoryTotals, provinceBuildingCapacity, stateBuildingCapacity } from "../../game/economy.ts";
 import { BUILDING_PROFILES, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types.ts";
 import type { BuildingKind, ConstructionOrder } from "../../game/types.ts";
-import { CONSTRUCTION_COLORS } from "../../render/constructionOverlay.ts";
 import { tooltipAttrs } from "../tooltip.ts";
-import { escapeGameText, escapeHtml, renderGameText } from "../text.ts";
+import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
+import { panelHead } from "../panel.ts";
+
+const CONSTRUCTION_TIP = `2 · 选择建筑后，点击地图中的己方州；省份建筑点击己方省份。\n每次点击加入一项，可连续选址。\n地图显示 已建＋在建 / 上限，颜色图例：空闲 / 较少 / 较多 / 已满；省份建筑仅空闲 / 已满。\n右键或 Esc 取消当前建筑选择。\n\n州建筑仅作用于州中心及其同属省份；省份建筑每省每种限 1 座，放大地图显示容量数字。\n施工消耗[[idle]][[factory]]，每项最多 5 座，按队列顺序分配，多余工厂顺延；无[[idle]][[factory]]时施工暂停。\n取消未完成项目返还半数已付资源。`;
 
 function icon(kind: BuildingKind): string {
     return `<span class="building-emoji" aria-hidden="true">${BUILDING_PROFILES[kind].glyph}</span>`;
@@ -49,15 +51,13 @@ export class ConstructionPanel {
         const local = this.scope === "province";
         const area = local ? "省份" : "州";
         const kinds = local ? PROVINCE_BUILDING_KINDS : STATE_BUILDING_KINDS;
-        const kind = this.selectedKind;
         const buildings = `<div class="deploy-head construction-step"><span>1 · 选择建筑</span></div>
-            <div class="construction-icons" role="group" aria-label="选择${area}建筑类型">${kinds.map((entry) => this.buildButton(entry, state.selected)).join("")}</div>
-            <div class="construction-placement">
-                <p>2 · ${kind ? `已选${BUILDING_PROFILES[kind].name}` : "选择建筑后"}，点击地图中的己方${area}</p>
-                <div class="construction-legend" aria-label="容量利用率图例"><span><i style="background:${CONSTRUCTION_COLORS.empty}"></i>空闲</span>${local ? "" : `<span><i style="background:${CONSTRUCTION_COLORS.low}"></i>较少</span><span><i style="background:${CONSTRUCTION_COLORS.high}"></i>较多</span>`}<span><i style="background:${CONSTRUCTION_COLORS.full}"></i>已满</span></div>
-                <p class="micro-hint">每次点击加入一项 · 可连续选址<br>地图：已建＋在建 / 上限 · 右键或 Esc 取消${local ? "<br>每省每种限 1 座 · 放大地图显示容量数字" : ""}</p>
-            </div>`;
-        this.el.innerHTML = `<div class="panel-head"><h2>建造</h2><span class="objective">${queue.length} 项工程</span></div>
+            <div class="construction-icons" role="group" aria-label="选择${area}建筑类型">${kinds.map((entry) => this.buildButton(entry, state.selected)).join("")}</div>`;
+        this.el.innerHTML = `${panelHead({
+            title: "建造",
+            help: { title: "建造说明", body: CONSTRUCTION_TIP },
+            status: `${queue.length} 项工程`,
+        })}
             <div class="construction-tabs" role="tablist" aria-label="建筑层级">
                 <button role="tab" id="construction-state-tab" aria-controls="construction-buildings" aria-selected="${this.scope === "state"}" data-action="construction-scope" data-mode="state" data-focus-key="scope-state" class="${this.scope === "state" ? "active" : ""}">州建筑 <span>经济与管理</span></button>
                 <button role="tab" id="construction-province-tab" aria-controls="construction-buildings" aria-selected="${this.scope === "province"}" data-action="construction-scope" data-mode="province" data-focus-key="scope-province" class="${this.scope === "province" ? "active" : ""}">省份建筑 <span>补给与防御</span></button>
@@ -95,7 +95,7 @@ export class ConstructionPanel {
             : kind === "supply"
                 ? `${profile.desc}\n沿己方陆地向外衰减：u = 1 − 距离/8。\n[[supply]] =（原[[supply]] + 10% × u）×（1 + 20% × u），再乘州[[infrastructure]]补给系数。`
                 : profile.desc;
-        const estimate = state.winner !== null ? "战役已结束" : enabled ? eta === null ? "暂停：无可分配工厂" : `${eta} 回合（含队列等待）`
+        const estimate = state.winner !== null ? "战役已结束" : enabled ? eta === null ? "暂停：无可分配工厂" : `${textToken("turn", eta)}（含队列等待）`
             : capacity && capacity.used >= capacity.limit ? "该参考目标已满（包含在建）" : "资金或工业不足";
         const target = local ? province : region;
         const targetDetails = target && site !== undefined && capacity && state.provinces[site].owner === 0 && state.terrain.passable[site]
@@ -111,8 +111,9 @@ export class ConstructionPanel {
         const province = state.provinces[order.site];
         const place = profile.scope === "state" ? state.states[province.stateId].name : province.name;
         const progress = Math.max(0, Math.min(100, (1 - order.remainingPoints / profile.constructionPoints) * 100));
+        const etaText = allocation.eta === null ? "暂停" : `${textToken("turn", allocation.eta)}（含等待）`;
         const eta = allocation.eta === null ? "暂停" : `${allocation.eta} 回合`;
-        const details = `${profile.scope === "state" ? "州" : "省份"} · ${escapeGameText(place)}\n剩余[[construction]] ${order.remainingPoints.toFixed(2)} / ${profile.constructionPoints}\n分配[[factory]] ${allocation.factories}/5 · [[construction:${allocation.pointsPerTurn.toFixed(2)}]]/回合\n预计完成 ${eta}（含等待）\n\n${profile.desc}\n[[factory]]在下一回合重新分配；取消返还半数已付资源。`;
+        const details = `${profile.scope === "state" ? "州" : "省份"} · ${escapeGameText(place)}\n剩余[[construction]] ${order.remainingPoints.toFixed(2)} / ${profile.constructionPoints}\n分配[[factory]] ${allocation.factories}/5 · [[construction:${allocation.pointsPerTurn.toFixed(2)}]]/回合\n预计完成 ${etaText}\n\n${profile.desc}\n[[factory]]在下一回合重新分配；取消返还半数已付资源。`;
         const finished = state.winner !== null;
         return `<div class="construction-order" role="listitem" draggable="${!finished}" data-order-id="${order.id}" ${tooltipAttrs(profile.name, details)}>
             <div class="queue-line"><span class="queue-grip" aria-hidden="true">⠿</span><span class="queue-kind">${icon(order.kind)}</span><button class="queue-place" data-action="construction-jump" data-site="${order.site}" data-mode="${profile.scope}" data-focus-key="jump-${order.id}"><b>${profile.name}</b><span>${escapeHtml(place)}</span></button><div class="queue-factories" role="img" aria-label="已分配 ${allocation.factories} 座工厂，共 5 槽"><span class="factory-cell-bar" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<i class="${i < allocation.factories ? "filled" : ""}"></i>`).join("")}</span>${icon("factory")}</div></div>

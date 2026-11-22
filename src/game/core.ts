@@ -4,9 +4,11 @@ import type { AIController } from "./ai.ts";
 import { attackTargets, reachable } from "./rules.ts";
 import type { ReachResult } from "./rules.ts";
 import { NEUTRAL } from "./types.ts";
-import type { Army, Battle, EngineEvent, GameState, LogTone } from "./types.ts";
+import type { Army, Battle, EngineEvent, GameState, LogEvent, LogTone } from "./types.ts";
 
 type Listener = (event: EngineEvent) => void;
+
+const LOG_CAP = 240;
 
 /** Shared state access and low-level army bookkeeping used by every domain module. */
 export class GameCore {
@@ -34,9 +36,9 @@ export class GameCore {
         for (const listener of this.listeners) listener(event);
     }
 
-    log(text: string, tone: LogTone, nationId: number): void {
-        this.state.log.push({ day: this.state.day, text, tone, nationId });
-        if (this.state.log.length > 80) this.state.log.shift();
+    log(text: string, tone: LogTone, nationId: number, major = false, event?: LogEvent): void {
+        this.state.log.push({ day: this.state.day, text, tone, nationId, major, event });
+        if (this.state.log.length > LOG_CAP) this.state.log.shift();
     }
 
     nationName(id: number): string {
@@ -126,6 +128,7 @@ export class GameCore {
         if (state.armyAt[army.province] === army.id) state.armyAt[army.province] = null;
         state.armies.delete(army.id);
         if (countLoss && army.nation === 0) state.stats.losses += army.regiments.length;
+        if (countLoss) this.emit({ type: "army-lost", armyId: army.id, province: army.province, nationId: army.nation });
         for (let i = state.battles.length - 1; i >= 0; i--) {
             const battle = state.battles[i];
             if (battle.attackerId === army.id) state.battles.splice(i, 1);

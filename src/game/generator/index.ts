@@ -15,7 +15,7 @@ export function generateWorld(settings: GameSettings): GameState {
     seedCities(provinces, mainland, rand);
     const names = new NameGenerator(new LCGRandom(settings.seed ^ 0x5eed));
     const states = generateStates(graph, terrain, provinces, components, rand, names, settings);
-    const nations = generateNations(graph, provinces, states, mainland, settings.nationCount, rand);
+    const nations = generateNations(graph, provinces, states, mainland, settings.nationCount, rand, names);
     const state: GameState = {
         settings,
         graph,

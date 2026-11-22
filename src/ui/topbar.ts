@@ -1,7 +1,9 @@
 import type { GameEngine } from "../game/engine.ts";
-import type { SoundManager } from "../audio.ts";
-import { factoryTotals, resourceRates } from "../game/economy.ts";
-import { POLICY_SWITCH_COST, SEASONS } from "../game/types.ts";
+import type { SoundManager } from "../audio/index.ts";
+import { factoryTotals, resourceBreakdown, resourceRates } from "../game/economy.ts";
+import { DIPLOMATIC_PROFILES } from "../game/diplomacy.ts";
+import { policySwitchUpkeep } from "../game/policy.ts";
+import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, PP_CAP, SEASONS } from "../game/types.ts";
 import { setGameText, textToken } from "./text.ts";
 import type { TextKey } from "./text.ts";
 
@@ -84,24 +86,63 @@ export class TopBar {
         const state = this.engine.state;
         const player = state.nations[0];
         const rates = resourceRates(state, 0);
-        this.dayPill.textContent = `第 ${state.day} 天`;
+        const detail = resourceBreakdown(state, 0);
+        setGameText(this.dayPill, `第 ${textToken("days", state.day)}`);
+        this.dayPill.dataset.tooltipTitle = "[[turn]]";
+        this.dayPill.dataset.tooltipBody = `当前为第 ${textToken("days", state.day)}。\n点击「结束回合」或按 E 推进 ${textToken("turn", 1)}：结算收入、恢复、施工、行军与会战。`;
         const season = SEASONS[state.seasonIndex];
         this.seasonPill.textContent = state.seasonIndex === 3 ? `${season.name} · 积雪减速` : season.name;
         this.seasonPill.classList.toggle("winter", state.seasonIndex === 3);
 
+        const fmt = (value: number): string => (Math.round(value * 10) / 10).toString();
+        const signed = (value: number): string => `${value >= 0 ? "+" : ""}${fmt(value)}`;
+        const policyBonus = (mult: number): string => {
+            const percent = Math.round((mult - 1) * 100);
+            return `政策加成 ${percent > 0 ? "+" : ""}${percent}%`;
+        };
         const net = Math.round(rates.fundsNet);
-        this.renderResource(this.resFunds, "funds", Math.floor(player.funds), `${net >= 0 ? "+" : ""}${net}/天`);
+        this.renderResource(this.resFunds, "funds", Math.floor(player.funds), `${net >= 0 ? "+" : ""}${net}/回合`);
         this.resFunds.dataset.tooltipTitle = "[[funds]]";
-        this.resFunds.dataset.tooltipBody = `税收 [[funds:+${Math.round(rates.fundsGross)}]]/回合\n军团维护 [[funds:-${Math.round(rates.upkeep)}]]/回合`;
+        this.resFunds.dataset.tooltipBody = `省份产值 [[funds:${signed(detail.funds.provinces)}]]/回合
+[[farm]] [[funds:${signed(detail.funds.farms)}]]/回合
+[[production]][[factory]] [[funds:${signed(detail.funds.factories)}]]/回合
+[[infrastructure]]加成 [[funds:${signed(detail.funds.infrastructure)}]]/回合
+${policyBonus(detail.funds.policyMult)}
+
+军团维护 [[funds:-${fmt(detail.funds.upkeep)}]]/回合
+净收入 [[funds:${signed(detail.funds.net)}]]/回合
+
+占领省按[[occupation]]效率折算；[[occupation]]政策影响占领省税收。`;
         this.renderResource(this.resManpower, "manpower", Math.floor(player.manpower), `+${rates.manpower.toFixed(1)}`);
         this.resManpower.dataset.tooltipTitle = "[[manpower]]储备";
-        this.resManpower.dataset.tooltipBody = `上限 [[manpower:${Math.round(rates.manpowerCap)}]]（随人口与[[occupation]]变化）`;
+        this.resManpower.dataset.tooltipBody = `每日征募 [[manpower:${signed(detail.manpower.total)}]]
+省份人口 [[manpower:${signed(detail.manpower.population)}]]
+[[farm]] [[manpower:${signed(detail.manpower.farms)}]]
+${policyBonus(detail.manpower.policyMult)}
+
+上限 [[manpower:${Math.round(detail.manpower.cap)}]]（随人口与[[occupation]]变化）`;
         this.renderResource(this.resIndustry, "industry", Math.floor(player.industry), `+${rates.industry.toFixed(1)}`);
         this.resIndustry.dataset.tooltipTitle = "[[industry]]储备";
-        this.resIndustry.dataset.tooltipBody = `上限 [[industry:${Math.round(rates.industryCap)}]]（随城市数量变化）\n[[production]][[factory]]产量受来源州[[infrastructure]]影响。`;
+        this.resIndustry.dataset.tooltipBody = `每日产出 [[industry:${signed(detail.industry.total)}]]
+城市 [[industry:${signed(detail.industry.cities)}]]
+[[production]][[factory]] [[industry:${signed(detail.industry.factories)}]]
+[[infrastructure]]加成 [[industry:${signed(detail.industry.infrastructure)}]]
+${policyBonus(detail.industry.policyMult)}
+
+上限 [[industry:${Math.round(detail.industry.cap)}]]（随城市数量变化）
+[[production]][[factory]]产量受来源州[[infrastructure]]影响。`;
         this.renderResource(this.resPp, "politics", Math.floor(player.politicalPower), `+${rates.politicalPower.toFixed(0)}`);
+        const diplomaticUpkeep = state.diplomaticActions
+            .filter((action) => action.nation === 0)
+            .reduce((sum, action) => sum + DIPLOMATIC_PROFILES[action.kind].upkeep, 0);
+        const switchUpkeep = policySwitchUpkeep(player);
         this.resPp.dataset.tooltipTitle = "[[politics]]";
-        this.resPp.dataset.tooltipBody = `切换政策消耗 [[politics:${POLICY_SWITCH_COST}]]\n有效[[admin]]每座 [[politics:+1]]/回合。`;
+        this.resPp.dataset.tooltipBody = `每日 [[politics:+${fmt(detail.political.total)}]]
+基础 [[politics:+${detail.political.base}]]
+[[admin]] [[politics:+${detail.political.admin}]]
+政策修正 [[politics:${detail.political.policy}]]
+${diplomaticUpkeep > 0 ? `外交项目维护 [[politics:-${diplomaticUpkeep}]]/回合\n` : ""}${switchUpkeep > 0 ? `政策切换维护 [[politics:-${switchUpkeep}]]/回合\n` : ""}
+上限 [[politics:${PP_CAP}]]。切换政策先付 [[politics:${POLICY_SWITCH_COST}]]，进行中每日维护，需 ${textToken("turn", POLICY_SWITCH_DAYS)}完成。`;
 
         const factories = factoryTotals(state, 0);
         this.production.max = String(factories.total);

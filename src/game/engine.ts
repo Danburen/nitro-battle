@@ -15,7 +15,7 @@ import {
 import { attack, cancelAttack } from "./combat.ts";
 import { cancelDiplomaticAction, claimState, cancelClaim, prepareDiplomaticAction, proposePeace, respondPeace, startWar } from "./diplomacy.ts";
 import { enforceWarGoal } from "./settlement.ts";
-import { setPolicy } from "./policy.ts";
+import { cancelPolicySwitch, startPolicySwitch } from "./policy.ts";
 import {
     cancelBuild,
     cancelTrain,
@@ -31,11 +31,9 @@ import type {
     Army,
     StateBuildingKind,
     ProvinceBuildingKind,
-    ConscriptionPolicy,
     DiplomaticActionKind,
-    EconomyPolicy,
     GameState,
-    OccupationPolicy,
+    PolicyCategory,
     UnitKind,
 } from "./types.ts";
 import { generateWorld } from "./generator/index.ts";
@@ -138,11 +136,12 @@ export class GameEngine extends GameCore {
 
     // ---- governance & diplomacy (game/policy.ts, game/diplomacy.ts) ----
 
-    setPolicy(category: "economy", value: EconomyPolicy): boolean;
-    setPolicy(category: "conscription", value: ConscriptionPolicy): boolean;
-    setPolicy(category: "occupation", value: OccupationPolicy): boolean;
-    setPolicy(category: "economy" | "conscription" | "occupation", value: string): boolean {
-        return setPolicy(this, category, value);
+    startPolicySwitch(category: PolicyCategory, value: string): boolean {
+        return startPolicySwitch(this, category, value);
+    }
+
+    cancelPolicySwitch(category: PolicyCategory): boolean {
+        return cancelPolicySwitch(this, category);
     }
 
     claimState(stateId: number): boolean {

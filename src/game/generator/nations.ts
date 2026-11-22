@@ -1,9 +1,10 @@
 import { periodicDistance } from "../../terrain/voronoi/index.ts";
 import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
-import { DEFAULT_POLICIES, NATION_PRESETS, NEUTRAL, START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types.ts";
+import { DEFAULT_POLICIES, NATION_COUNT_MAX, NEUTRAL, START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types.ts";
 import type { Nation, Province, StateRegion } from "../types.ts";
 import { makeCity } from "./cities.ts";
+import type { NameGenerator } from "./names.ts";
 
 export function stateAdjacency(graph: VoronoiGraph, provinces: readonly Province[], states: readonly StateRegion[]): number[][] {
     return states.map((region) => {
@@ -153,19 +154,21 @@ export function assignStateTerritories(states: readonly StateRegion[], adjacency
     const canRelease = (id: number): boolean => {
         const nation = owner[id];
         if (nation === NEUTRAL) return true;
-        const visited = new Set<number>([capitals[nation]]);
-        const open = [capitals[nation]];
-        let remaining = 0;
-        while (open.length > 0) {
-            const current = open.pop()!;
-            remaining += states[current].provinces.length;
-            for (const neighbor of adjacency[current]) {
-                if (neighbor === id || owner[neighbor] !== nation || visited.has(neighbor)) continue;
-                visited.add(neighbor);
-                open.push(neighbor);
+        // Overseas holdings are separate components; only the capital's component must survive.
+        const reachable = (exclude: number | null): number => {
+            const visited = new Set<number>([capitals[nation]]);
+            const open = [capitals[nation]];
+            while (open.length > 0) {
+                const current = open.pop()!;
+                for (const neighbor of adjacency[current]) {
+                    if (neighbor === exclude || owner[neighbor] !== nation || visited.has(neighbor)) continue;
+                    visited.add(neighbor);
+                    open.push(neighbor);
+                }
             }
-        }
-        return remaining === counts[nation] - states[id].provinces.length;
+            return visited.size;
+        };
+        return reachable(id) === reachable(null) - 1;
     };
     const errorChange = (nation: number, change: number): number => nation === NEUTRAL ? 0
         : (counts[nation] - target) ** 2 - (counts[nation] + change - target) ** 2;
@@ -195,20 +198,52 @@ export function assignStateTerritories(states: readonly StateRegion[], adjacency
     return owner;
 }
 
-export function generateNations(graph: VoronoiGraph, provinces: Province[], states: readonly StateRegion[], mainland: readonly number[], nationCount: number, rand: LCGRandom): Nation[] {
+function nationColors(count: number, rand: LCGRandom): string[] {
+    const start = rand.nextInt(0, 360);
+    const step = 360 / count;
+    return Array.from({ length: count }, (_, index) => {
+        const hue = (start + index * step + rand.nextInt(-6, 7) + 360) % 360;
+        const saturation = rand.nextInt(62, 78);
+        const lightness = rand.nextInt(47, 57);
+        return hslToHex(hue, saturation, lightness);
+    });
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+    const s = saturation / 100;
+    const l = lightness / 100;
+    const channel = (n: number): number => {
+        const k = (n + hue / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+    };
+    return `#${[channel(0), channel(8), channel(4)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function generateNations(
+    graph: VoronoiGraph,
+    provinces: Province[],
+    states: readonly StateRegion[],
+    mainland: readonly number[],
+    nationCount: number,
+    rand: LCGRandom,
+    names: NameGenerator,
+): Nation[] {
     const candidates = [...new Set(mainland.map((site) => provinces[site].stateId))];
-    const capitals = pickCapitalStates(graph, states, candidates, Math.min(nationCount, candidates.length, NATION_PRESETS.length), rand);
+    const count = Math.min(nationCount, candidates.length, NATION_COUNT_MAX);
+    const capitals = pickCapitalStates(graph, states, candidates, count, rand);
     const owners = assignStateTerritories(states, stateAdjacency(graph, provinces, states), capitals);
     for (const region of states) {
         for (const site of region.provinces) provinces[site].owner = owners[region.id];
     }
+    const colors = nationColors(capitals.length, rand);
     return capitals.map((id, nation) => {
         const capital = states[id].center;
         makeCity(provinces[capital], true);
         return {
             id: nation,
-            name: NATION_PRESETS[nation].name,
-            color: NATION_PRESETS[nation].color,
+            name: names.nationName(),
+            color: colors[nation],
             isPlayer: nation === 0,
             capital,
             funds: START_FUNDS,
@@ -216,6 +251,7 @@ export function generateNations(graph: VoronoiGraph, provinces: Province[], stat
             industry: START_INDUSTRY,
             politicalPower: START_PP,
             policies: { ...DEFAULT_POLICIES },
+            policyTransitions: {},
             alive: true,
         };
     });

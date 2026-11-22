@@ -1,6 +1,7 @@
 import type { GameEngine } from "../game/engine.ts";
 import type { BuildingKind } from "../game/types.ts";
-import type { SoundManager } from "../audio.ts";
+import type { SoundManager } from "../audio/index.ts";
+import type { ConfirmSpec } from "./confirm.ts";
 
 /** Shared services every UI module and action handler relies on. */
 export interface UIContext {
@@ -9,6 +10,8 @@ export interface UIContext {
     readonly multiSelect: Set<number>;
     readonly splitChecks: Set<number>;
     toast(text: string): void;
+    /** Router for the shared confirm/cancel card. */
+    confirm(spec: ConfirmSpec): void;
     refresh(): void;
     centerSite(site: number): void;
 }

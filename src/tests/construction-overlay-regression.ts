@@ -992,12 +992,15 @@ test("UI switches army selection to province mode and state mode restores land i
     const ui = Object.assign(Object.create(GameUI.prototype), {
         engine: h.engine, mapMode: "state", activeTab: "nations",
         multiSelect: new Set<number>(), splitChecks: new Set<number>(),
+        refreshTasks: [], refreshFrame: 0, refreshAgain: false,
         hud: { classList: { toggle(name: string, enabled: boolean) { if (enabled) classes.add(name); else classes.delete(name); } } },
         tooltip: { hide() {}, refresh() {} },
         construction: { selectedKind: null, scope: "state", render() {} },
         callbacks: { onMapMode: (mode: "province" | "state") => h.renderer.setMapMode(mode) },
         renderLayers() {}, syncConstructionView() {},
-        ...Object.fromEntries(["topbar", "intel", "armies", "detail", "nations", "deploy", "policy", "diplomacy", "expansion", "feed"].map((key) => [key, pane()])),
+        claimBanner: { classList: { toggle() {} } },
+        ...Object.fromEntries(["topbar", "intel", "armies", "detail", "nations", "deploy", "policy", "diplomacy", "feed"].map((key) => [key, pane()])),
+        expansion: { render() {}, isManaging: () => false },
     });
     t.after(h.engine.subscribe(() => ui.refresh()));
     h.engine.selectArmy(1);
