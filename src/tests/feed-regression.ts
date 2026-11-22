@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildFeedDigest } from "../ui/feed.ts";
+import { buildReportDigest } from "../ui/report/digest.ts";
 import type { LogEntry, LogEvent } from "../game/types.ts";
 
 function entry(day: number, text: string, event?: LogEvent, major = false): LogEntry {
@@ -8,7 +8,7 @@ function entry(day: number, text: string, event?: LogEvent, major = false): LogE
 }
 
 function digest(day: number, log: LogEntry[]) {
-    return buildFeedDigest({ day, log });
+    return buildReportDigest({ day, log });
 }
 
 const battle = (rounds: number, attackLoss: number, defenseLoss: number, outcome: "ongoing" | "repelled" | "captured") => ({
@@ -129,4 +129,24 @@ test("global events are pinned, deduplicated and separated from the day stream",
     const { globals, days } = digest(10, log);
     assert.deepEqual(globals.map((item) => item.text), ["季节更替 夏季", "吞并 S 州", "宣战"]);
     assert.equal(days.some((block) => block.other.some((item) => item.text === "宣战")), false, "globals are not repeated in the day stream");
+});
+
+test("floating highlights keep only headlines and state flips touching the player", () => {
+    const log = [
+        entry(9, "敌国攻占我方州", {
+            kind: "capture", nation: 2, previousOwner: 0, stateFlipped: true, province: "都城", stateName: "S",
+        }),
+        entry(9, "他国互相易手", {
+            kind: "capture", nation: 3, previousOwner: 2, stateFlipped: true, province: "边境", stateName: "T",
+        }),
+        entry(9, "普通占领", { kind: "capture", nation: 3, previousOwner: 2, stateFlipped: false, province: "村庄" }),
+        entry(10, "我方攻占敌国州", {
+            kind: "capture", nation: 0, previousOwner: 2, stateFlipped: true, province: "要塞", stateName: "U",
+        }),
+        entry(10, "双方停战", { kind: "peace", nation: 0 }),
+        entry(11, "季节更替 秋季", { kind: "season", season: "秋季" }),
+    ];
+
+    const { highlights } = digest(11, log);
+    assert.deepEqual(highlights.map((item) => item.text), ["季节更替 秋季", "双方停战", "我方攻占敌国州", "敌国攻占我方州"]);
 });

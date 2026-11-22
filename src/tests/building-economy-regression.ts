@@ -67,6 +67,8 @@ function fixture(sizes = [16, 16], owners = [0, 1]): GameState {
         redeployArmyId: null, war: [[false, false], [false, false]], warSince: [[-1, -1], [-1, -1]],
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
+        alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
+        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };
@@ -81,6 +83,7 @@ function engine(state = fixture()): GameEngine {
 test("unified scoped building profiles and exact costs", () => {
     assert.deepEqual(STATE_BUILDING_KINDS, ["factory", "farm", "infrastructure", "admin"]);
     assert.deepEqual(PROVINCE_BUILDING_KINDS, ["supply", "fort"]);
+    assert.equal(BUILDING_PROFILES.fort.glyph, "🛡️");
     const costs: Record<BuildingKind, number[]> = {
         factory: [180, 30, 8], farm: [80, 15, 4], infrastructure: [80, 15, 5],
         admin: [100, 15, 6], supply: [250, 40, 30], fort: [120, 15, 8],

@@ -1,4 +1,5 @@
 import { periodicDistance } from "../terrain/voronoi/index.ts";
+import { hasMilitaryAccess } from "./access.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { infrastructureLevel, infrastructureMoveMultiplier } from "./economy.ts";
 import { NEUTRAL, REGIMENT_CAP, UNIT_PROFILES } from "./types.ts";
@@ -79,7 +80,8 @@ export function reachable(state: GameState, army: Army): ReachResult {
         for (const edge of state.graph.adjacency[current.site]) {
             const next = edge.site;
             if (!state.terrain.passable[next]) continue;
-            if (state.provinces[next].owner !== army.nation) continue;
+            const owner = state.provinces[next].owner;
+            if (owner !== army.nation && !hasMilitaryAccess(state, army.nation, owner)) continue;
             const occupant = armyAt(state, next);
             if (occupant && occupant.id !== army.id) {
                 // Own armies may merge when there is room; enemies block.
@@ -117,9 +119,11 @@ export function pathTo(reach: ReachResult, target: number): number[] {
  */
 export function marchPath(state: GameState, army: Army, target: number): number[] | null {
     if (target === army.province) return null;
-    const passableOwn = (site: number): boolean =>
-        state.terrain.passable[site] === 1 &&
-        (state.provinces[site].owner === army.nation || site === target);
+    const passableOwn = (site: number): boolean => {
+        const owner = state.provinces[site].owner;
+        return state.terrain.passable[site] === 1 &&
+            (owner === army.nation || hasMilitaryAccess(state, army.nation, owner) || site === target);
+    };
 
     const cost = new Map<number, number>([[army.province, 0]]);
     const parent = new Map<number, number>();

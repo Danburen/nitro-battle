@@ -6,7 +6,7 @@ import { tooltipAttrs } from "../tooltip.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { panelHead } from "../panel.ts";
 
-const CONSTRUCTION_TIP = `2 · 选择建筑后，点击地图中的己方州；省份建筑点击己方省份。\n每次点击加入一项，可连续选址。\n地图显示 已建＋在建 / 上限，颜色图例：空闲 / 较少 / 较多 / 已满；省份建筑仅空闲 / 已满。\n右键或 Esc 取消当前建筑选择。\n\n州建筑仅作用于州中心及其同属省份；省份建筑每省每种限 1 座，放大地图显示容量数字。\n施工消耗[[idle]][[factory]]，每项最多 5 座，按队列顺序分配，多余工厂顺延；无[[idle]][[factory]]时施工暂停。\n取消未完成项目返还半数已付资源。`;
+const CONSTRUCTION_TIP = `2 · 选择建筑后，点击地图中的己方州；省份建筑点击己方省份。\n每次点击加入一项，可连续选址。\n地图显示「已建+在建 / 上限」：在建数字为绿色，正在施工的地块会覆盖绿色阴影；不可建造的地块统一为灰色。\n颜色图例：空闲 / 较少 / 较多 / 已满；省份建筑仅空闲 / 已满。\n右键或 Esc 取消当前建筑选择。\n\n州建筑仅作用于州中心及其同属省份；省份建筑每省每种限 1 座，放大地图显示容量数字。\n施工消耗[[idle]][[factory]]，每项最多 5 座，按队列顺序分配，多余工厂顺延；无[[idle]][[factory]]时施工暂停。\n取消未完成项目返还半数已付资源。`;
 
 function icon(kind: BuildingKind): string {
     return `<span class="building-emoji" aria-hidden="true">${BUILDING_PROFILES[kind].glyph}</span>`;

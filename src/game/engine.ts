@@ -15,6 +15,22 @@ import {
 import { attack, cancelAttack } from "./combat.ts";
 import { cancelDiplomaticAction, claimState, cancelClaim, prepareDiplomaticAction, proposePeace, respondPeace, startWar } from "./diplomacy.ts";
 import { enforceWarGoal } from "./settlement.ts";
+import {
+    adjustTributeRate as adjustTributeRateOf,
+    demandVassalization as demandVassalizationOf,
+    petitionIndependence as petitionIndependenceOf,
+    releaseVassal as releaseVassalOf,
+    requestForeignAid as requestForeignAidOf,
+    requestVassalization as requestVassalizationOf,
+    requestVassalUpgrade as requestVassalUpgradeOf,
+    respondDiplomaticRequest as respondDiplomaticRequestOf,
+} from "./vassal.ts";
+import {
+    createAlliance as createAllianceOf,
+    inviteToAlliance as inviteToAllianceOf,
+    leaveAlliance as leaveAllianceOf,
+    requestJoinAlliance as requestJoinAllianceOf,
+} from "./alliance.ts";
 import { cancelPolicySwitch, startPolicySwitch } from "./policy.ts";
 import {
     cancelBuild,
@@ -35,6 +51,7 @@ import type {
     GameState,
     PolicyCategory,
     UnitKind,
+    VassalType,
 } from "./types.ts";
 import { generateWorld } from "./generator/index.ts";
 
@@ -165,8 +182,8 @@ export class GameEngine extends GameCore {
         return startWar(this, 0, targetId, actionId);
     }
 
-    enforceWarGoal(targetId: number): boolean {
-        return enforceWarGoal(this, 0, targetId);
+    enforceWarGoal(targetId: number, vassalType?: VassalType): boolean {
+        return enforceWarGoal(this, 0, targetId, vassalType);
     }
 
     proposePeace(targetId: number): boolean {
@@ -175,6 +192,59 @@ export class GameEngine extends GameCore {
 
     respondPeace(fromId: number, accept: boolean): boolean {
         return respondPeace(this, fromId, accept);
+    }
+
+    // ---- vassals & alliances (game/vassal.ts, game/alliance.ts) ----
+
+    /** Player asks to become a vassal of the target (cooperative or autonomous only). */
+    requestVassalization(targetId: number, type: string): boolean {
+        return requestVassalizationOf(this, 0, targetId, type);
+    }
+
+    requestVassalUpgrade(): boolean {
+        return requestVassalUpgradeOf(this, 0);
+    }
+
+    /** Coercive demand: the target becomes an oppressive vassal, or refuses. */
+    demandVassalization(targetId: number): boolean {
+        return demandVassalizationOf(this, 0, targetId);
+    }
+
+    /** One-shot independence petition: pay the contract's cost, gain, then cool down. */
+    petitionIndependence(): boolean {
+        return petitionIndependenceOf(this, 0);
+    }
+
+    adjustTributeRate(delta: number): boolean {
+        return adjustTributeRateOf(this, 0, delta);
+    }
+
+    releaseVassal(vassalId: number): boolean {
+        return releaseVassalOf(this, vassalId, true);
+    }
+
+    requestForeignAid(helperId?: number): boolean {
+        return requestForeignAidOf(this, 0, helperId);
+    }
+
+    respondDiplomaticRequest(requestId: number, accept: boolean): boolean {
+        return respondDiplomaticRequestOf(this, requestId, accept);
+    }
+
+    createAlliance(): boolean {
+        return createAllianceOf(this, 0) !== null;
+    }
+
+    inviteToAlliance(targetId: number): boolean {
+        return inviteToAllianceOf(this, 0, targetId);
+    }
+
+    requestJoinAlliance(leaderId: number): boolean {
+        return requestJoinAllianceOf(this, 0, leaderId);
+    }
+
+    leaveAlliance(): boolean {
+        return leaveAllianceOf(this, 0);
     }
 
     // ---- turn resolution (game/turn.ts) ----

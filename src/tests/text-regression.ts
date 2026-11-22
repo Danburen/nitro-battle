@@ -87,6 +87,22 @@ test("unknown, malformed, nested and nonfinite tokens remain literal", () => {
     }
 });
 
+test("signed trait tokens prefix + or - and colour the whole line", () => {
+    assert.equal(renderGameText("[[pos:倾向于主动进攻他国]]"),
+        '<span class="game-text game-text--pos">+倾向于主动进攻他国</span>');
+    assert.equal(renderGameText("[[neg:难以忍受长期战争]]"),
+        '<span class="game-text game-text--neg">-难以忍受长期战争</span>');
+    assert.equal(renderGameText("[[note:对扩张领土兴趣不大]]"),
+        '<span class="game-text game-text--note">~对扩张领土兴趣不大</span>');
+    assert.equal(renderGameText("[[pos:倾向于主动进攻他国]]", "plain"), "+倾向于主动进攻他国");
+    assert.equal(renderGameText("[[note:对扩张领土兴趣不大]]", "plain"), "~对扩张领土兴趣不大");
+    assert.equal(renderGameText("[[neg:<b>短板</b>]]"),
+        '<span class="game-text game-text--neg">-&lt;b&gt;短板&lt;/b&gt;</span>');
+    for (const source of ["[[pos:]]", "[[neg:]]", "[[note:]]", "[[positive:1]]", "[[pos :x]]"]) {
+        assert.equal(renderGameText(source), escapeHtml(source));
+    }
+});
+
 test("ordinary text and untrusted HTML are escaped, not interpreted", () => {
     const source = `<img src=x onerror="alert(1)"> & 'quoted'\n[[funds]]`;
     const html = renderGameText(source);

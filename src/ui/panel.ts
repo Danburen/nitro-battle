@@ -30,9 +30,9 @@ export function helpButton(help: HelpSpec, attrs = ""): string {
 }
 
 export function panelHead(spec: PanelHeadSpec): string {
-    return `<div class="panel-head"><h2>${escapeHtml(spec.title)}</h2>${
+    return `<div class="panel-head"><div class="panel-head-main"><h2>${escapeHtml(spec.title)}</h2>${
         spec.help ? helpButton(spec.help, spec.helpAttrs ?? "") : ""
-    }${spec.extras ?? ""}${spec.status ? `<span class="objective">${spec.status}</span>` : ""}</div>`;
+    }</div>${spec.extras ?? ""}${spec.status ? `<span class="objective">${spec.status}</span>` : ""}</div>`;
 }
 
 export interface PanelView {
@@ -58,5 +58,38 @@ export function renderPanel(el: HTMLElement, view: PanelView): void {
         [...el.querySelectorAll<HTMLElement>(`[${focusAttr}]`)]
             .find((element) => element.getAttribute(focusAttr) === focusValue && !element.matches(":disabled"))
             ?.focus({ preventScroll: true });
+    }
+}
+
+/**
+ * One dock panel as a reusable container: visibility, shared head/body chrome
+ * and scroll-preserving re-render. Panels own their content; the shell owns the
+ * frame so every panel looks and behaves the same.
+ */
+export class PanelShell {
+    readonly el: HTMLElement;
+
+    constructor(el: HTMLElement) {
+        this.el = el;
+    }
+
+    get visible(): boolean {
+        return !this.el.classList.contains("hidden");
+    }
+
+    show(): void {
+        this.el.classList.remove("hidden");
+    }
+
+    hide(): void {
+        this.el.classList.add("hidden");
+    }
+
+    clear(): void {
+        this.el.innerHTML = "";
+    }
+
+    render(view: PanelView): void {
+        renderPanel(this.el, view);
     }
 }

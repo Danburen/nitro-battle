@@ -10,7 +10,8 @@ import { BIOME_ZH, ownerColor, ownerName } from "../common.ts";
 import { BIOME_PROFILES } from "../../terrain/biome.ts";
 import { escapeGameText, escapeHtml as escapeText, renderGameText, signClass, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
-import { panelHead } from "../panel.ts";
+import { panelHead, PanelShell } from "../panel.ts";
+import { tendencyBadge } from "../tendency.ts";
 
 const INTEL_TIP = `点击地图查询省份或州。\n省份：地形、城市防御、通行、天气、[[supply]]水平、控制国与正式归属、[[occupation]]进度、驻军军团与省份设施。\n州：州中心、控制范围、[[factory]]/[[farm]]/[[infrastructure]]/[[admin]]建筑容量与增益。\n带 i 或「地区修正」按钮可查看详细修正，建筑图标上悬停显示产量与建造条件。`;
 
@@ -20,7 +21,7 @@ function infrastructureEffects(level: number): string {
 
 export class IntelPanel {
     private readonly engine: GameEngine;
-    private readonly el = document.querySelector<HTMLElement>("#intel-panel") as HTMLElement;
+    private readonly shell = new PanelShell(document.querySelector<HTMLElement>("#intel-panel") as HTMLElement);
 
     constructor(engine: GameEngine) {
         this.engine = engine;
@@ -30,38 +31,28 @@ export class IntelPanel {
         const state = this.engine.state;
         const site = state.selected;
         if (site === null) {
-            this.el.innerHTML = `${panelHead({ title: mode === "state" ? "州情报" : "省份", help: { title: "情报面板", body: INTEL_TIP } })}
-                <div class="panel-body empty-hint">${renderGameText(`点击地图查看${mode === "state" ? "州" : "省份"}。左上「建造」管理州属[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]与省份[[supply]]中心、[[fort]]；点击军团接管指挥。`)}</div>`;
+            this.shell.render({
+                head: panelHead({ title: mode === "state" ? "州情报" : "省份", help: { title: "情报面板", body: INTEL_TIP } }),
+                body: `<div class="empty-hint">${renderGameText(`点击地图查看${mode === "state" ? "州" : "省份"}。左上「建造」管理州属[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]与省份[[supply]]中心、[[fort]]；点击军团接管指挥。`)}</div>`,
+            });
             return;
         }
 
-        const scrollTop = this.el.querySelector(".panel-body")?.scrollTop ?? 0;
-        const activeElement = document.activeElement;
-        const focusKey = activeElement instanceof HTMLElement && this.el.contains(activeElement)
-            ? activeElement.dataset.focusKey : undefined;
-        const restoreFocus = (): void => {
-            this.el.querySelector(".panel-body")!.scrollTop = scrollTop;
-            if (!focusKey) return;
-            const target = Array.from(this.el.querySelectorAll<HTMLElement>("[data-focus-key]"))
-                .find((element) => element.dataset.focusKey === focusKey);
-            target?.focus({ preventScroll: true });
-        };
         const province = state.provinces[site];
         if (mode === "state" && province.stateId >= 0) {
             const region = state.states[province.stateId];
             const center = state.provinces[region.center];
-            this.el.innerHTML = `
-                ${panelHead({
+            this.shell.render({
+                head: panelHead({
                     title: "州情报",
                     help: { title: "情报面板", body: INTEL_TIP },
                     extras: `<span class="owner-pill" style="--pc:${escapeText(ownerColor(state, center.owner))}">${escapeText(ownerName(state, center.owner))}</span>`,
-                })}
-                <div class="panel-body">
+                }),
+                body: `
                     <div class="prov-title">${escapeText(region.name)}<span class="prov-kind">${region.provinces.length} 省</span></div>
                     <div class="intel-selection"><span>选中省份：${escapeText(province.name)} · 控制国：${escapeText(ownerName(state, province.owner))} · 正式归属：${escapeText(ownerName(state, province.legalOwner))}</span>${this.modifiersHtml(province)}</div>
-                    ${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}
-                </div>`;
-            restoreFocus();
+                    ${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}`,
+            });
             return;
         }
         const biome = state.terrain.biomeAt(site);
@@ -89,13 +80,13 @@ export class IntelPanel {
                 ${occupant.nation === 0 ? " · 左上详情窗可指挥" : ""}
             </div>` : "";
 
-        this.el.innerHTML = `
-            ${panelHead({
+        this.shell.render({
+            head: panelHead({
                 title: "省份",
                 help: { title: "情报面板", body: INTEL_TIP },
                 extras: `<span class="owner-pill" style="--pc:${escapeText(color)}">${escapeText(ownerName(state, province.owner))}</span>`,
-            })}
-            <div class="panel-body">
+            }),
+            body: `
                 <div class="prov-title">${escapeText(province.name)}<span class="prov-kind">${kindLabel}</span></div>
                 <div class="tag-row">
                     <span class="tag">${escapeText(BIOME_ZH[biome] ?? profile.name)}</span>
@@ -108,13 +99,13 @@ export class IntelPanel {
                 <dl class="kv">
                     <div class="kv-row"><dt>控制国</dt><dd>${escapeText(ownerName(state, province.owner))}</dd></div>
                     <div class="kv-row"><dt>正式归属</dt><dd>${escapeText(ownerName(state, province.legalOwner))}</dd></div>
+                    ${province.owner > 0 ? `<div class="kv-row"><dt>外交倾向</dt><dd>${tendencyBadge(state.nations[province.owner], state)}</dd></div>` : ""}
                     ${occHtml}
                     <div class="kv-row"><dt>通行成本</dt><dd>${state.terrain.passable[site] ? entryCost(state, site).toFixed(2) : "不可通行"}</dd></div>
                     <div class="kv-row"><dt>天气</dt><dd>${snowText}</dd></div>
                 </dl>
-                ${presenceHtml}${battle ? this.battleHtml(battle) : ""}${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}
-            </div>`;
-        restoreFocus();
+                ${presenceHtml}${battle ? this.battleHtml(battle) : ""}${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}`,
+        });
     }
 
     private modifiersHtml(province: Province): string {
@@ -132,12 +123,15 @@ export class IntelPanel {
 
     private buildingCardHtml(kind: BuildingKind, built: number, limit: number, pending: number, focusKey: string, detail = ""): string {
         const profile = BUILDING_PROFILES[kind];
-        const count = `${built}/${limit}`;
+        const count = pending > 0 ? `${built}+${pending}/${limit}` : `${built}/${limit}`;
+        const countHtml = pending > 0
+            ? `${built}<span class="building-pending">+${pending}</span>/${limit}`
+            : `${built}/${limit}`;
         const title = `${textToken(kind)}${kind === "supply" ? "中心" : ""}`;
         const body = `已建/上限：${count}\n待建：${pending}\n${profile.desc}\n建造需求：${textToken("construction", profile.constructionPoints)}。${detail ? `\n${detail}` : ""}`;
-        return `<span class="intel-building-card" tabindex="0" role="img" aria-label="${escapeText(renderGameText(`${title}：${body}`, "plain"))}" data-focus-key="${escapeText(focusKey)}" ${tooltipAttrs(title, body)}>
+        return `<span class="intel-building-card${pending > 0 ? " pending" : ""}" tabindex="0" role="img" aria-label="${escapeText(renderGameText(`${title}：${body}`, "plain"))}" data-focus-key="${escapeText(focusKey)}" ${tooltipAttrs(title, body)}>
             <span class="building-emoji" aria-hidden="true">${escapeText(profile.glyph)}</span>
-            <span class="intel-building-count">${escapeText(count)}</span>
+            <span class="intel-building-count">${countHtml}</span>
         </span>`;
     }
 
@@ -177,6 +171,7 @@ export class IntelPanel {
             <dl class="kv">
                 <div class="kv-row"><dt>州中心</dt><dd>${escapeText(center.name)} · ${escapeText(ownerName(state, center.owner))}</dd></div>
                 <div class="kv-row"><dt>控制范围</dt><dd>${escapeText(`${controlled}/${capacity}`)} 省</dd></div>
+                ${center.owner > 0 ? `<div class="kv-row"><dt>外交倾向</dt><dd>${tendencyBadge(state.nations[center.owner], state)}</dd></div>` : ""}
             </dl>
             <div class="intel-building-cards">${buildings}</div>
             ${center.owner === 0 || province.owner === 0 ? '<button class="btn btn-sm" data-action="open-construction">前往建造页</button>' : ""}

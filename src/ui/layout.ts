@@ -1,7 +1,44 @@
 import { MAP_SIZES, NATION_COUNT_MAX } from "../game/types.ts";
+import { DEFAULT_TERRAIN_PARAMS } from "../terrain/biome.ts";
 import { renderGameText } from "./text.ts";
+import { tooltipAttrs } from "./tooltip.ts";
 
-const NATION_COUNT_LABELS = ["双雄对决", "三足鼎立", "四国争霸", "五强并立", "六方混战", "七国纵横", "八国乱世"];
+/** Preset line-ups; anything else goes through the custom slider. */
+const NATION_COUNT_PRESETS = [2, 3, 5, 6, 10] as const;
+const MAP_CELL_PRESETS = [600, 1500, 2400] as const;
+const DEFAULT_NATION_COUNT = 6;
+const DEFAULT_MAP_CELLS = MAP_SIZES.standard.cells;
+const MAP_CELLS_MIN = 600;
+const MAP_CELLS_MAX = 3000;
+
+const BALANCE_TIP = "开启后按开局实力补偿：领土少于同局平均的国家会获得补偿，每省工厂密度越低补得越多（额外州属农场与基础设施，各最多 +3，优先给最大的州）。领土越多补偿越少，最大的工业强国不补。基础设施同时提高产值与补给，小国更容易守住本土。关闭时保留生成出的原始强弱差距，世界更戏剧化。";
+
+interface TerrainSlider {
+    readonly key: "seaLevel" | "basePeriod" | "elevationExponent" | "moistureContrast" | "freqMultiplier";
+    readonly label: string;
+    readonly min: number;
+    readonly max: number;
+    readonly step: number;
+    readonly digits: number;
+}
+
+const TERRAIN_SLIDERS: readonly TerrainSlider[] = [
+    { key: "seaLevel", label: "海洋占比", min: 0.05, max: 0.45, step: 0.01, digits: 2 },
+    { key: "basePeriod", label: "地形周期", min: 2, max: 10, step: 0.5, digits: 1 },
+    { key: "elevationExponent", label: "海岸锐度", min: 1, max: 4, step: 0.1, digits: 1 },
+    { key: "moistureContrast", label: "湿度对比", min: 1, max: 3, step: 0.1, digits: 1 },
+    { key: "freqMultiplier", label: "频率倍率", min: 1.5, max: 3, step: 0.1, digits: 1 },
+];
+
+function terrainRows(): string {
+    return TERRAIN_SLIDERS.map((slider) => {
+        const value = DEFAULT_TERRAIN_PARAMS[slider.key];
+        return `<div class="field slider-field">
+            <label for="terrain-${slider.key}">${slider.label} <b data-terrain-out="${slider.key}">${value.toFixed(slider.digits)}</b></label>
+            <input id="terrain-${slider.key}" type="range" data-terrain="${slider.key}" data-digits="${slider.digits}" min="${slider.min}" max="${slider.max}" step="${slider.step}" value="${value}" disabled />
+        </div>`;
+    }).join("");
+}
 
 export const DEFAULT_HINT = "点击省份查看 · 点击军团接管指挥 · 军团列表 Ctrl+点击多选合并 · 拖拽平移 · 滚轮缩放 · 右键取消";
 
@@ -49,8 +86,9 @@ export function mountLayout(app: HTMLElement): void {
                     <button id="btn-settings" class="btn btn-icon" title="配置" aria-label="配置" aria-expanded="false" aria-controls="settings-pop">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     </button>
-                    <button id="btn-menu" class="btn">新战役</button>
+                    <button id="btn-menu" class="btn">新游戏</button>
                     <button id="btn-endturn" class="btn btn-primary">结束回合 <kbd>E</kbd></button>
+                    <div class="brief-start-hint hidden" id="brief-start-hint" role="status"></div>
                 </div>
             </div>
 
@@ -99,11 +137,12 @@ export function mountLayout(app: HTMLElement): void {
             </div>
 
             <section class="panel army-detail hidden" id="army-detail"></section>
+            <section class="panel brief-panel hidden" id="brief-panel" aria-label="国家详情"></section>
 
             <div class="hud-feed">
                 <div class="feed-bar">
                     <span class="feed-title">⚑ 战报直播</span>
-                    <button class="feed-toggle" id="feed-toggle" data-action="feed-toggle" title="展开/收起历史战报" aria-label="展开历史战报">▾</button>
+                    <button class="feed-toggle" id="feed-toggle" data-action="feed-toggle" title="展开/收起战场直播明细" aria-label="展开战场直播明细">▾</button>
                 </div>
                 <div class="feed-live" id="feed-live"></div>
                 <div class="feed-history hidden" id="feed-history"></div>
@@ -155,31 +194,8 @@ export function mountLayout(app: HTMLElement): void {
                         <p class="start-sub">Voronoi 大地图 · 军团战略 · 单机版</p>
                     </div>
                 </div>
-                <div class="start-form">
-                    <div class="field">
-                        <label for="seed-input">地图种子</label>
-                        <div class="seed-row">
-                            <input id="seed-input" type="number" step="1" />
-                            <button id="btn-dice" class="btn" type="button" title="随机种子">随机</button>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label for="size-select">地图规模</label>
-                        <select id="size-select">
-                            ${Object.entries(MAP_SIZES).map(([id, size]) => `<option value="${id}"${id === "standard" ? " selected" : ""}>${size.label}</option>`).join("")}
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="nation-select">国家数量</label>
-                        <select id="nation-select">
-                            ${Array.from({ length: NATION_COUNT_MAX - 1 }, (_, index) => index + 2)
-                                .map((count) => `<option value="${count}"${count === 3 ? " selected" : ""}>${count} 国 · ${NATION_COUNT_LABELS[count - 2]}</option>`)
-                                .join("")}
-                        </select>
-                    </div>
-                </div>
                 <div class="start-actions">
-                    <button id="btn-start" class="btn btn-primary btn-lg" type="button">开始战役</button>
+                    <button id="btn-start" class="btn btn-primary btn-lg" type="button">新游戏</button>
                     <button id="btn-howto" class="btn btn-lg" type="button">玩法说明</button>
                 </div>
                 <ul class="start-summary">
@@ -194,9 +210,14 @@ export function mountLayout(app: HTMLElement): void {
     <div class="overlay overlay-top hidden" id="gen-overlay">
         <div class="start-card gen-card">
             <div class="gen-inner">
-                <div class="gen-spinner" aria-hidden="true"></div>
                 <h2>正在生成世界</h2>
-                <p class="start-sub" id="gen-status">绘制大陆、划分州郡、推演列国……</p>
+                <div class="gen-progress" id="gen-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <i id="gen-bar"></i>
+                </div>
+                <div class="gen-meta">
+                    <p class="start-sub" id="gen-status">绘制大陆、划分州郡、推演列国……</p>
+                    <span class="gen-percent" id="gen-percent">0%</span>
+                </div>
             </div>
         </div>
     </div>
@@ -205,11 +226,79 @@ export function mountLayout(app: HTMLElement): void {
             <div class="start-strip"></div>
             <div class="start-inner">
                 <h2 class="picker-title">选择你的国家</h2>
-                <p class="start-sub">世界已经生成。执掌一国，或把命运交给骰子。</p>
+                <p class="start-sub">世界已经生成。点击旗帜进入巡视，可在地图上切换国家，右上角「开始游戏」以当前选中的国家开局。</p>
                 <div class="nation-options" id="nation-options"></div>
                 <div class="start-actions">
                     <button id="btn-random-nation" class="btn btn-primary" type="button">随机选择</button>
                     <button id="btn-back-start" class="btn" type="button">返回设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="overlay hidden" id="newgame-overlay">
+        <div class="start-card newgame-card">
+            <div class="start-strip"></div>
+            <div class="start-inner">
+                <h2 class="picker-title">新游戏</h2>
+                <p class="start-sub">选择世界规模与生成参数，随后生成世界并挑选国家。</p>
+                <div class="start-form newgame-form">
+                    <div class="field">
+                        <label for="seed-input">地图种子</label>
+                        <div class="seed-row">
+                            <input id="seed-input" type="number" step="1" />
+                            <button id="btn-dice" class="btn" type="button" title="随机种子">随机</button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <span class="field-label">世界国家数</span>
+                        <div class="preset-row" role="group" aria-label="世界国家数">
+                            ${NATION_COUNT_PRESETS.map((count) => `<button type="button" class="preset-btn${count === DEFAULT_NATION_COUNT ? " active" : ""}" data-nation-preset="${count}" aria-pressed="${count === DEFAULT_NATION_COUNT}">${count}</button>`).join("")}
+                            <button type="button" class="preset-btn" data-nation-preset="custom" aria-pressed="false">自定义</button>
+                        </div>
+                        <div class="preset-custom hidden" id="nation-custom">
+                            <input id="nation-range" type="range" min="2" max="${NATION_COUNT_MAX}" step="1" value="${DEFAULT_NATION_COUNT}" aria-label="自定义世界国家数" />
+                            <b id="nation-value">${DEFAULT_NATION_COUNT} 国</b>
+                        </div>
+                        <p class="field-hint">5 国以上会额外生成 1–3 个附庸（割地小国或独立弱国），因此实际国家总数可能比设定多出 1–3 个。</p>
+                    </div>
+                    <div class="field">
+                        <span class="field-label">地图大小</span>
+                        <div class="preset-row" role="group" aria-label="地图大小">
+                            ${MAP_CELL_PRESETS.map((cells) => `<button type="button" class="preset-btn${cells === DEFAULT_MAP_CELLS ? " active" : ""}" data-cells-preset="${cells}" aria-pressed="${cells === DEFAULT_MAP_CELLS}" aria-label="${cells} 省">${cells}</button>`).join("")}
+                            <button type="button" class="preset-btn" data-cells-preset="custom" aria-pressed="false">自定义</button>
+                        </div>
+                        <div class="preset-custom hidden" id="cells-custom">
+                            <input id="cells-range" type="range" min="${MAP_CELLS_MIN}" max="${MAP_CELLS_MAX}" step="100" value="${DEFAULT_MAP_CELLS}" aria-label="自定义地图大小" />
+                            <b id="cells-value">${DEFAULT_MAP_CELLS.toLocaleString("zh-CN")} 省</b>
+                        </div>
+                        <p class="field-hint">自定义范围 ${MAP_CELLS_MIN}–${MAP_CELLS_MAX} 省，步长 100；预设按小型 / 标准 / 大型轮廓等比缩放。</p>
+                    </div>
+                    <div class="field">
+                        <span class="field-label">国家强度平衡
+                            <button type="button" class="intel-help intel-info" aria-label="国家强度平衡说明" ${tooltipAttrs("国家强度平衡", BALANCE_TIP)}>i</button>
+                        </span>
+                        <span class="settings-control settings-seg-group" role="group" aria-label="国家强度平衡">
+                            <button type="button" class="settings-seg" data-balance="on" aria-pressed="false">开启</button>
+                            <button type="button" class="settings-seg active" data-balance="off" aria-pressed="true">关闭</button>
+                        </span>
+                        <p class="field-hint">默认关闭：保留生成出的强弱差距；开启后补偿领土小、工业弱的开局国家。</p>
+                    </div>
+                    <details class="newgame-advanced" id="newgame-advanced">
+                        <summary>地图生成参数</summary>
+                        <div class="advanced-mode">
+                            <span class="settings-label">参数</span>
+                            <span class="settings-seg-group" role="group" aria-label="地图生成参数模式">
+                                <button type="button" class="settings-seg active" data-terrain-mode="default" aria-pressed="true">默认</button>
+                                <button type="button" class="settings-seg" data-terrain-mode="custom" aria-pressed="false">自定义</button>
+                            </span>
+                        </div>
+                        ${terrainRows()}
+                        <p class="settings-note">默认即标准地形；切到自定义后可调整海岸、湿度与噪声频率。</p>
+                    </details>
+                </div>
+                <div class="start-actions">
+                    <button id="btn-newgame-start" class="btn btn-primary btn-lg" type="button">开始游戏</button>
+                    <button id="btn-newgame-cancel" class="btn btn-lg" type="button">取消</button>
                 </div>
             </div>
         </div>

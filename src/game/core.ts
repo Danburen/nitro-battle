@@ -1,6 +1,7 @@
 import { LCGRandom } from "../utils/LCGRandom.ts";
-import { StandardAI } from "./ai.ts";
-import type { AIController } from "./ai.ts";
+import { nationDisplayColor } from "./access.ts";
+import { StandardAI } from "./ai/index.ts";
+import type { AIController } from "./ai/index.ts";
 import { attackTargets, reachable } from "./rules.ts";
 import type { ReachResult } from "./rules.ts";
 import { NEUTRAL } from "./types.ts";
@@ -50,7 +51,8 @@ export class GameCore {
         if (id === NEUTRAL) return "中立守军";
         const nation = this.state.nations[id];
         const label = nation.name.replace(/[\\[\]]/g, "\\$&");
-        return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(nation.color) ? `[[chip:${nation.color}|${label}]]` : label;
+        const color = nationDisplayColor(this.state, id);
+        return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? `[[chip:${color}|${label}]]` : label;
     }
 
     invalidateReach(): void {

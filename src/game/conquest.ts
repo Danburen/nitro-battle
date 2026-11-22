@@ -48,6 +48,7 @@ export function claimProvince(core: GameCore, site: number, nation: number, prev
         {
             kind: "capture",
             nation,
+            previousOwner,
             site,
             province: province.name,
             stateName: region?.name,

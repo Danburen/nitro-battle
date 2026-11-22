@@ -1,4 +1,5 @@
 import type { GameEngine } from "../../game/engine.ts";
+import { nationDisplayColor } from "../../game/access.ts";
 import { canTrain } from "../../game/economy.ts";
 import { armyCap, nationArmyCount } from "../../game/rules.ts";
 import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
@@ -38,6 +39,7 @@ export class DeployPanel {
         if (state.winner !== null) return `<div class="empty-hint">战役已结束。</div>`;
 
         const player = state.nations[0];
+        const playerColor = nationDisplayColor(state, 0);
         const queue = state.deployments.filter((order) => order.nation === 0);
         const selectedSite = state.selected;
         const ownSelected = selectedSite !== null && state.provinces[selectedSite].owner === 0;
@@ -48,15 +50,11 @@ export class DeployPanel {
             const affordable = canTrain(state, 0, kind);
             const costParts = [textToken("funds", up.cost), textToken("manpower", up.manpowerCost)];
             if (up.industryCost > 0) costParts.push(textToken("industry", up.industryCost));
+            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n维护 ${textToken("funds", up.upkeep)}/天\n训练 ${textToken("days", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
             return `
-                <button class="deploy-kind" data-action="train" data-kind="${kind}" ${tooltipAttrs(escapeGameText(up.name), `${up.desc} · 维护 ${textToken("funds", up.upkeep)}/天`)} ${affordable ? "" : "disabled"}>
-                    <span class="unit-glyph small" style="--pc:${escapeHtml(player.color)}">${escapeHtml(up.glyph)}</span>
-                    <span class="deploy-kind-info">
-                        <span class="deploy-kind-name">${escapeHtml(up.name)}</span>
-                        <span class="deploy-kind-cost">${renderGameText(costParts.join(" · "))}</span>
-                        <span class="deploy-kind-stats">${up.trainDays}天 · 攻${up.atk}/防${up.def}/机动${up.mp}</span>
-                    </span>
-                    <span class="deploy-kind-add">添加</span>
+                <button class="deploy-kind" data-action="train" data-kind="${kind}" style="--nc:${escapeHtml(playerColor)}" ${tooltipAttrs(escapeGameText(up.name), detail)} ${affordable ? "" : "disabled"}>
+                    <span class="unit-glyph small" style="--pc:${escapeHtml(playerColor)}">${escapeHtml(up.glyph)}</span>
+                    <span class="deploy-kind-name">${escapeHtml(up.name)}</span>
                 </button>`;
         }).join("");
 

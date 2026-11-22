@@ -46,14 +46,19 @@ export function generateMap(settings: GameSettings): {
     terrain: BiomeMap;
     components: number[][];
 } {
-    const size = MAP_SIZES[settings.mapSize];
+    const profile = MAP_SIZES[settings.mapSize];
+    const cells = Math.max(200, Math.round(settings.mapCells ?? profile.cells));
+    // Keep the profile's density and aspect ratio when the dialog asks for a custom cell count.
+    const scale = Math.sqrt(cells / profile.cells);
+    const width = Math.max(320, Math.round(profile.width * scale));
+    const height = Math.max(240, Math.round(profile.height * scale));
     const graph = buildVoronoiGraph(
-        createRandomPoints(size.cells, size.width, size.height, settings.seed),
-        size.width,
-        size.height,
+        createRandomPoints(cells, width, height, settings.seed),
+        width,
+        height,
         { lloydIterations: 2 },
     );
-    const terrain = new TerrainGenerator(settings.seed, graph.domain).build(graph);
+    const terrain = new TerrainGenerator(settings.seed, graph.domain, settings.terrain ?? {}).build(graph);
     terrain.updateWeather(SEASONS[0].value);
     terrain.applyToGraph(graph);
 

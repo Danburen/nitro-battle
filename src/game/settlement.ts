@@ -1,12 +1,15 @@
 import type { GameCore } from "./core.ts";
 import { checkVictory, transferControl } from "./conquest.ts";
 import { advanceDiplomacy, dropOffers, isAtWar, setWar } from "./diplomacy.ts";
+import { hasMilitaryAccess, overlordOf, vassalsOf } from "./access.ts";
+import { tendencyProfileOf } from "./ai/tendencies.ts";
+import { setVassal, VASSAL_PROFILES } from "./vassal.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
 import { isHostileProvince } from "./rules.ts";
 import { clampResources, resourceRates } from "./economy.ts";
 import { periodicDistance } from "../terrain/voronoi/index.ts";
 import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "./types.ts";
-import type { GameState, War } from "./types.ts";
+import type { GameState, VassalType, War } from "./types.ts";
 
 function capitulated(state: GameState, nation: number, opponent: number): boolean {
     const territory = state.provinces.filter((province) => province.legalOwner === nation);
@@ -61,6 +64,7 @@ function retireLandlessNations(core: GameCore): void {
     for (const nation of state.nations) {
         if (!nation.alive || state.provinces.some((province) => province.legalOwner === nation.id)) continue;
         nation.alive = false;
+        core.emit({ type: "relations" });
         for (const other of state.nations) {
             if (isAtWar(state, nation.id, other.id)) endPairWar(core, nation.id, other.id);
         }
@@ -102,7 +106,8 @@ function repatriateArmies(core: GameCore): void {
     const state = core.state;
     const displaced = [...state.armies.values()].filter((army) => {
         const controller = state.provinces[army.province].owner;
-        return controller !== army.nation && !isAtWar(state, army.nation, controller);
+        return controller !== army.nation && !isAtWar(state, army.nation, controller) &&
+            !hasMilitaryAccess(state, army.nation, controller);
     });
     // Release all departing counters before choosing destinations, including mutual exchanges.
     for (const army of displaced) if (state.armyAt[army.province] === army.id) state.armyAt[army.province] = null;
@@ -188,17 +193,32 @@ export function settlePeace(core: GameCore, a: number, b: number): void {
     finishTreaty(core, owners, capitals, a, b);
 }
 
-export function enforceWarGoal(core: GameCore, nation: number, target: number): boolean {
+export function enforceWarGoal(
+    core: GameCore, nation: number, target: number, vassalType?: VassalType,
+): boolean {
     const state = core.state;
     if (state.winner !== null || !isAtWar(state, nation, target)) return false;
     const war = state.wars.find((entry) => entry.aggressor === nation && entry.defender === target);
     if (!war || !warGoalProgress(state, war).canEnforce) return false;
+    // Oppressive vassalage is a peace term of a war of annexation: no land changes hands.
+    if (vassalType !== undefined && (war.goal !== "annex" || overlordOf(state, target) >= 0 ||
+        overlordOf(state, nation) >= 0 || vassalsOf(state, target).length > 0)) return false;
     const owners = state.provinces.map((province) => province.owner);
     const capitals = state.provinces.map((province) => province.isCapital);
     const sites = war.goal === "annex"
         ? state.provinces.filter((province) => province.legalOwner === target).map((province) => province.site)
         : war.targetSites;
     endPairWar(core, nation, target);
+    if (vassalType !== undefined) {
+        restorePairTerritory(core, nation, target);
+        if (!setVassal(core, target, nation, vassalType)) return false;
+        core.log(`${core.nationChip(nation)} 强迫 ${core.nationChip(target)} 成为${VASSAL_PROFILES[vassalType].name}附庸`, "diplo", nation, true, {
+            kind: "peace",
+            nation,
+        });
+        finishTreaty(core, owners, capitals, nation, target);
+        return true;
+    }
     for (const site of sites) {
         const province = state.provinces[site];
         if (province.legalOwner !== target) continue;
@@ -218,8 +238,9 @@ export function enforceWarGoal(core: GameCore, nation: number, target: number): 
 export function resolveWarOutcomes(core: GameCore): void {
     for (const war of [...core.state.wars]) {
         if (!isAtWar(core.state, war.aggressor, war.defender)) continue;
-        if (warGoalProgress(core.state, war).canEnforce) enforceWarGoal(core, war.aggressor, war.defender);
-        else if (capitulated(core.state, war.aggressor, war.defender)) {
+        if (warGoalProgress(core.state, war).canEnforce) {
+            enforceWarGoal(core, war.aggressor, war.defender, prefersOppressiveVassalage(core.state, war) ? "oppressive" : undefined);
+        } else if (capitulated(core.state, war.aggressor, war.defender)) {
             core.log(`${core.nationChip(war.aggressor)} 进攻失败 ${core.nationChip(war.defender)}`, "diplo", war.defender, true, {
                 kind: "peace",
                 nation: war.defender,
@@ -227,4 +248,19 @@ export function resolveWarOutcomes(core: GameCore): void {
             settlePeace(core, war.aggressor, war.defender);
         }
     }
+}
+
+/**
+ * Expansionist AI victors often prefer a tribute state to a new province,
+ * except against the final rival where annexation is the only winning move.
+ */
+function prefersOppressiveVassalage(state: GameState, war: War): boolean {
+    if (war.goal !== "annex") return false;
+    const aggressor = state.nations[war.aggressor];
+    const target = state.nations[war.defender];
+    if (!aggressor?.alive || aggressor.isPlayer || !target?.alive) return false;
+    if (overlordOf(state, target.id) >= 0 || overlordOf(state, aggressor.id) >= 0) return false;
+    if (vassalsOf(state, target.id).length > 0) return false;
+    if (tendencyProfileOf(aggressor.tendency).expansion < 4) return false;
+    return state.nations.filter((nation) => nation.alive && nation.id !== war.aggressor).length > 1;
 }

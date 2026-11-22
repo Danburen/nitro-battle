@@ -59,6 +59,8 @@ function fixture(politicalPower = 20): GameState {
         redeployArmyId: null, war: [[false, false], [false, false]], warSince: [[-1, -1], [-1, -1]],
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
+        alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
+        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };

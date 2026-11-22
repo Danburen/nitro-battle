@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { nationDisplayColor } from "../game/access.ts";
 import { claimProvince } from "../game/conquest.ts";
 import { factoryTotals } from "../game/economy.ts";
 import { generateWorld } from "../game/generator/index.ts";
@@ -141,6 +142,103 @@ for (const mapSize of ["small", "standard", "large"] as MapSizeId[]) {
         }
     }
 }
+
+test("large line-ups mix great and minor powers", () => {
+    for (const nationCount of [5, 6, 8, 10, 12]) {
+        for (const seed of [42, 2026]) {
+            const state = generateWorld({ seed, mapSize: "standard", nationCount });
+            // Carved vassals are extra nations on top of the requested line-up.
+            assert.ok(state.nations.length >= nationCount && state.nations.length <= nationCount + 3);
+            const sizes = state.nations.map((nation) =>
+                state.provinces.filter((province) => province.owner === nation.id).length);
+            assert.ok(sizes.every((size) => size > 0), `empty nation: ${sizes.join(",")}`);
+            assert.ok(Math.max(...sizes) >= Math.min(...sizes) * 1.8,
+                `${nationCount} nations/seed ${seed}: ${sizes.join(",")}`);
+            for (const nation of state.nations) {
+                assert.equal(state.provinces[nation.capital].owner, nation.id);
+                assert.ok(state.provinces[nation.capital].isCapital);
+            }
+        }
+    }
+});
+
+test("custom cell counts keep the map-size aspect ratio and honor terrain tuning", () => {
+    const standard = generateWorld({ seed: 9, mapSize: "standard", nationCount: 4 });
+    const dense = generateWorld({ seed: 9, mapSize: "standard", nationCount: 4, mapCells: 2600 });
+    assert.ok(dense.graph.sites.length > standard.graph.sites.length);
+    assert.ok(Math.abs(dense.graph.domain.width / dense.graph.domain.height
+        - standard.graph.domain.width / standard.graph.domain.height) < 0.02);
+    const ocean = generateWorld({ seed: 9, mapSize: "small", nationCount: 4, terrain: { seaLevel: 0.4 } });
+    const land = generateWorld({ seed: 9, mapSize: "small", nationCount: 4, terrain: { seaLevel: 0.1 } });
+    const passable = (state: ReturnType<typeof generateWorld>): number =>
+        state.provinces.filter((province) => state.terrain.passable[province.site]).length;
+    assert.ok(passable(ocean) < passable(land));
+});
+
+test("nation strength balance compensates small starts and leaves great powers alone", () => {
+    const settings = { seed: 42, mapSize: "standard" as const, nationCount: 6 };
+    const base = generateWorld(settings);
+    const balanced = generateWorld({ ...settings, balanceNations: true });
+    // Compensation only touches starting buildings; territory and capitals stay identical.
+    assert.deepEqual(balanced.provinces.map((province) => province.owner), base.provinces.map((province) => province.owner));
+    assert.deepEqual(balanced.nations.map((nation) => nation.capital), base.nations.map((nation) => nation.capital));
+    assert.equal(base.settings.balanceNations, undefined);
+
+    const perNation = (state: typeof base, value: (region: typeof state.states[number], nationId: number) => number): number[] =>
+        state.nations.map((nation) => state.states.reduce((sum, region) =>
+            sum + (state.provinces[region.center].owner === nation.id ? value(region, nation.id) : 0), 0));
+    const farmCount = (region: typeof base.states[number]): number =>
+        region.buildings.filter((building) => building === "farm").length;
+    const sizes = base.nations.map((nation) =>
+        base.provinces.filter((province) => province.owner === nation.id).length);
+    const baseFarms = perNation(base, farmCount);
+    const baseInfrastructure = perNation(base, (region) => region.infrastructure);
+    const extraFarms = perNation(balanced, farmCount).map((value, index) => value - baseFarms[index]);
+    const extraInfrastructure = perNation(balanced, (region) => region.infrastructure)
+        .map((value, index) => value - baseInfrastructure[index]);
+
+    assert.ok(extraFarms.some((value) => value > 0), `no compensation: ${extraFarms.join(",")}`);
+    assert.ok(extraInfrastructure.some((value) => value > 0), `no infrastructure: ${extraInfrastructure.join(",")}`);
+    for (let index = 0; index < base.nations.length; index++) {
+        assert.ok(extraFarms[index] >= 0 && extraFarms[index] <= 3, `farms ${extraFarms[index]}`);
+        assert.ok(extraInfrastructure[index] >= 0 && extraInfrastructure[index] <= 3,
+            `infrastructure ${extraInfrastructure[index]}`);
+        if (sizes[index] === Math.max(...sizes)) {
+            assert.equal(extraFarms[index], 0);
+            assert.equal(extraInfrastructure[index], 0);
+        }
+        if (sizes[index] === Math.min(...sizes)) {
+            assert.ok(extraFarms[index] > 0, `smallest nation not compensated: ${sizes.join(",")}`);
+        }
+    }
+});
+
+test("world generation seeds one-layer vassals, both carved and independent", () => {
+    const sites = new Set<number>();
+    for (const seed of [42, 2026, 7, 11]) {
+        const state = generateWorld({ seed, mapSize: "standard", nationCount: 10 });
+        const vassals = state.nations.filter((nation) => (nation.overlord ?? -1) >= 0);
+        assert.ok(vassals.length > 0, `seed ${seed} has no vassals`);
+        assert.ok(vassals.some((nation) => nation.id >= 10), `seed ${seed} has no carved vassal`);
+        assert.ok(vassals.some((nation) => nation.id < 10), `seed ${seed} has no independent vassal`);
+        for (const vassal of vassals) {
+            const overlord = state.nations[vassal.overlord as number];
+            assert.ok(overlord?.alive);
+            assert.equal(overlord.id, vassal.overlord);
+            assert.notEqual(vassal.id, overlord.id);
+            assert.equal(overlord.overlord ?? -1, -1, "vassals never form chains");
+            assert.ok(state.nations.every((nation) => nation.id === vassal.id || nation.overlord !== vassal.id),
+                "a vassal never rules another vassal");
+            assert.ok(vassal.vassalType && ["cooperative", "autonomous", "oppressive"].includes(vassal.vassalType));
+            assert.ok(Number.isFinite(vassal.independence) && (vassal.independence ?? 0) > 0);
+            assert.equal(nationDisplayColor(state, vassal.id), overlord.color);
+            assert.equal(state.provinces[vassal.capital].owner, vassal.id);
+            assert.equal(state.provinces[vassal.capital].isCapital, true);
+            sites.add(state.provinces[vassal.capital].site);
+        }
+    }
+    assert.ok(sites.size > 0);
+});
 
 test("same settings reproduce the entire opening", () => {
     const settings = { seed: 717, mapSize: "small" as const, nationCount: 4 };

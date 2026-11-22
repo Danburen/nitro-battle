@@ -1,5 +1,6 @@
 import type { VoronoiGraph } from "../terrain/voronoi/index.ts";
 import type { BiomeMap } from "../terrain/biome.ts";
+import type { AITendencyId } from "./ai/types.ts";
 
 export const UnitKind = {
     INFANTRY: 0,
@@ -136,7 +137,7 @@ export const BUILDING_PROFILES: Readonly<Record<BuildingKind, BuildingProfile>> 
     infrastructure: { name: "基础设施", glyph: "🏗️", scope: "state", costFunds: 80, costIndustry: 15, constructionPoints: 5, desc: "提升全州[[factory]]产出、施工、[[movement]]及[[supply]]效率，最多 8 级" },
     admin: { name: "行政中心", glyph: "🏛️", scope: "state", costFunds: 100, costIndustry: 15, constructionPoints: 6, desc: "州中心为核心或[[occupation]] ≥50% 时 [[politics:+1]]/回合；每州一个" },
     supply: { name: "补给中心", glyph: "📦", scope: "province", costFunds: 250, costIndustry: 40, constructionPoints: 30, desc: "核心或[[occupation]] ≥50% 时提供范围 8 的[[supply]]源与衰减增益；每省一个，不叠加" },
-    fort: { name: "要塞", glyph: "🏰", scope: "province", costFunds: 120, costIndustry: 15, constructionPoints: 8, desc: "本省[[garrison]]容量 +50%、每日恢复 15%、伤害 +25%、承伤 ×0.8；每省一个" },
+    fort: { name: "要塞", glyph: "🛡️", scope: "province", costFunds: 120, costIndustry: 15, constructionPoints: 8, desc: "本省[[garrison]]容量 +50%、每日恢复 15%、伤害 +25%、承伤 ×0.8；每省一个" },
 };
 
 export const STATE_BUILDING_KINDS: readonly StateBuildingKind[] = ["factory", "farm", "infrastructure", "admin"];
@@ -225,6 +226,10 @@ export interface Nation {
     readonly name: string;
     readonly color: string;
     readonly isPlayer: boolean;
+    /** Fixed per-nation AI temperament; omitted by hand-built test fixtures, defaults at read time. */
+    readonly tendency?: AITendencyId;
+    /** Seeded 1–5 vassal temperament, generated with the nation; omitted fixtures fall back to the tendency baseline. */
+    readonly subservience?: number;
     capital: number;
     funds: number;
     manpower: number;
@@ -234,6 +239,17 @@ export interface Nation {
     /** In-progress switches per category; the committed value lives in `policies`. */
     policyTransitions?: Partial<Record<PolicyCategory, PolicyTransition>>;
     alive: boolean;
+    /** Overlord nation id; -1 or omitted when independent. */
+    overlord?: number;
+    vassalType?: VassalType;
+    /** 0–100. Petitions end at 100; oppressive vassals rebel at 100. */
+    independence?: number;
+    /** Resource share paid to the overlord; only cooperative vassals may adjust it. */
+    tributeRate?: number;
+    /** Day of the last foreign-aid request (oppressive vassals only). */
+    lastAidDay?: number;
+    /** Day of the last independence petition; gates `VASSAL_PETITION_COOLDOWN`. */
+    lastPetitionDay?: number;
 }
 
 export interface Province {
@@ -356,12 +372,27 @@ export const MAP_SIZES: Readonly<Record<MapSizeId, MapSizeProfile>> = {
     large: { label: "大型 · 2400 省", cells: 2400, width: 2200, height: 1400 },
 };
 
-export const NATION_COUNT_MAX = 8;
+export const NATION_COUNT_MAX = 12;
+
+/** Optional terrain tuning exposed by the new-game dialog (advanced section). */
+export interface TerrainTuning {
+    readonly seaLevel?: number;
+    readonly basePeriod?: number;
+    readonly elevationExponent?: number;
+    readonly moistureContrast?: number;
+    readonly freqMultiplier?: number;
+}
 
 export interface GameSettings {
     readonly seed: number;
     readonly mapSize: MapSizeId;
     readonly nationCount: number;
+    /** Exact cell count; overrides the map-size profile while keeping its aspect ratio. */
+    readonly mapCells?: number;
+    /** Omitted fields fall back to the terrain defaults. */
+    readonly terrain?: TerrainTuning;
+    /** Optional start compensation: weaker/smaller nations get extra farms and infrastructure. */
+    readonly balanceNations?: boolean;
 }
 
 export type LogTone = "info" | "combat" | "capture" | "econ" | "diplo" | "system";
@@ -393,6 +424,8 @@ export interface LogItemCount {
 export interface LogEvent {
     readonly kind: LogEventKind;
     readonly nation?: number;
+    /** Controller before the capture; lets the report tell whose state was lost. */
+    readonly previousOwner?: number;
     readonly site?: number;
     readonly province?: string;
     readonly stateName?: string;
@@ -451,6 +484,35 @@ export interface War {
     startedDay: number;
 }
 
+/** Three vassal contracts; their full player-facing rules live in `vassal.ts`. */
+export type VassalType = "cooperative" | "autonomous" | "oppressive";
+
+/** A one-leader defensive/offensive camp. Membership is unique per nation. */
+export interface Alliance {
+    readonly id: number;
+    leader: number;
+    readonly members: number[];
+    readonly createdDay: number;
+}
+
+export type DiplomaticRequestKind = "vassalize" | "alliance" | "aid" | "upgrade" | "call";
+
+/** A pending offer addressed to the player; AI-to-AI offers resolve immediately. */
+export interface DiplomaticRequest {
+    readonly id: number;
+    readonly kind: DiplomaticRequestKind;
+    readonly from: number;
+    readonly to: number;
+    readonly vassalType?: VassalType;
+    readonly allianceId?: number;
+    /** Enemy of the overlord for a call-to-arms request. */
+    readonly enemy?: number;
+    /** A coercive vassal demand: `from` is the overlord, `to` the would-be vassal. */
+    readonly demand?: boolean;
+    readonly createdDay: number;
+    readonly expiresDay: number;
+}
+
 export interface GameState {
     readonly settings: GameSettings;
     readonly graph: VoronoiGraph;
@@ -481,7 +543,15 @@ export interface GameState {
     readonly claims: StateClaim[];
     readonly diplomaticActions: DiplomaticAction[];
     readonly wars: War[];
+    readonly alliances: Alliance[];
+    readonly diplomaticRequests: DiplomaticRequest[];
+    /** Symmetric rejection cooldown matrix for alliance invitations; -1 when free. */
+    readonly allianceCooldown: number[][];
+    /** Symmetric cooldown matrix for vassalization offers; -1 when free. */
+    readonly vassalCooldown: number[][];
     nextDiplomaticActionId: number;
+    nextAllianceId: number;
+    nextRequestId: number;
     readonly log: LogEntry[];
     /** null while playing; nation id of winner, or -1 when the player lost. */
     winner: number | null;
@@ -517,6 +587,7 @@ export type EngineEvent =
     | { type: "build"; province: number; kind: BuildingKind; nationId: number }
     | { type: "war"; aggressor: number; defender: number }
     | { type: "peace"; a: number; b: number }
+    | { type: "relations" }
     | { type: "day"; day: number; seasonIndex: number }
     | { type: "gameover"; winner: number };
 

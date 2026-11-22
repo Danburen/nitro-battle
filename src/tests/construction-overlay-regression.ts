@@ -6,7 +6,10 @@ import { processConstruction } from "../game/production.ts";
 import { BUILDING_PROFILES, DEFAULT_POLICIES, STATE_BUILDING_KINDS } from "../game/types.ts";
 import type { BuildingKind, GameState, Province, StateRegion } from "../game/types.ts";
 import { Biome, BiomeMap } from "../terrain/biome.ts";
-import { buildConstructionOverlay, constructionColor, CONSTRUCTION_COLORS, PROVINCE_CAPACITY_MIN_ZOOM } from "../render/constructionOverlay.ts";
+import {
+    buildConstructionOverlay, constructionColor, CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS,
+    CONSTRUCTION_PENDING_TINT, PROVINCE_CAPACITY_MIN_ZOOM,
+} from "../render/constructionOverlay.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { GameUI } from "../ui/index.ts";
 import { renderGameText } from "../ui/text.ts";
@@ -59,6 +62,8 @@ function fixture(): GameState {
         redeployArmyId: null, war: [[false, false], [false, false]], warSince: [[-1, -1], [-1, -1]],
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
+        alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
+        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };
@@ -118,8 +123,20 @@ test("only controlled passable centers and player-owned passable members are col
     assert.equal(overlay.areas[0].center, 0);
     assert.deepEqual(overlay.areas[0].sites, [0, 3]);
     assert.equal(overlay.areas[0].limit, 4);
+    // Foreign, wrong-center and neutral land is greyed; water keeps its terrain.
+    assert.deepEqual(overlay.blocked, [1, 4, 5, 6, 7, 9, 10, 11]);
     state.provinces[0].owner = -1;
     assert.deepEqual(buildConstructionOverlay(state, "farm").areas, []);
+});
+
+test("queued plots keep their plot tint and pending count while blocked land stays grey", () => {
+    const state = fixture();
+    const before = buildConstructionOverlay(state, "farm");
+    order(state, "farm");
+    const queued = buildConstructionOverlay(state, "farm");
+    assert.equal(queued.areas[0].pending, 1);
+    assert.deepEqual(queued.blocked, before.blocked);
+    assert.notEqual(queued.signature, before.signature);
 });
 
 test("local orders and wrong centers/kinds cannot consume state capacity", () => {
@@ -413,6 +430,7 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     h.tick();
     assert.equal(h.clears, 1);
     assert.equal(h.fills.filter((color) => color === CONSTRUCTION_COLORS.empty).length, 6);
+    assert.ok(h.fills.includes(CONSTRUCTION_BLOCKED_COLOR));
     assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 0/4` && label.font.includes("17px")));
     assert.ok(!h.labels.some((label) => label.text === "S1" || label.text.includes(" · ") || label.text === BUILDING_PROFILES.fort.glyph));
     h.engine.select(2);
@@ -424,7 +442,9 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     h.tick();
     assert.equal(h.clears, 2);
     assert.ok(h.fills.includes(CONSTRUCTION_COLORS.high));
-    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 2/4`));
+    assert.ok(h.fills.includes(CONSTRUCTION_PENDING_TINT));
+    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 0+2/4`));
+    assert.ok(h.labels.some((label) => label.text === "+2" && label.color === "#3fb950"));
     const firstId = h.state.construction[0].id;
     assert.ok(h.engine.reorderConstruction(firstId, null));
     h.tick();
@@ -517,11 +537,12 @@ for (const kind of ["supply", "fort"] as const) {
                 && !Object.values(CONSTRUCTION_COLORS).includes(fill.color as never)));
         }
         const fullLabel = `${BUILDING_PROFILES[kind].glyph} 1/1`;
+        const queuedLabel = `${BUILDING_PROFILES[kind].glyph} 0+1/1`;
         assert.equal(h.engine.queueProvinceBuild(0, kind), true);
         h.tick();
         assert.equal(h.clears, ++rebuilds);
         assert.equal(h.fills.filter((color) => color === CONSTRUCTION_COLORS.full).length, 1);
-        assert.ok(h.labels.some((label) => label.text === fullLabel));
+        assert.ok(h.labels.some((label) => label.text === queuedLabel));
         h.engine.select(0);
         h.engine.setFactoryProduction(1);
         h.state.construction[0].remainingPoints -= 1;

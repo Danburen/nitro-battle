@@ -7,9 +7,10 @@ import { setPlayerNation } from "../game/player.ts";
 test("generated nations use unique random names and colors, including eight-player worlds", () => {
     for (const seed of [42, 20261122]) {
         const state = generateWorld({ seed, mapSize: "small", nationCount: 8 });
-        assert.equal(state.nations.length, 8);
-        assert.equal(new Set(state.nations.map((nation) => nation.name)).size, 8);
-        assert.equal(new Set(state.nations.map((nation) => nation.color)).size, 8);
+        // Vassal generation may add carved minors; request count is still a lower bound.
+        assert.ok(state.nations.length >= 8 && state.nations.length <= 11);
+        assert.equal(new Set(state.nations.map((nation) => nation.name)).size, state.nations.length);
+        assert.equal(new Set(state.nations.map((nation) => nation.color)).size, state.nations.length);
         assert.ok(state.nations.every((nation) => /^#[0-9a-f]{6}$/i.test(nation.color)));
         assert.ok(state.nations.every((nation) => nation.isPlayer === (nation.id === 0)));
     }

@@ -41,6 +41,10 @@ function fixture(owners = [0, 1, 1, NEUTRAL]): GameEngine {
         war: nations.map(() => nations.map(() => false)), warSince: nations.map(() => nations.map(() => -1)),
         peaceOffers: [], truce: nations.map(() => nations.map(() => -1)), peaceCooldown: nations.map(() => -1),
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
+        alliances: [], diplomaticRequests: [],
+        allianceCooldown: nations.map(() => nations.map(() => -1)),
+        vassalCooldown: nations.map(() => nations.map(() => -1)),
+        nextAllianceId: 1, nextRequestId: 1,
         log: [], winner: null, nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };

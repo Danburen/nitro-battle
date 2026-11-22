@@ -27,7 +27,7 @@ npm test
 npm run build
 ```
 
-当前基线：`typecheck` 通过，`lint` 0 问题，`node --test` 238 个用例全绿；`electron:build` 可出 NSIS 安装包（2026-11-22）。
+当前基线：`typecheck` 通过，`lint` 0 问题，`node --test` 272 个用例全绿；`electron:build` 可出 NSIS 安装包（2026-11-23）。
 
 ## 文档同步
 

@@ -1,5 +1,6 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { CLAIM_COST, canCancelStateClaim, hasStateClaim } from "../../game/diplomacy.ts";
+import { nationDisplayColor } from "../../game/access.ts";
 import type { StateRegion } from "../../game/types.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
@@ -195,7 +196,7 @@ export class ExpansionPanel {
         const draftLabel = stagedCancel ? "撤销取消" : stagedAdd ? "撤销待宣称" : claim ? "标记取消" : "标记宣称";
         const canStage = stagedCancel || stagedAdd || !claim || canCancelStateClaim(state, 0, region.id);
         return `<div class="claim-focused diplo-card" data-claim-row="${region.id}">
-            <div class="diplo-head"><span class="nation-dot" style="--pc:${escapeHtml(claim ? state.nations[0].color : "#8b949e")}"></span><span class="diplo-name">${escapeHtml(region.name)}</span><span class="status-pill ${claim || stagedAdd ? "ready" : "idle"}">${pill}</span></div>
+            <div class="diplo-head"><span class="nation-dot" style="--pc:${escapeHtml(claim ? nationDisplayColor(state, 0) : "#8b949e")}"></span><span class="diplo-name">${escapeHtml(region.name)}</span><span class="status-pill ${claim || stagedAdd ? "ready" : "idle"}">${pill}</span></div>
             <p class="diplo-note">正式归属：${escapeHtml(ownerText)} · ${region.provinces.length} 省 · ${this.adjacent(region) ? "与己方邻接" : "不邻接（需历史核心）"}</p>
             ${reason ? `<p class="diplo-note">${escapeHtml(reason)}</p>` : ""}
             <div class="diplo-button-row">
@@ -241,7 +242,7 @@ export class ExpansionPanel {
                 ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>取消</button>`;
         return `<div class="claim-row${focused ? " focused" : ""}${pending ? " pending" : ""}" data-action="claim-focus" data-state="${region.id}" data-claim-row="${region.id}" data-exp-focus="claim-row-${region.id}" tabindex="0" role="button"
             ${tooltipAttrs(escapeGameText(region.name), escapeGameText(`正式归属：${ownerText}\n点击聚焦并在地图描边`))}>
-            <span class="nation-dot" style="--pc:${escapeHtml(state.nations[0].color)}"></span>
+            <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
             <span class="claim-name">${escapeHtml(region.name)}</span>
             <span class="claim-owner">${escapeHtml(ownerText)}</span>
             <span class="claim-badge">${pending ? "待取消" : "已宣称"}</span>
@@ -256,7 +257,7 @@ export class ExpansionPanel {
             .filter((owner) => owner !== 0);
         const ownerText = owners.map((owner) => state.nations[owner]?.name ?? "已灭亡国家").join("、") || "我方";
         return `<div class="claim-row pending">
-            <span class="nation-dot" style="--pc:${escapeHtml(state.nations[0].color)}"></span>
+            <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
             <span class="claim-name">${escapeHtml(region.name)}</span>
             <span class="claim-owner">${escapeHtml(ownerText)}</span>
             <span class="claim-badge">待宣称</span>

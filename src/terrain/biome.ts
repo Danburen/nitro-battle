@@ -74,8 +74,8 @@ export interface TerrainSample {
  * Base biome classification. This is generated once and never changes with
  * weather; snow is a separate overlay layer.
  */
-export function classifyBiome(e: number, m: number): Biome {
-    if (e < 0.20) return Biome.OCEAN;
+export function classifyBiome(e: number, m: number, seaLevel = 0.20): Biome {
+    if (e < seaLevel) return Biome.OCEAN;
 
     if (e > 0.42) {
         if (m < 0.35) return Biome.MOUNTAINS;
@@ -138,6 +138,7 @@ export const MOISTURE_CONTRAST = 1.8;
 export const FREQ_MULTIPLIER = 2;
 
 export interface TerrainParams {
+    readonly seaLevel: number;
     readonly basePeriod: number;
     readonly elevationExponent: number;
     readonly moistureContrast: number;
@@ -145,6 +146,7 @@ export interface TerrainParams {
 }
 
 export const DEFAULT_TERRAIN_PARAMS: TerrainParams = {
+    seaLevel: 0.20,
     basePeriod: BASE_PERIOD,
     elevationExponent: ELEVATION_EXPONENT,
     moistureContrast: MOISTURE_CONTRAST,
@@ -189,6 +191,7 @@ export class TerrainField {
         this.moistureAmplitude = opts.moistureAmplitude ?? DEFAULT_MOISTURE_AMPLITUDE;
 
         this.params = {
+            seaLevel: opts.seaLevel ?? DEFAULT_TERRAIN_PARAMS.seaLevel,
             basePeriod: opts.basePeriod ?? BASE_PERIOD,
             elevationExponent: opts.elevationExponent ?? ELEVATION_EXPONENT,
             moistureContrast: opts.moistureContrast ?? MOISTURE_CONTRAST,
@@ -363,9 +366,11 @@ export type TerrainSource = Pick<VoronoiGraph, "domain" | "sites" | "cells">;
 /** Compose the periodic field, classifier and biome table into a `BiomeMap`. */
 export class TerrainGenerator {
     private readonly field: TerrainField;
+    private readonly seaLevel: number;
 
     constructor(seed: number, domain: Domain, opts: TerrainFieldOptions = {}) {
         this.field = new TerrainField(domain, seed, opts);
+        this.seaLevel = opts.seaLevel ?? DEFAULT_TERRAIN_PARAMS.seaLevel;
     }
 
     build(source: TerrainSource): BiomeMap {
@@ -376,7 +381,7 @@ export class TerrainGenerator {
             const cell = source.cells[site];
             const point = cell.bounded ? cell.centroid : source.sites[site];
             const sample = this.field.sample(point);
-            const biome = classifyBiome(sample.elevation, sample.moisture);
+            const biome = classifyBiome(sample.elevation, sample.moisture, this.seaLevel);
             const profile = BIOME_PROFILES[biome];
 
             map.elevation[site] = sample.elevation;

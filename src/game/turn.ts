@@ -1,9 +1,13 @@
 import type { GameCore } from "./core.ts";
-import type { AIAction } from "./ai.ts";
+import type { AIAction } from "./ai/index.ts";
 import { advanceMarches, moveArmy, orderMarch } from "./armies.ts";
 import { garrisonRecoveryRate } from "./battle.ts";
 import { attack, resolveBattles } from "./combat.ts";
 import { advanceDiplomacy, runAIDiplomacy, tickDiplomaticUpkeep } from "./diplomacy.ts";
+import { runAIAlliances, tickAlliances } from "./alliance.ts";
+import {
+    expireDiplomaticRequests, runAIVassalPolitics, tickVassalIndependence, tickVassalTribute,
+} from "./vassal.ts";
 import { resolveWarOutcomes } from "./settlement.ts";
 import { clampResources, occupationGrowth, resourceRates } from "./economy.ts";
 import { advancePolicySwitches, tickPolicyUpkeep } from "./policy.ts";
@@ -25,6 +29,8 @@ export function endTurn(core: GameCore): void {
     for (const controller of core.controllers) {
         const nation = core.state.nations[controller.nationId];
         if (!nation.alive) continue;
+        runAIAlliances(core, controller.nationId);
+        runAIVassalPolitics(core, controller.nationId);
         runAIDiplomacy(core, controller.nationId);
         if (core.state.winner !== null) return;
         for (const action of controller.takeTurn(core.state)) {
@@ -122,6 +128,10 @@ function advanceDay(core: GameCore): void {
         nation.politicalPower += rates.politicalPower;
         clampResources(nation, rates);
     }
+    tickVassalTribute(core);
+    tickVassalIndependence(core);
+    tickAlliances(core);
+    expireDiplomaticRequests(core);
     tickDiplomaticUpkeep(core);
     tickPolicyUpkeep(core);
 

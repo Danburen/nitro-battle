@@ -1,3 +1,8 @@
+import { tendencyProfileOf, tendencyTuning } from "./ai/tendencies.ts";
+import type { AITuning } from "./ai/types.ts";
+import { isProtectedRelation, overlordOf } from "./access.ts";
+import { applyAllianceWar } from "./alliance.ts";
+import { joinVassalDefense, applyVassalCallToArms } from "./vassal.ts";
 import type { GameCore } from "./core.ts";
 import { settlePeace, warGoalProgress, enforceWarGoal } from "./settlement.ts";
 import { MAX_HP, NEUTRAL, UNIT_PROFILES } from "./types.ts";
@@ -9,15 +14,15 @@ export const DIPLOMATIC_PROFILES = {
     annex: { label: "全面吞并", cost: 35, days: 8, validDays: 16, upkeep: 2 },
 } as const satisfies Record<DiplomaticActionKind, { label: string; cost: number; days: number; validDays: number; upkeep: number }>;
 
-export const WAR_FATIGUE_DAYS = 10;
 export const TRUCE_DAYS = 10;
 const MIN_PEACE_DAYS = 2;
-const PEACE_POWER_RATIO = 0.85;
-const AI_OFFER_MIN_DAYS = 5;
-const AI_OFFER_POWER_RATIO = 0.65;
 const OFFER_COOLDOWN_DAYS = 5;
 const WAR_MIN_DAY = 5;
-const WAR_POWER_RATIO = 1.15;
+
+/** AI thresholds for one nation; a missing tendency falls back to the neutral profile. */
+function aiTuningOf(state: GameState, nation: number): AITuning {
+    return tendencyTuning(tendencyProfileOf(state.nations[nation]?.tendency));
+}
 
 function livingNation(state: GameState, nation: number): boolean {
     return Number.isInteger(nation) && nation >= 0 && state.nations[nation]?.alive === true;
@@ -163,6 +168,7 @@ export function borderingNations(state: GameState, nationId: number): Set<number
 
 function peacefulTarget(state: GameState, nation: number, target: number): boolean {
     return livingNation(state, nation) && livingNation(state, target) && nation !== target &&
+        !isProtectedRelation(state, nation, target) &&
         !isAtWar(state, nation, target) && truceDays(state, nation, target) === 0;
 }
 
@@ -320,26 +326,29 @@ export function dropOffers(state: GameState, a: number, b: number): void {
 
 export function aiWantsPeace(state: GameState, aiId: number, otherId: number): boolean {
     if (!isAtWar(state, aiId, otherId)) return false;
+    const tuning = aiTuningOf(state, aiId);
     const duration = warDuration(state, aiId, otherId);
     if (duration < MIN_PEACE_DAYS) return false;
-    if (duration >= WAR_FATIGUE_DAYS) return true;
-    return nationPower(state, aiId) < nationPower(state, otherId) * PEACE_POWER_RATIO;
+    if (duration >= tuning.fatigueDays) return true;
+    return nationPower(state, aiId) < nationPower(state, otherId) * tuning.peacePowerRatio;
 }
 
 export function aiOffersPlayerPeace(state: GameState, aiId: number): boolean {
     if (!isAtWar(state, aiId, 0) || state.peaceOffers.includes(aiId)) return false;
     const rejectedDay = state.peaceCooldown[aiId] ?? -1;
     if (rejectedDay >= 0 && state.day - rejectedDay < OFFER_COOLDOWN_DAYS) return false;
+    const tuning = aiTuningOf(state, aiId);
     const duration = warDuration(state, aiId, 0);
-    if (duration < AI_OFFER_MIN_DAYS) return false;
-    return nationPower(state, aiId) < Math.max(1, nationPower(state, 0)) * AI_OFFER_POWER_RATIO ||
-        duration >= WAR_FATIGUE_DAYS;
+    if (duration < tuning.offerMinDays) return false;
+    return nationPower(state, aiId) < Math.max(1, nationPower(state, 0)) * tuning.offerPowerRatio ||
+        duration >= tuning.fatigueDays;
 }
 
 /** Strategic target selection is not permission to declare war. */
 export function aiWarTarget(state: GameState, aiId: number): number | null {
     if (!livingNation(state, aiId) || state.day < WAR_MIN_DAY || state.war[aiId].some(Boolean)) return null;
     const own = nationPower(state, aiId);
+    const tuning = aiTuningOf(state, aiId);
     let best: number | null = null;
     let bestPower = Infinity;
     for (const otherId of borderingNations(state, aiId)) {
@@ -350,7 +359,7 @@ export function aiWarTarget(state: GameState, aiId: number): number | null {
             best = otherId;
         }
     }
-    return best !== null && own >= bestPower * WAR_POWER_RATIO ? best : null;
+    return best !== null && own >= bestPower * tuning.warPowerRatio ? best : null;
 }
 
 export function startWar(core: GameCore, aggressor: number, defender: number, actionId?: number): boolean {
@@ -363,6 +372,14 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
     state.diplomaticActions.splice(state.diplomaticActions.indexOf(action), 1);
     state.wars.push({ aggressor, defender, goal: action.kind, stateId: action.stateId, targetSites, startedDay: state.day });
     setWar(state, aggressor, defender, true);
+    joinVassalDefense(core, aggressor, defender);
+    const protector = overlordOf(state, defender);
+    if (protector >= 0) applyAllianceWar(core, aggressor, protector);
+    applyAllianceWar(core, aggressor, defender);
+    // A war summons both sides' vassals: the defender's protector answers first,
+    // then each overlord calls its own dependants.
+    if (protector >= 0) applyVassalCallToArms(core, protector, aggressor);
+    applyVassalCallToArms(core, aggressor, defender);
     // Existing peacetime orders must not pin armies to an obsolete front.
     for (const army of state.armies.values()) {
         if (army.nation === aggressor || army.nation === defender) army.march = null;
@@ -457,10 +474,11 @@ export function runAIDiplomacy(core: GameCore, nationId: number): void {
         return;
     }
     if (wasAtWar || state.war[nationId].some(Boolean)) return;
-    if (state.day >= WAR_MIN_DAY) {
+    const tuning = aiTuningOf(state, nationId);
+    if (state.day >= Math.max(WAR_MIN_DAY, tuning.warMinDay)) {
         const action = state.diplomaticActions.find((candidate) => candidate.nation === nationId &&
             canDeclareWar(state, nationId, candidate.target, candidate.id) &&
-            nationPower(state, nationId) >= nationPower(state, candidate.target) * WAR_POWER_RATIO);
+            nationPower(state, nationId) >= nationPower(state, candidate.target) * tuning.warPowerRatio);
         if (action && startWar(core, nationId, action.target, action.id)) return;
     }
     prepareAIExpansion(core, nationId);

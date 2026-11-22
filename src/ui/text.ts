@@ -75,6 +75,15 @@ export function chipToken(color: string, name: string): string {
 }
 
 function renderToken(body: string, format: TextFormat): string | null {
+    // Trait line: [[pos:倾向]] / [[neg:短板]] / [[note:中性描述]] — the sign carries the colour.
+    const trait = /^(pos|neg|note):([^]*)$/.exec(body);
+    if (trait) {
+        const label = trait[2].replace(/\\([\\[\]])/g, "$1");
+        if (!label) return null;
+        const sign = trait[1] === "pos" ? "+" : trait[1] === "neg" ? "-" : "~";
+        if (format === "plain") return `${sign}${label}`;
+        return `<span class="game-text game-text--${trait[1]}">${sign}${escapeHtml(label)}</span>`;
+    }
     const chip = /^chip:(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})\|([^]*)$/.exec(body);
     if (chip) {
         const label = chip[2].replace(/\\([\\[\]])/g, "$1");

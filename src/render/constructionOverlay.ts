@@ -10,6 +10,11 @@ export const CONSTRUCTION_COLORS = {
     full: "#263849",
 } as const;
 
+/** Land outside the player's buildable area is uniformly grey while the tool is open. */
+export const CONSTRUCTION_BLOCKED_COLOR = "#454b52";
+/** Translucent tint marking a plot that already has an order in the queue. */
+export const CONSTRUCTION_PENDING_TINT = "rgba(46, 160, 67, 0.38)";
+
 export function constructionColor(used: number, limit: number): string {
     if (used >= limit) return CONSTRUCTION_COLORS.full;
     if (used === 0) return CONSTRUCTION_COLORS.empty;
@@ -31,6 +36,8 @@ export interface ConstructionAreaOverlay {
 export interface ConstructionOverlay {
     readonly scope: "state" | "province";
     readonly areas: readonly ConstructionAreaOverlay[];
+    /** Passable land the player cannot build in right now (foreign, neutral or wrong center). */
+    readonly blocked: readonly number[];
     readonly signature: string;
 }
 
@@ -65,9 +72,13 @@ export function buildConstructionOverlay(state: GameState, kind: BuildingKind): 
             });
         }
     }
-    // Foreign ownership also affects the ordinary political fills beneath this overlay.
+    const buildable = new Set(areas.flatMap((area) => area.sites));
+    const blocked = provinces
+        .filter((province) => terrain.passable[province.site] && !buildable.has(province.site))
+        .map((province) => province.site);
+    // Ownership also affects the ordinary political fills beneath this overlay.
     const owners = provinces.map((province) => terrain.passable[province.site] ? province.owner : "x").join(",");
     const counts = areas.map((area) =>
         `${area.id}:${area.center}:${area.built}:${area.pending}:${area.limit}`).join(";");
-    return { scope, areas, signature: `${kind}|${owners}|${counts}` };
+    return { scope, areas, blocked, signature: `${kind}|${owners}|${counts}|${blocked.join(",")}` };
 }

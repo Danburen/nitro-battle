@@ -15,6 +15,8 @@ export function setPlayerNation(state: GameState, chosen: number): boolean {
     swapAxes(state.war, chosen);
     swapAxes(state.warSince, chosen);
     swapAxes(state.truce, chosen);
+    swapAxes(state.allianceCooldown, chosen);
+    swapAxes(state.vassalCooldown, chosen);
     swapPair(state.peaceCooldown, chosen);
     for (let i = 0; i < state.peaceOffers.length; i++) state.peaceOffers[i] = mapId(state.peaceOffers[i]);
 
@@ -43,11 +45,22 @@ export function setPlayerNation(state: GameState, chosen: number): boolean {
         war.aggressor = mapId(war.aggressor);
         war.defender = mapId(war.defender);
     }
+    for (const alliance of state.alliances) {
+        alliance.leader = mapId(alliance.leader);
+        for (let i = 0; i < alliance.members.length; i++) alliance.members[i] = mapId(alliance.members[i]);
+    }
+    for (let i = 0; i < state.diplomaticRequests.length; i++) {
+        const request = state.diplomaticRequests[i];
+        state.diplomaticRequests[i] = { ...request, from: mapId(request.from), to: mapId(request.to) };
+    }
 
     const nations = [...state.nations];
     nations[0] = rebuildNation(state.nations[chosen], 0);
     nations[chosen] = rebuildNation(state.nations[0], chosen);
     for (let i = 0; i < nations.length; i++) state.nations[i] = nations[i];
+    for (const nation of state.nations) {
+        if (nation.overlord !== undefined && nation.overlord >= 0) nation.overlord = mapId(nation.overlord);
+    }
 
     for (let i = 0; i < state.log.length; i++) {
         const entry = state.log[i];
@@ -82,6 +95,9 @@ function remapEvent(event: LogEvent | undefined, mapId: (id: number) => number):
     return {
         ...event,
         nation: event.nation === undefined || event.nation === NEUTRAL ? event.nation : mapId(event.nation),
+        previousOwner: event.previousOwner === undefined || event.previousOwner === NEUTRAL
+            ? event.previousOwner
+            : mapId(event.previousOwner),
         battle: event.battle
             ? {
                 ...event.battle,

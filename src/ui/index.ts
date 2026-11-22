@@ -1,15 +1,17 @@
 import type { GameEngine } from "../game/engine.ts";
 import { BUILDING_KINDS, BUILDING_PROFILES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types.ts";
 import type { BuildingKind, PolicyCategory } from "../game/types.ts";
+import { nationDisplayColor } from "../game/access.ts";
 import { POLICY_LABELS, policyOption } from "../game/policy.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
 import { provinceBuildingCapacity, stateBuildingCapacity } from "../game/economy.ts";
-import { CONSTRUCTION_COLORS } from "../render/constructionOverlay.ts";
+import { CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS } from "../render/constructionOverlay.ts";
 import type { SoundManager } from "../audio/index.ts";
 import type { UIContext, UICallbacks } from "./context.ts";
 import { TopBar } from "./topbar.ts";
 import { GlobalTooltip } from "./tooltip.ts";
-import { BattleFeed } from "./feed.ts";
+import { BattleReport } from "./report/feed.ts";
+import { Briefing } from "./briefing.ts";
 import { IntelPanel } from "./panels/intel.ts";
 import { ArmyListPanel } from "./panels/armies.ts";
 import { ArmyDetailPanel } from "./panels/armyDetail.ts";
@@ -48,7 +50,8 @@ export class GameUI implements UIContext {
 
     private readonly topbar: TopBar;
     private readonly tooltip: GlobalTooltip;
-    private readonly feed: BattleFeed;
+    private readonly feed: BattleReport;
+    readonly briefing: Briefing;
     private readonly intel: IntelPanel;
     private readonly armies: ArmyListPanel;
     private readonly detail: ArmyDetailPanel;
@@ -82,7 +85,11 @@ export class GameUI implements UIContext {
 
         this.tooltip = new GlobalTooltip();
         this.topbar = new TopBar(engine, sound, (text) => this.toast(text));
-        this.feed = new BattleFeed(engine);
+        this.feed = new BattleReport(engine);
+        this.briefing = new Briefing(engine, {
+            inspect: (nationId) => this.callbacks.onBriefingInspect(nationId),
+            start: (nationId) => this.callbacks.onBriefingEnd(nationId),
+        });
         this.intel = new IntelPanel(engine);
         this.armies = new ArmyListPanel(engine, this.multiSelect);
         this.detail = new ArmyDetailPanel(engine, this.splitChecks);
@@ -142,6 +149,7 @@ export class GameUI implements UIContext {
         document.removeEventListener("keydown", this.handleKey);
         this.endOverlay.classList.add("hidden");
         this.feed.destroy();
+        this.briefing.destroy();
         this.topbar.destroy();
         this.construction.destroy();
         this.diplomacy.destroy();
@@ -166,6 +174,11 @@ export class GameUI implements UIContext {
         this.toastEl.classList.add("show");
         window.clearTimeout(this.toastTimer);
         this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove("show"), 2200);
+    }
+
+    /** Enter the pre-game inspection mode: map + nation detail only. */
+    startBriefing(nationId: number): void {
+        this.briefing.start(nationId);
     }
 
     confirm(spec: ConfirmSpec): void {
@@ -219,6 +232,8 @@ export class GameUI implements UIContext {
     /** Housekeeping runs up front; panel renders are returned as individual slices. */
     private buildRefreshTasks(): (() => void)[] {
         const state = this.engine.state;
+        // Briefing shows the map and one nation panel only; keep hidden HUD work off the frame.
+        if (this.briefing?.isActive()) return [() => this.topbar.render()];
         for (const id of [...this.multiSelect]) {
             if (!state.armies.has(id)) this.multiSelect.delete(id);
         }
@@ -262,6 +277,12 @@ export class GameUI implements UIContext {
     }
 
     private readonly handleEndTurn = (): void => {
+        if (this.briefing.isActive()) {
+            this.sound.play("select");
+            // Committing may tear this UI down and build the campaign UI; do nothing after it.
+            this.briefing.finish();
+            return;
+        }
         if (this.engine.state.winner !== null) return;
         this.sound.play("endTurn");
         this.engine.endTurn();
@@ -330,7 +351,7 @@ export class GameUI implements UIContext {
                 title: "扩张 · 州图例",
                 items: [
                     { label: "可宣称", pulse: true },
-                    { label: "已宣称", overlay: state.nations[0].color },
+                    { label: "已宣称", overlay: nationDisplayColor(state, 0) },
                     { label: "聚焦州", ring: true },
                 ],
                 note: "金色闪烁可点击宣称 · 再次点击取消并返还[[politics]]",
@@ -349,8 +370,9 @@ export class GameUI implements UIContext {
                         { label: "较多", color: CONSTRUCTION_COLORS.high },
                     ]),
                     { label: "已满", color: CONSTRUCTION_COLORS.full },
+                    { label: "不可建造", color: CONSTRUCTION_BLOCKED_COLOR },
                 ],
-                note: `地图＝已建＋在建 / 上限 · ${local ? "省份" : "州"}容量`,
+                note: `地图＝已建＋在建 / 上限 · ${local ? "省份" : "州"}容量；绿色数字与阴影＝施工中`,
             });
             return;
         }
@@ -558,6 +580,13 @@ export class GameUI implements UIContext {
         if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (tag === "BUTTON" && event.key === " ")) return;
         if (!document.querySelector("#start-overlay")?.classList.contains("hidden")) return;
         if (document.querySelector("#guide-overlay")?.classList.contains("open")) return;
+        if (this.briefing.isActive()) {
+            if (event.key === "e" || event.key === "E" || event.key === " ") {
+                event.preventDefault();
+                this.handleEndTurn();
+            }
+            return;
+        }
         if (this.confirmDialog.isOpen) {
             if (event.key === "Escape") {
                 event.preventDefault();

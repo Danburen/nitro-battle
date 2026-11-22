@@ -29,4 +29,8 @@ export interface UICallbacks {
     onClaimFocus: (stateId: number | null) => void;
     onClaimsOverlay: (on: boolean) => void;
     onCenterSite: (site: number) => void;
+    /** Briefing selection changed: highlight the nation's borders; the camera is untouched. */
+    onBriefingInspect: (nationId: number) => void;
+    /** Briefing ended with a committed nation: start the campaign as it. */
+    onBriefingEnd: (nationId: number) => void;
 }

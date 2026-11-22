@@ -6,6 +6,7 @@ import { garrisonCapacity } from "../battle.ts";
 import { computeSupply } from "../supply.ts";
 import { NEUTRAL, START_ORG, UnitKind } from "../types.ts";
 import type { GameState } from "../types.ts";
+import { compensateStartingNations } from "./balance.ts";
 
 const POP_BIOMES = new Set<number>([Biome.PLAINS, Biome.FOREST, Biome.HILLS, Biome.BEACH]);
 
@@ -27,6 +28,7 @@ export function initializeWorld(state: GameState, rand: LCGRandom): void {
             prod -= region.prodFactories;
         }
     }
+    if (state.settings.balanceNations) compensateStartingNations(state);
     for (const province of provinces) {
         province.coreNation = province.owner;
         province.legalOwner = province.owner;
@@ -58,4 +60,16 @@ export function initializeWorld(state: GameState, rand: LCGRandom): void {
         tone: "system",
         nationId: NEUTRAL,
     });
+    const vassalLines = nations
+        .filter((nation) => nation.alive && (nation.overlord ?? -1) >= 0)
+        .map((nation) => `${nation.name}（${nation.vassalType === "cooperative" ? "合作"
+            : nation.vassalType === "autonomous" ? "自治" : "压迫"}）→ ${nations[nation.overlord as number]?.name ?? "?"}`);
+    if (vassalLines.length > 0) {
+        state.log.push({
+            day: 1,
+            text: `附庸格局 ${vassalLines.join(" · ")}`,
+            tone: "diplo",
+            nationId: NEUTRAL,
+        });
+    }
 }

@@ -7,12 +7,18 @@ import {
 } from "../terrain/voronoi/index.ts";
 import type { Vec2 } from "../terrain/voronoi/index.ts";
 import { claimableStateIds, isAtWar, stateSummary } from "../game/diplomacy.ts";
+import { nationDisplayColor } from "../game/access.ts";
 import { pathTo } from "../game/rules.ts";
 import { BUILDING_PROFILES, MAX_HP, NEUTRAL, NEUTRAL_COLOR } from "../game/types.ts";
 import type { Army, BuildingKind, EngineEvent, Province, UnitKind } from "../game/types.ts";
 import type { GameEngine } from "../game/engine.ts";
 import { Camera } from "./camera.ts";
-import { buildConstructionOverlay, PROVINCE_CAPACITY_MIN_ZOOM } from "./constructionOverlay.ts";
+import {
+    buildConstructionOverlay,
+    CONSTRUCTION_BLOCKED_COLOR,
+    CONSTRUCTION_PENDING_TINT,
+    PROVINCE_CAPACITY_MIN_ZOOM,
+} from "./constructionOverlay.ts";
 import type { ConstructionOverlay } from "./constructionOverlay.ts";
 import { drawTerrainDecorCell } from "./terrainDecor.ts";
 import { BIOME_ZH, garrisonRelation, ownerName } from "../ui/common.ts";
@@ -83,6 +89,7 @@ export class MapRenderer {
     private lastSeason = -1;
     private claimSignature = "";
     private claimFocus: number | null = null;
+    private nationHighlight: { color: string; sites: number[]; segments: [Vec2, Vec2][] } | null = null;
     private claimsOverlay = false;
     private claimableCache: number[] = [];
     private colorMode: "uniform" | "gradient" = "gradient";
@@ -126,6 +133,7 @@ export class MapRenderer {
         button: number;
     } | null = null;
     private miniDrag = false;
+    private minimapVisible = true;
     private readonly resizeObserver: ResizeObserver;
     private readonly unsubscribe: () => void;
 
@@ -248,11 +256,39 @@ export class MapRenderer {
         const capital = this.engine.state.nations[0].capital;
         const site = this.engine.state.graph.sites[capital];
         this.camera.centerOn(site.x, site.y);
-        this.camera.zoom = Math.max(this.camera.zoom, 1.1);
+        this.camera.zoom = Math.min(this.camera.maxZoom, Math.max(this.camera.zoom, 1.1));
     }
 
     public setClaimFocus(stateId: number | null): void {
         this.claimFocus = stateId;
+    }
+
+    /** Briefing preview: tint and outline every province of one nation (null clears it). */
+    public setNationHighlight(nationId: number | null): void {
+        if (nationId === null) {
+            this.nationHighlight = null;
+            return;
+        }
+        const { graph, terrain, provinces } = this.engine.state;
+        const nation = this.engine.state.nations[nationId];
+        if (!nation) {
+            this.nationHighlight = null;
+            return;
+        }
+        const sites: number[] = [];
+        const segments: [Vec2, Vec2][] = [];
+        for (const province of provinces) {
+            if (province.owner !== nationId || !terrain.passable[province.site]) continue;
+            sites.push(province.site);
+            const cell = graph.cells[province.site];
+            if (!cell.bounded) continue;
+            for (let k = 0; k < cell.neighbors.length; k++) {
+                const neighbor = provinces[cell.neighbors[k]];
+                if (neighbor && neighbor.owner === nationId) continue;
+                segments.push([cell.polygon[k], cell.polygon[(k + 1) % cell.polygon.length]]);
+            }
+        }
+        this.nationHighlight = { color: nationDisplayColor(this.engine.state, nationId), sites, segments };
     }
 
     public getColorMode(): "uniform" | "gradient" {
@@ -306,11 +342,17 @@ export class MapRenderer {
         this.claimableCache = on ? claimableStateIds(this.engine.state, 0) : [];
     }
 
+    /** Pre-game briefing hides the minimap and its hit area. */
+    public setMinimapVisible(visible: boolean): void {
+        this.minimapVisible = visible;
+        this.miniDrag = false;
+    }
+
     public centerOnSite(site: number): void {
         this.resetMapTooltip();
         const point = this.engine.state.graph.sites[site];
         this.camera.centerOn(point.x, point.y);
-        this.camera.zoom = Math.max(this.camera.zoom, 1.4);
+        this.camera.zoom = Math.min(this.camera.maxZoom, Math.max(this.camera.zoom, 1.4));
     }
 
     public isSiteVisible(site: number): boolean {
@@ -347,6 +389,9 @@ export class MapRenderer {
         if (!this.fitted) {
             this.camera.fit(this.viewW, this.viewH);
             this.fitted = true;
+        } else {
+            // A resized window changes the zoom ceiling; pull the camera back under it.
+            this.camera.setViewport(this.viewW, this.viewH);
         }
     }
 
@@ -394,7 +439,7 @@ export class MapRenderer {
         const sx = event.clientX - rect.left;
         const sy = event.clientY - rect.top;
         const mini = this.miniRect();
-        if (sx >= mini.x && sx <= mini.x + mini.w && sy >= mini.y && sy <= mini.y + mini.h) {
+        if (this.minimapVisible && sx >= mini.x && sx <= mini.x + mini.w && sy >= mini.y && sy <= mini.y + mini.h) {
             this.miniDrag = true;
             this.jumpMini(sx, sy);
         } else {
@@ -423,7 +468,7 @@ export class MapRenderer {
             return;
         }
         const mini = this.miniRect();
-        if (event.buttons || (sx >= mini.x && sx <= mini.x + mini.w && sy >= mini.y && sy <= mini.y + mini.h)) {
+        if (event.buttons || (this.minimapVisible && sx >= mini.x && sx <= mini.x + mini.w && sy >= mini.y && sy <= mini.y + mini.h)) {
             this.handlePointerLeave();
             return;
         }
@@ -563,10 +608,10 @@ export class MapRenderer {
                 return;
             }
             const chips = (ids: number[]): string => ids.length
-                ? ids.map((id) => chipToken(state.nations[id].color, state.nations[id].name)).join(" ")
+                ? ids.map((id) => chipToken(nationDisplayColor(state, id), state.nations[id].name)).join(" ")
                 : "无";
             const control = summary.control.length
-                ? summary.control.map((entry) => `${chipToken(state.nations[entry.nation].color, state.nations[entry.nation].name)} ${entry.percent}%`).join(" / ")
+                ? summary.control.map((entry) => `${chipToken(nationDisplayColor(state, entry.nation), state.nations[entry.nation].name)} ${entry.percent}%`).join(" / ")
                 : "无";
             const title = escapeGameText(region.name);
             const body = `核心：${chips(summary.cores)}\n拥有者：${chips(summary.owners)}\n控制明细：${control}\n持有宣称：${chips(summary.claimants)}`;
@@ -623,6 +668,11 @@ export class MapRenderer {
                 if (this.claimsOverlay) this.claimableCache = claimableStateIds(this.engine.state, 0);
                 break;
             }
+            case "relations": {
+                // Vassal colours and the nation list changed; terrain/name cache must be repainted.
+                this.baseDirty = true;
+                break;
+            }
             case "move": {
                 if (event.path.length < 2) break;
                 const points: Vec2[] = [];
@@ -667,8 +717,7 @@ export class MapRenderer {
                 this.constructionDirty = true;
                 if (event.eliminated !== null) this.baseDirty = true;
                 else this.markDirty(event.province);
-                const nation = this.engine.state.nations[event.nationId];
-                this.fx.push({ kind: "capture", province: event.province, start: now, dur: 650, color: nation.color });
+                this.fx.push({ kind: "capture", province: event.province, start: now, dur: 650, color: nationDisplayColor(this.engine.state, event.nationId) });
                 break;
             }
             case "deploy": {
@@ -709,8 +758,13 @@ export class MapRenderer {
 
     /** Frame slices stay small enough to keep input and combat FX responsive. */
     private static readonly BASE_BUDGET_MS = 4;
+    /** The first build has no previous frame to show, so spend the frame and avoid a long blank map. */
+    private static readonly FIRST_BASE_BUDGET_MS = 14;
+    /** Always make some progress even when the frame budget is eaten by load; keeps rebuilds deterministic. */
+    private static readonly MIN_BASE_STEPS = 8;
     private static readonly CELL_CHUNK = 24;
     private static readonly PROVINCE_CHUNK = 32;
+    private baseReady = false;
 
     private beginBaseRebuild(): void {
         this.baseDirty = false;
@@ -721,8 +775,11 @@ export class MapRenderer {
     /** Advance the staged rebuild within a frame budget; swap buffers only when complete. */
     private advanceBaseRebuild(): void {
         if (!this.baseBuild) return;
-        const deadline = performance.now() + MapRenderer.BASE_BUDGET_MS;
+        const budget = this.baseReady ? MapRenderer.BASE_BUDGET_MS : MapRenderer.FIRST_BASE_BUDGET_MS;
+        const deadline = performance.now() + budget;
+        let steps = 0;
         do {
+            steps++;
             if (this.baseBuild.next().done) {
                 this.baseBuild = null;
                 const base = this.base;
@@ -732,9 +789,10 @@ export class MapRenderer {
                 this.baseCtx = this.spareCtx;
                 this.spareCtx = ctx;
                 this.frontlineDirty = true;
+                this.baseReady = true;
                 return;
             }
-        } while (performance.now() < deadline);
+        } while (steps < MapRenderer.MIN_BASE_STEPS || performance.now() < deadline);
     }
 
     private *rebuildBaseSteps(ctx: CanvasRenderingContext2D): Generator<void, void, void> {
@@ -810,18 +868,18 @@ export class MapRenderer {
     }
 
     private paintProvinceTint(ctx: CanvasRenderingContext2D, province: Province): void {
-        const { graph, terrain, nations } = this.engine.state;
+        const { graph, terrain } = this.engine.state;
         const { width, height } = graph.domain;
         if (province.owner === NEUTRAL || !terrain.passable[province.site]) return;
         const cell = graph.cells[province.site];
         if (!cell.bounded) return;
         ctx.globalAlpha = this.tintAlpha();
-        ctx.fillStyle = nations[province.owner].color;
+        ctx.fillStyle = nationDisplayColor(this.engine.state, province.owner);
         fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
     }
 
     private stateColor(owner: number, stateId: number, factor = 1): string {
-        const color = this.engine.state.nations[owner]?.color ?? NEUTRAL_COLOR;
+        const color = nationDisplayColor(this.engine.state, owner);
         const rgb = Number.parseInt(color.slice(1), 16);
         const shade = (((stateId + 1) * 37) % 11 - 5) * 0.022;
         const channel = (shift: number): number => {
@@ -833,9 +891,9 @@ export class MapRenderer {
     }
 
     private drawClaimLand(ctx: CanvasRenderingContext2D): void {
-        const { graph, terrain, states, claims, nations } = this.engine.state;
+        const { graph, terrain, states, claims } = this.engine.state;
         const { width, height } = graph.domain;
-        const color = nations[0].color;
+        const color = nationDisplayColor(this.engine.state, 0);
         for (const claim of claims) {
             if (claim.nation !== 0) continue;
             const region = states[claim.stateId];
@@ -873,6 +931,29 @@ export class MapRenderer {
         ctx.restore();
     }
 
+    /** Briefing preview: translucent nation tint plus a dashed national border. */
+    private drawNationHighlight(ctx: CanvasRenderingContext2D): void {
+        const highlight = this.nationHighlight;
+        if (!highlight) return;
+        const { graph } = this.engine.state;
+        const { width, height } = graph.domain;
+        ctx.save();
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = highlight.color;
+        for (const site of highlight.sites) {
+            const cell = graph.cells[site];
+            if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+        }
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = highlight.color;
+        ctx.lineWidth = 2.4;
+        ctx.setLineDash([9, 5]);
+        ctx.beginPath();
+        for (const [a, b] of highlight.segments) drawWrappedLine(ctx, a, b, width, height, true, true, false);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     /** Gold breathing fill + marching outline for states the player may claim right now. */
     private drawClaimablePulse(ctx: CanvasRenderingContext2D, now: number): void {
         if (!this.claimsOverlay || this.currentMapMode !== "state" || this.claimableCache.length === 0) return;
@@ -906,11 +987,25 @@ export class MapRenderer {
         if (!this.constructionActive || !this.constructionOverlay) return;
         const { graph } = this.engine.state;
         const { width, height } = graph.domain;
+        // Grey out everything the player cannot build in, so eligible plots read as the only choices.
+        ctx.fillStyle = CONSTRUCTION_BLOCKED_COLOR;
+        for (const site of this.constructionOverlay.blocked) {
+            const cell = graph.cells[site];
+            if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+        }
         for (const area of this.constructionOverlay.areas) {
             ctx.fillStyle = area.color;
             for (const site of area.sites) {
                 const cell = graph.cells[site];
                 if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+            }
+            // A live order tints the whole plot: the cell is shaded, not just its counter.
+            if (area.pending > 0) {
+                ctx.fillStyle = CONSTRUCTION_PENDING_TINT;
+                for (const site of area.sites) {
+                    const cell = graph.cells[site];
+                    if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+                }
             }
         }
     }
@@ -925,7 +1020,7 @@ export class MapRenderer {
             this.baseDirty = true;
             return;
         }
-        const { graph, terrain, provinces, nations } = this.engine.state;
+        const { graph, terrain, provinces } = this.engine.state;
         const { width, height } = graph.domain;
         const ctx = this.baseCtx;
         const sites = [...this.dirtySites];
@@ -959,7 +1054,7 @@ export class MapRenderer {
             const cell = graph.cells[site];
             if (!cell.bounded) continue;
             ctx.globalAlpha = this.tintAlpha();
-            ctx.fillStyle = nations[province.owner].color;
+            ctx.fillStyle = nationDisplayColor(this.engine.state, province.owner);
             fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
         }
         ctx.globalAlpha = 1;
@@ -1001,7 +1096,7 @@ export class MapRenderer {
 
     /** Batch-stroke hairlines, coasts and national borders for a set of cells. */
     private drawEdges(ctx: CanvasRenderingContext2D, sites: Iterable<number>): void {
-        const { graph, terrain, provinces, nations } = this.engine.state;
+        const { graph, terrain, provinces } = this.engine.state;
         const { width, height } = graph.domain;
         const count = provinces.length;
         const seen = new Set<number>();
@@ -1032,13 +1127,13 @@ export class MapRenderer {
                     coasts.push([a, b]);
                 } else if (landA && province.owner !== other.owner) {
                     const owner = province.owner !== NEUTRAL ? province.owner : other.owner;
-                    const color = owner === NEUTRAL ? NEUTRAL_COLOR : nations[owner].color;
+                    const color = owner === NEUTRAL ? NEUTRAL_COLOR : nationDisplayColor(this.engine.state, owner);
                     const list = borders.get(color) ?? [];
                     list.push([a, b]);
                     borders.set(color, list);
                     if (rimOn) {
-                        this.pushRim(rims, nations, province.owner, cell, a, b);
-                        this.pushRim(rims, nations, other.owner, graph.cells[neighbor], a, b);
+                        this.pushRim(rims, province.owner, cell, a, b);
+                        this.pushRim(rims, other.owner, graph.cells[neighbor], a, b);
                     }
                 } else if (landA && province.stateId !== other.stateId) {
                     stateLines.push([a, b]);
@@ -1095,7 +1190,6 @@ export class MapRenderer {
     /** Offset a border edge toward one side's interior so the rim stays inside that nation. */
     private pushRim(
         rims: Map<string, [Vec2, Vec2][]>,
-        nations: { color: string }[],
         owner: number,
         cell: { bounded: boolean; centroid: Vec2 },
         a: Vec2,
@@ -1114,7 +1208,7 @@ export class MapRenderer {
             ny = -ny;
         }
         const inset = 3.2;
-        const color = nations[owner].color;
+        const color = nationDisplayColor(this.engine.state, owner);
         const list = rims.get(color) ?? [];
         list.push([
             { x: a.x + nx * inset, y: a.y + ny * inset },
@@ -1188,7 +1282,7 @@ export class MapRenderer {
         maxY: number,
     ): void {
         if (this.currentMapMode === "province") return;
-        const { graph, terrain, provinces, states, nations } = this.engine.state;
+        const { graph, terrain, provinces, states } = this.engine.state;
         const { width, height } = graph.domain;
         const construction = this.constructionActive;
         const overlayAreas = new Map(this.constructionOverlay?.areas.map((area) => [area.id, area]));
@@ -1202,8 +1296,13 @@ export class MapRenderer {
             const capacity = construction ? overlayAreas.get(region.id) : undefined;
             if (construction && !capacity) continue;
             let buildingLabel: string;
+            const pendingText = capacity && capacity.pending > 0 ? `+${capacity.pending}` : "";
             if (capacity) {
-                buildingLabel = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${capacity.used}/${capacity.limit}`;
+                // built+pending keeps the queued part visible: `1+2/8`, pending drawn in green.
+                const count = pendingText
+                    ? `${capacity.built}${pendingText}/${capacity.limit}`
+                    : `${capacity.built}/${capacity.limit}`;
+                buildingLabel = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${count}`;
                 if (capacity.used >= capacity.limit) buildingLabel += " 已满";
             } else {
                 const farms = region.buildings.filter((kind) => kind === "farm").length;
@@ -1258,19 +1357,32 @@ export class MapRenderer {
                     ctx.fill();
                     ctx.stroke();
                     ctx.fillStyle = "rgba(13, 17, 23, 0.9)";
-                    ctx.strokeStyle = "rgba(230, 237, 243, 0.55)";
-                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = capacity && capacity.pending > 0
+                        ? "rgba(63, 185, 80, 0.9)" : "rgba(230, 237, 243, 0.55)";
+                    ctx.lineWidth = capacity && capacity.pending > 0 ? 1.5 : 1;
                     ctx.beginPath();
                     ctx.roundRect(-labelWidth / 2, top, labelWidth, labelHeight, 4);
                     ctx.fill();
                     ctx.stroke();
-                    ctx.fillStyle = capacity?.color ?? nations[province.owner]?.color ?? NEUTRAL_COLOR;
+                    ctx.fillStyle = capacity?.color ?? nationDisplayColor(this.engine.state, province.owner) ?? NEUTRAL_COLOR;
                     ctx.fillRect(-labelWidth / 2 + 4, top + 5, 3, 12);
                     ctx.font = nameFont;
                     ctx.fillStyle = "#f0f6fc";
                     ctx.fillText(region.name, 3, top + 11);
                     ctx.font = buildingFont;
-                    ctx.fillText(buildingLabel, 0, bottom - (capacity ? 13 : 8));
+                    const buildingY = bottom - (capacity ? 13 : 8);
+                    ctx.fillStyle = "#f0f6fc";
+                    ctx.fillText(buildingLabel, 0, buildingY);
+                    if (capacity && pendingText) {
+                        // Overdraw only the pending count so the green part stays compact.
+                        const prefix = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${capacity.built}`;
+                        const start = -ctx.measureText(buildingLabel).width / 2;
+                        ctx.save();
+                        ctx.textAlign = "left";
+                        ctx.fillStyle = "#3fb950";
+                        ctx.fillText(pendingText, start + ctx.measureText(prefix).width, buildingY);
+                        ctx.restore();
+                    }
                     ctx.restore();
                 }
             }
@@ -1298,7 +1410,9 @@ export class MapRenderer {
         for (const area of this.constructionOverlay.areas) {
             const cell = graph.cells[area.center];
             const point = cell.bounded ? cell.centroid : graph.sites[area.center];
-            const label = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${area.used}/${area.limit}`;
+            const pending = area.pending > 0 ? `+${area.pending}` : "";
+            const count = pending ? `${area.built}${pending}/${area.limit}` : `${area.built}/${area.limit}`;
+            const label = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${count}`;
             const labelWidth = ctx.measureText(label).width + 18;
             const labelHeight = 22;
             const marginX = (labelWidth / 2 + 1) * scale;
@@ -1317,8 +1431,8 @@ export class MapRenderer {
                     ctx.translate(x, y);
                     ctx.scale(scale, scale);
                     ctx.fillStyle = "rgba(13, 17, 23, 0.9)";
-                    ctx.strokeStyle = "rgba(230, 237, 243, 0.55)";
-                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = pending ? "rgba(63, 185, 80, 0.9)" : "rgba(230, 237, 243, 0.55)";
+                    ctx.lineWidth = pending ? 1.5 : 1;
                     ctx.beginPath();
                     ctx.roundRect(-labelWidth / 2, -labelHeight / 2, labelWidth, labelHeight, 4);
                     ctx.fill();
@@ -1327,6 +1441,15 @@ export class MapRenderer {
                     ctx.fillRect(-labelWidth / 2 + 4, -6, 3, 12);
                     ctx.fillStyle = "#f0f6fc";
                     ctx.fillText(label, 3, 0);
+                    if (pending) {
+                        const prefix = `${BUILDING_PROFILES[this.currentConstructionKind!].glyph} ${area.built}`;
+                        const start = 3 - ctx.measureText(label).width / 2;
+                        ctx.save();
+                        ctx.textAlign = "left";
+                        ctx.fillStyle = "#3fb950";
+                        ctx.fillText(pending, start + ctx.measureText(prefix).width, 0);
+                        ctx.restore();
+                    }
                     ctx.restore();
                 }
             }
@@ -1481,6 +1604,7 @@ export class MapRenderer {
         for (const [ox, oy] of offsets) {
             ctx.save();
             ctx.translate(ox, oy);
+            this.drawNationHighlight(ctx);
             this.drawClaimablePulse(ctx, now);
             this.drawClaimFocus(ctx);
             ctx.restore();
@@ -1790,8 +1914,7 @@ export class MapRenderer {
             if (effect.kind === "combat") x += Math.sin(p * 55) * 3 * (1 - p);
         }
 
-        const nation = state.nations[army.nation];
-        const color = nation ? nation.color : NEUTRAL_COLOR;
+        const color = nationDisplayColor(state, army.nation);
         const w = 40 * scale;
         const h = 28 * scale;
         const count = army.regiments.length;
@@ -1937,6 +2060,7 @@ export class MapRenderer {
     }
 
     private drawMinimap(ctx: CanvasRenderingContext2D, minX: number, maxX: number, minY: number, maxY: number): void {
+        if (!this.minimapVisible) return;
         const state = this.engine.state;
         const { width, height } = state.graph.domain;
         const mini = this.miniRect();
@@ -1961,7 +2085,7 @@ export class MapRenderer {
         const sy = mini.h / height;
         for (const army of state.armies.values()) {
             const point = state.graph.sites[army.province];
-            ctx.fillStyle = state.nations[army.nation]?.color ?? NEUTRAL_COLOR;
+            ctx.fillStyle = nationDisplayColor(state, army.nation);
             ctx.fillRect(mini.x + point.x * sx - 1.5, mini.y + point.y * sy - 1.5, 3, 3);
         }
 

@@ -1,5 +1,6 @@
 import type { UIContext } from "./context.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
+import { ALLIANCE_CREATE_COST } from "../game/alliance.ts";
 import { REGIMENT_CAP } from "../game/types.ts";
 
 /** Training, construction and policy switches (dock panels). */
@@ -48,6 +49,9 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
     if (![
         "claim-state", "claim-cancel", "claim-locate", "prepare-diplomacy", "cancel-diplomacy", "declare", "enforce-war-goal",
         "propose-peace", "accept-peace", "reject-peace",
+        "respond-request", "vassal-request", "vassal-demand", "petition-independence", "tribute-rate",
+        "release-vassal", "request-aid", "request-upgrade", "create-alliance", "invite-alliance", "join-alliance",
+        "leave-alliance", "enforce-vassal",
     ].includes(action)) return false;
 
     const state = ctx.engine.state;
@@ -111,6 +115,114 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
     } else if (action === "accept-peace") {
         if (ctx.engine.respondPeace(nationId, true)) ctx.toast(`已接受${nationName}的白和平，双方返还临时占领并撤军`);
         else fail("无法接受白和平：提议已失效或战争已结束");
+    } else if (action === "respond-request") {
+        const requestId = Number(target.dataset.request);
+        const accept = target.dataset.accept === "1";
+        if (!Number.isInteger(requestId)) fail("外交请求无效");
+        else if (ctx.engine.respondDiplomaticRequest(requestId, accept)) {
+            ctx.sound.play("select");
+            ctx.toast(accept ? "已接受外交请求" : "已拒绝外交请求");
+        } else fail("无法处理：请求已失效，或当前条件已不满足");
+    } else if (action === "vassal-request") {
+        const details = target.closest("details");
+        const picked = details?.querySelector<HTMLInputElement>("input[type='radio']:checked")?.value ?? "cooperative";
+        if (!Number.isInteger(nationId)) fail("附庸请求目标无效");
+        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast(`${nationName} 接受了附庸请求，契约已生效`);
+        else fail("附庸请求未获接受：需与目标邻接、双方均无宗主国，且对方认为你有足够价值");
+    } else if (action === "vassal-demand") {
+        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        else ctx.confirm({
+            title: `要求 ${nationName} 成为附庸`,
+            body: "以压迫型附庸结束：不割让领土，对方上缴 30% 资源与每日 3 政治点，独立性不可主动提升。对方可能拒绝，并因此保持敌对。",
+            confirmLabel: "提出要求",
+            danger: true,
+            onConfirm: () => {
+                if (ctx.engine.demandVassalization(nationId)) ctx.toast(`${nationName} 接受了附庸要求`);
+                else {
+                    ctx.sound.play("error");
+                    ctx.toast(`${nationName} 拒绝成为附庸：需明显弱于我方或无望继续战争`);
+                }
+            },
+        });
+    } else if (action === "petition-independence") {
+        if (ctx.engine.petitionIndependence()) ctx.toast("主权诉求已提出，独立性上升");
+        else fail("无法争取独立：政治点不足、冷却未结束，或压迫型附庸不可主动争取");
+    } else if (action === "tribute-rate") {
+        const delta = Number(target.dataset.delta);
+        if (!Number.isFinite(delta)) fail("贡赋调整无效");
+        else if (ctx.engine.adjustTributeRate(delta)) ctx.toast("贡赋比例已调整");
+        else fail("无法调整贡赋：只有合作型附庸可在 5%–40% 内调整");
+    } else if (action === "release-vassal") {
+        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        else ctx.confirm({
+            title: `释放 ${nationName}`,
+            body: "解除附庸关系并给予 10 天停战期；已收取的贡赋不会返还。",
+            confirmLabel: "释放附庸",
+            onConfirm: () => {
+                if (ctx.engine.releaseVassal(nationId)) ctx.toast(`${nationName} 已恢复独立`);
+                else {
+                    ctx.sound.play("error");
+                    ctx.toast("无法释放：该国不是你的附庸");
+                }
+            },
+        });
+    } else if (action === "request-aid") {
+        if (ctx.engine.requestForeignAid()) ctx.toast("求援请求已发出：对方可能提供财政与政治点，甚至对宗主国宣战");
+        else fail("无法求援：仅压迫型附庸可请求，且需冷却结束与非宗主国存在");
+    } else if (action === "request-upgrade") {
+        if (ctx.engine.requestVassalUpgrade()) ctx.toast("契约改善请求已发出，等待宗主国答复");
+        else fail("无法请求改善契约：需臣服度足够高、政治点足够，且当前契约还有改善空间");
+    } else if (action === "create-alliance") {
+        ctx.confirm({
+            title: "创建联盟阵营",
+            body: `消耗 ${ALLIANCE_CREATE_COST} 政治点。创建后可邀请有共同敌人或战略倾向相近的国家；孤立主义不会主动创建联盟。`,
+            confirmLabel: "创建",
+            onConfirm: () => {
+                if (ctx.engine.createAlliance()) ctx.toast("联盟阵营已创建，可在外交面板邀请成员");
+                else {
+                    ctx.sound.play("error");
+                    ctx.toast("无法创建联盟：政治点不足、已有联盟，或当前倾向不适合结盟");
+                }
+            },
+        });
+    } else if (action === "invite-alliance") {
+        if (!Number.isInteger(nationId)) fail("联盟邀请目标无效");
+        else if (ctx.engine.inviteToAlliance(nationId)) ctx.toast(`已向${nationName}发出结盟邀请`);
+        else fail("无法邀请：需由联盟领袖发出，且双方有共同敌人或相近战略倾向");
+    } else if (action === "join-alliance") {
+        const leaderId = Number(target.dataset.leader);
+        if (!Number.isInteger(leaderId)) fail("联盟领袖无效");
+        else if (ctx.engine.requestJoinAlliance(leaderId)) ctx.toast("入盟申请已获接受");
+        else fail("入盟申请被拒绝：需有共同敌人或相近战略倾向，拒绝后 15 天内不能再次申请");
+    } else if (action === "leave-alliance") {
+        ctx.confirm({
+            title: "退出联盟",
+            body: "退出后共享通行权与共同敌人即刻失效，15 天内无法重新加入同一联盟。",
+            confirmLabel: "退出联盟",
+            danger: true,
+            onConfirm: () => {
+                if (ctx.engine.leaveAlliance()) ctx.toast("已退出联盟");
+                else {
+                    ctx.sound.play("error");
+                    ctx.toast("无法退出：我方不在任何联盟中");
+                }
+            },
+        });
+    } else if (action === "enforce-vassal") {
+        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        else ctx.confirm({
+            title: `扶 ${nationName} 为压迫型附庸`,
+            body: "以战争目标议和，但不割让领土：对方保留国土，上缴 30% 资源与每日 3 政治点，独立性极低且不可主动提升。",
+            confirmLabel: "扶为附庸",
+            danger: true,
+            onConfirm: () => {
+                if (ctx.engine.enforceWarGoal(nationId, "oppressive")) ctx.toast(`${nationName} 已成为压迫型附庸`);
+                else {
+                    ctx.sound.play("error");
+                    ctx.toast("无法扶为附庸：需我方发起的全面吞并战争且已满足胜利条件");
+                }
+            },
+        });
     } else {
         const hadOffer = state.peaceOffers.includes(nationId);
         ctx.engine.respondPeace(nationId, false);

@@ -1,6 +1,7 @@
 import { Biome } from "../terrain/biome.ts";
 import { NEUTRAL, NEUTRAL_COLOR, ORG_MAX } from "../game/types.ts";
 import type { Army, GameState } from "../game/types.ts";
+import { nationDisplayColor } from "../game/access.ts";
 import { isAtWar } from "../game/diplomacy.ts";
 import type { RelationTone } from "./text.ts";
 
@@ -24,7 +25,7 @@ export function ownerName(state: GameState, owner: number): string {
 }
 
 export function ownerColor(state: GameState, owner: number): string {
-    return owner === NEUTRAL ? NEUTRAL_COLOR : state.nations[owner].color;
+    return owner === NEUTRAL ? NEUTRAL_COLOR : nationDisplayColor(state, owner);
 }
 
 export function garrisonRelation(state: GameState, owner: number): RelationTone {
