@@ -4,8 +4,12 @@ import { claimedDefenseSites } from "../defense.ts";
 import { canBuild, canBuildProvince, canTrain, economicValue, factoryTotals } from "../economy.ts";
 import { supplyLevel } from "../supply.ts";
 import { armyAt, armyCap, attackTargets, isHostileProvince, nationArmyCount, reachable } from "../rules.ts";
-import { BUILDING_PROFILES, REGIMENT_CAP, UNIT_PROFILES, UnitKind } from "../types.ts";
-import type { Army, GameState, ProvinceBuildingKind, StateBuildingKind, UnitKind as UnitKindType } from "../types.ts";
+import { BUILDING_PROFILES } from "../types/building.ts";
+import { REGIMENT_CAP, UNIT_PROFILES, UnitKind } from "../types/unit.ts";
+import type { Army } from "../types/organization.ts";
+import type { GameState } from "../types/state.ts";
+import type { ProvinceBuildingKind, StateBuildingKind } from "../types/building.ts";
+import type { UnitKind as UnitKindType } from "../types/unit.ts";
 import { tendencyProfileOf, tendencyTuning } from "./tendencies.ts";
 import type { AIAction, AIController, AITendencyProfile, AITuning } from "./types.ts";
 

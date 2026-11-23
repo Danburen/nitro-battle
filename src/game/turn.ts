@@ -15,15 +15,8 @@ import { clampResources, occupationGrowth, resourceRates } from "./economy.ts";
 import { advancePolicySwitches, tickPolicyUpkeep } from "./policy.ts";
 import { enqueueBuild, enqueueProvinceBuild, enqueueTrain, processConstruction, processDeployments, reinforceArmy, setFactoryProduction } from "./production.ts";
 import { computeSupply, supplyLevel, supplyOrgFactor } from "./supply.ts";
-import {
-    DAYS_PER_SEASON,
-    NEUTRAL,
-    ORG_MAX,
-    ORG_REGEN,
-    REINFORCE_MIN_SUPPLY,
-    SEASONS,
-    UNPAID_UPKEEP_ORG_PENALTY,
-} from "./types.ts";
+import { DAYS_PER_SEASON, NEUTRAL, SEASONS } from "./types/world.ts";
+import { ORG_MAX, ORG_REGEN, REINFORCE_MIN_SUPPLY, UNPAID_UPKEEP_ORG_PENALTY } from "./types/organization.ts";
 
 export function endTurn(core: GameCore): void {
     if (core.state.winner !== null) return;

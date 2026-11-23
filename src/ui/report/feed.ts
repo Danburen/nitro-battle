@@ -1,7 +1,7 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { nationDisplayColor } from "../../game/access.ts";
-import { NEUTRAL, SEASONS } from "../../game/types.ts";
-import type { LogEntry } from "../../game/types.ts";
+import { NEUTRAL, SEASONS } from "../../game/types/world.ts";
+import type { LogEntry } from "../../game/types/log.ts";
 import { chipToken, escapeHtml, renderGameText } from "../text.ts";
 import { buildReportDigest, OUTCOME_LABEL } from "./digest.ts";
 import type { DayBlock, ProductionAgg } from "./digest.ts";

@@ -4,8 +4,11 @@ import { StandardAI } from "./ai/index.ts";
 import type { AIController } from "./ai/index.ts";
 import { attackTargets, reachable } from "./rules.ts";
 import type { ReachResult } from "./rules.ts";
-import { NEUTRAL } from "./types.ts";
-import type { Army, Battle, EngineEvent, GameState, LogEvent, LogTone } from "./types.ts";
+import { NEUTRAL } from "./types/world.ts";
+import type { Army, Battle } from "./types/organization.ts";
+import type { EngineEvent } from "./types/events.ts";
+import type { GameState } from "./types/state.ts";
+import type { LogEvent, LogTone } from "./types/log.ts";
 
 type Listener = (event: EngineEvent) => void;
 

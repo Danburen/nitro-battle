@@ -4,8 +4,10 @@ import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { spawnArmy } from "../armies.ts";
 import { garrisonCapacity } from "../battle.ts";
 import { computeSupply } from "../supply.ts";
-import { NEUTRAL, START_ORG, UnitKind } from "../types.ts";
-import type { GameState } from "../types.ts";
+import { NEUTRAL } from "../types/world.ts";
+import { START_ORG } from "../types/organization.ts";
+import { UnitKind } from "../types/unit.ts";
+import type { GameState } from "../types/state.ts";
 import { compensateStartingNations } from "./balance.ts";
 
 const POP_BIOMES = new Set<number>([Biome.PLAINS, Biome.FOREST, Biome.HILLS, Biome.BEACH]);

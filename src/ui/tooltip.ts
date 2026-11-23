@@ -4,6 +4,11 @@ export function tooltipAttrs(title: string, body: string): string {
     return `data-tooltip-title="${escapeHtml(title)}" data-tooltip-body="${escapeHtml(body)}"`;
 }
 
+/** Rich tooltip markup is escaped once for the attribute; GlobalTooltip renders it as raw HTML. */
+export function rawTooltipAttrs(markup: string): string {
+    return `data-tooltip-html="${escapeHtml(markup)}"`;
+}
+
 // Map payloads are semantic text, never HTML; dismissals reset the renderer's hover clock.
 export const MAP_TOOLTIP_EVENT = "nitro:map-tooltip";
 export const MAP_TOOLTIP_DISMISS_EVENT = "nitro:map-tooltip-dismiss";

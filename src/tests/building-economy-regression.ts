@@ -17,8 +17,12 @@ import {
 import { generateWorld } from "../game/generator/index.ts";
 import { spawnArmy } from "../game/armies.ts";
 import { LCGRandom } from "../utils/LCGRandom.ts";
-import { BUILDING_PROFILES, DEFAULT_POLICIES, STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS, UnitKind } from "../game/types.ts";
-import type { BuildingKind, GameState, Nation, Province, StateRegion } from "../game/types.ts";
+import { BUILDING_PROFILES, STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS } from "../game/types/building.ts";
+import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import { UnitKind } from "../game/types/unit.ts";
+import type { BuildingKind } from "../game/types/building.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
 
 function near(actual: number, expected: number, epsilon = 1e-6): void {
     assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);

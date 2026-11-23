@@ -6,8 +6,8 @@ import type { RelationTone, TextKey } from "../ui/text.ts";
 import { tooltipAttrs } from "../ui/tooltip.ts";
 import { garrisonRelation } from "../ui/common.ts";
 import { setWar } from "../game/diplomacy.ts";
-import { NEUTRAL } from "../game/types.ts";
-import type { GameState } from "../game/types.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import type { GameState } from "../game/types/state.ts";
 
 /** CSS assertions span the split style package and the per-component stylesheets. */
 function readStyles(): string {

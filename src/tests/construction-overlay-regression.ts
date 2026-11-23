@@ -3,8 +3,11 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 import { GameEngine } from "../game/engine.ts";
 import { processConstruction } from "../game/production.ts";
-import { BUILDING_PROFILES, DEFAULT_POLICIES, STATE_BUILDING_KINDS } from "../game/types.ts";
-import type { BuildingKind, GameState, Province, StateRegion } from "../game/types.ts";
+import { BUILDING_PROFILES, STATE_BUILDING_KINDS } from "../game/types/building.ts";
+import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import type { BuildingKind } from "../game/types/building.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Province, StateRegion } from "../game/types/entities.ts";
 import { Biome, BiomeMap } from "../terrain/biome.ts";
 import {
     buildConstructionOverlay, constructionColor, CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS,

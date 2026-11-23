@@ -1,8 +1,9 @@
 import { orderMerge, splitArmy } from "./armies.ts";
 import { claimedDefenseSites } from "./defense.ts";
 import type { GameCore } from "./core.ts";
-import { REGIMENT_CAP } from "./types.ts";
-import type { Army, GameState } from "./types.ts";
+import { REGIMENT_CAP } from "./types/unit.ts";
+import type { Army } from "./types/organization.ts";
+import type { GameState } from "./types/state.ts";
 
 /**
  * Army trusteeship for the human player. The global switch hands every player

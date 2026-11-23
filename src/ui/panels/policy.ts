@@ -1,14 +1,7 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { categoryModifiers, policyTransitionProgress } from "../../game/policy.ts";
-import {
-    CONSCRIPTION_POLICIES,
-    ECONOMY_POLICIES,
-    OCCUPATION_POLICIES,
-    POLICY_SWITCH_COST,
-    POLICY_SWITCH_DAYS,
-    POLICY_SWITCH_UPKEEP,
-} from "../../game/types.ts";
-import type { PolicyCategory, PolicyModifiers, PolicyTransition } from "../../game/types.ts";
+import { CONSCRIPTION_POLICIES, ECONOMY_POLICIES, OCCUPATION_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../../game/types/policy.ts";
+import type { PolicyCategory, PolicyModifiers, PolicyTransition } from "../../game/types/policy.ts";
 import { escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, renderPanel } from "../panel.ts";

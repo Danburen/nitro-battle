@@ -44,16 +44,12 @@ import {
     setTrainDestination,
 } from "./production.ts";
 import { endTurn } from "./turn.ts";
-import type {
-    Army,
-    StateBuildingKind,
-    ProvinceBuildingKind,
-    DiplomaticActionKind,
-    GameState,
-    PolicyCategory,
-    UnitKind,
-    VassalType,
-} from "./types.ts";
+import type { Army } from "./types/organization.ts";
+import type { StateBuildingKind, ProvinceBuildingKind } from "./types/building.ts";
+import type { DiplomaticActionKind, VassalType } from "./types/diplomacy.ts";
+import type { GameState } from "./types/state.ts";
+import type { PolicyCategory } from "./types/policy.ts";
+import type { UnitKind } from "./types/unit.ts";
 import { generateWorld } from "./generator/index.ts";
 
 /** Public facade: every command delegates to its domain module. */

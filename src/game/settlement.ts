@@ -8,8 +8,9 @@ import { refreshGarrisonCapacity } from "./battle.ts";
 import { isHostileProvince } from "./rules.ts";
 import { clampResources, resourceRates } from "./economy.ts";
 import { periodicDistance } from "../terrain/voronoi/index.ts";
-import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "./types.ts";
-import type { GameState, VassalType, War } from "./types.ts";
+import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "./types/unit.ts";
+import type { GameState } from "./types/state.ts";
+import type { VassalType, War } from "./types/diplomacy.ts";
 
 function capitulated(state: GameState, nation: number, opponent: number): boolean {
     const territory = state.provinces.filter((province) => province.legalOwner === nation);

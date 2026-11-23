@@ -1,14 +1,11 @@
-import {
-    BUILDING_PROFILES, FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, INDUSTRY_BASE_CAP, INDUSTRY_CAP_PER_CITY,
-    INFRASTRUCTURE_MAX, MANPOWER_BASE_CAP, MANPOWER_CAP_PER_POP, NEUTRAL,
-    OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN, PP_CAP,
-    STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS,
-    SUPPLY_RANGE_CAPITAL, SUPPLY_RANGE_CITY, SUPPLY_RANGE_CENTER, UNIT_PROFILES, UnitKind,
-} from "./types.ts";
-import type {
-    BuildingKind, ConstructionOrder, GameState, Nation, PolicyModifiers, Province,
-    ProvinceBuildingKind, StateBuildingKind, StateRegion,
-} from "./types.ts";
+import { BUILDING_PROFILES, INFRASTRUCTURE_MAX, STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS } from "./types/building.ts";
+import { FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, INDUSTRY_BASE_CAP, INDUSTRY_CAP_PER_CITY, MANPOWER_BASE_CAP, MANPOWER_CAP_PER_POP, OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN, PP_CAP, SUPPLY_RANGE_CAPITAL, SUPPLY_RANGE_CITY, SUPPLY_RANGE_CENTER } from "./types/economy.ts";
+import { NEUTRAL } from "./types/world.ts";
+import { UNIT_PROFILES, UnitKind } from "./types/unit.ts";
+import type { BuildingKind, ConstructionOrder, ProvinceBuildingKind, StateBuildingKind } from "./types/building.ts";
+import type { GameState } from "./types/state.ts";
+import type { Nation, Province, StateRegion } from "./types/entities.ts";
+import type { PolicyModifiers } from "./types/policy.ts";
 import { policyModifiers } from "./policy.ts";
 
 export function occupationFactor(province: Province, nationId: number): number {

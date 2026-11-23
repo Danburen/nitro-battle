@@ -1,6 +1,6 @@
 import type { Vec2 } from "../terrain/voronoi/index.ts";
 import { drawWrappedLine, fillWrappedPolygon } from "../terrain/voronoi/index.ts";
-import type { GameState } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { stateBoundary } from "./geometry.ts";
 import {

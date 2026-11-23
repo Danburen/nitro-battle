@@ -1,7 +1,7 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { CLAIM_COST, canCancelStateClaim, hasStateClaim } from "../../game/diplomacy.ts";
 import { nationDisplayColor } from "../../game/access.ts";
-import type { StateRegion } from "../../game/types.ts";
+import type { StateRegion } from "../../game/types/entities.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead } from "../panel.ts";

@@ -1,5 +1,5 @@
 import { LCGRandom } from "../../utils/LCGRandom.ts";
-import type { VassalType } from "../types.ts";
+import type { VassalType } from "../types/diplomacy.ts";
 import type { AITendencyId, AITendencyProfile, AITuning, VassalTuning } from "./types.ts";
 
 /**

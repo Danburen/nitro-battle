@@ -1,5 +1,6 @@
 import { provinceBuildingCapacity, stateBuildingCapacity } from "../game/economy.ts";
-import type { BuildingKind, GameState } from "../game/types.ts";
+import type { BuildingKind } from "../game/types/building.ts";
+import type { GameState } from "../game/types/state.ts";
 
 export const PROVINCE_CAPACITY_MIN_ZOOM = 1.6;
 

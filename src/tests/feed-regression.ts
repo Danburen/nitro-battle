@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildReportDigest } from "../ui/report/digest.ts";
-import type { LogEntry, LogEvent } from "../game/types.ts";
+import type { LogEntry, LogEvent } from "../game/types/log.ts";
 
 function entry(day: number, text: string, event?: LogEvent, major = false): LogEntry {
     return { day, text, tone: "combat", nationId: 0, major, event };

@@ -1,7 +1,7 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { canBuild, canBuildProvince, constructionPlan, factoryTotals, provinceBuildingCapacity, stateBuildingCapacity } from "../../game/economy.ts";
-import { BUILDING_PROFILES, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types.ts";
-import type { BuildingKind, ConstructionOrder } from "../../game/types.ts";
+import { BUILDING_PROFILES, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types/building.ts";
+import type { BuildingKind, ConstructionOrder } from "../../game/types/building.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { panelHead } from "../panel.ts";

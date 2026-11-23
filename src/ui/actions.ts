@@ -4,8 +4,8 @@ import { AUTO_GLOBAL_LOCK_TIP } from "./common.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
 import { ALLIANCE_CREATE_COST } from "../game/alliance.ts";
 import { VASSAL_PROFILES, validVassalType } from "../game/vassal.ts";
-import { REGIMENT_CAP } from "../game/types.ts";
-import type { VassalType } from "../game/types.ts";
+import { REGIMENT_CAP } from "../game/types/unit.ts";
+import type { VassalType } from "../game/types/diplomacy.ts";
 import { textToken } from "./text.ts";
 
 /** Training, construction and policy switches (dock panels). */

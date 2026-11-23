@@ -1,5 +1,7 @@
-import { NEUTRAL } from "./types.ts";
-import type { GameState, LogEvent, Nation } from "./types.ts";
+import { NEUTRAL } from "./types/world.ts";
+import type { GameState } from "./types/state.ts";
+import type { LogEvent } from "./types/log.ts";
+import type { Nation } from "./types/entities.ts";
 
 /**
  * Promote the chosen generated nation to player id 0.

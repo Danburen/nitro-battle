@@ -3,7 +3,8 @@ import { resolveBattleRound } from "./battle.ts";
 import { claimProvince } from "./conquest.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { armyAt, isHostileProvince } from "./rules.ts";
-import type { Army, Battle, BattleReport } from "./types.ts";
+import type { Army, Battle } from "./types/organization.ts";
+import type { BattleReport } from "./types/log.ts";
 
 export function attack(core: GameCore, armyId: number, target: number): boolean {
     const state = core.state;

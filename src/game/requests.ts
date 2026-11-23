@@ -1,4 +1,5 @@
-import type { DiplomaticRequest, DiplomaticRequestKind, GameState, VassalType } from "./types.ts";
+import type { DiplomaticRequest, DiplomaticRequestKind, VassalType } from "./types/diplomacy.ts";
+import type { GameState } from "./types/state.ts";
 
 /** Pending offers expire after ten days; a rejection also starts a longer cooldown. */
 export const DIPLOMATIC_REQUEST_DAYS = 10;

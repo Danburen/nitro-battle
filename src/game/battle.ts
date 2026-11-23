@@ -2,8 +2,11 @@ import type { LCGRandom } from "../utils/LCGRandom.ts";
 import { provinceDefense } from "./economy.ts";
 import { armyAt, orgFactor } from "./rules.ts";
 import { supplyAttackFactor } from "./supply.ts";
-import { MAX_HP, ORG_BREAK, UNIT_PROFILES, UnitKind } from "./types.ts";
-import type { Army, Battle, CombatOutcome, GameState, Province, Regiment } from "./types.ts";
+import { MAX_HP, UNIT_PROFILES, UnitKind } from "./types/unit.ts";
+import { ORG_BREAK } from "./types/organization.ts";
+import type { Army, Battle, CombatOutcome, Regiment } from "./types/organization.ts";
+import type { GameState } from "./types/state.ts";
+import type { Province } from "./types/entities.ts";
 
 /** Share of a province's maximum garrison restored each day. */
 export const GARRISON_RECOVERY_RATE = 0.1;

@@ -1,5 +1,6 @@
 import { LCGRandom } from "../../utils/LCGRandom.ts";
-import type { GameSettings, GameState } from "../types.ts";
+import type { GameState } from "../types/state.ts";
+import type { GameSettings } from "../../types/settings.ts";
 import { createProvinces, seedCities } from "./cities.ts";
 import { initializeWorld } from "./initialization.ts";
 import { generateMap } from "./map.ts";

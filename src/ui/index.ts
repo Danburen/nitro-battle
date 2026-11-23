@@ -1,6 +1,8 @@
 import type { GameEngine } from "../game/engine.ts";
-import { BUILDING_KINDS, BUILDING_PROFILES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types.ts";
-import type { BuildingKind, PolicyCategory } from "../game/types.ts";
+import { BUILDING_KINDS, BUILDING_PROFILES } from "../game/types/building.ts";
+import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types/policy.ts";
+import type { BuildingKind } from "../game/types/building.ts";
+import type { PolicyCategory } from "../game/types/policy.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { POLICY_LABELS, policyOption } from "../game/policy.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";

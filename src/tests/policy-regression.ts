@@ -11,8 +11,9 @@ import {
     startPolicySwitch,
     tickPolicyUpkeep,
 } from "../game/policy.ts";
-import { DEFAULT_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types.ts";
-import type { GameState, Nation, Province, StateRegion } from "../game/types.ts";
+import { DEFAULT_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types/policy.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
 
 function near(actual: number, expected: number, epsilon = 1e-6): void {
     assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);

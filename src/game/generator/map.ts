@@ -3,8 +3,9 @@ import type { Point, VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import { TerrainGenerator } from "../../terrain/biome.ts";
 import type { BiomeMap } from "../../terrain/biome.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
-import { MAP_SIZES, SEASONS } from "../types.ts";
-import type { GameSettings } from "../types.ts";
+import { SEASONS } from "../types/world.ts";
+import { MAP_SIZES } from "../../types/settings.ts";
+import type { GameSettings } from "../../types/settings.ts";
 
 function createRandomPoints(count: number, width: number, height: number, seed: number): Point[] {
     const rand = new LCGRandom(seed);

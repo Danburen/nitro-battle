@@ -8,10 +8,12 @@ import { isProtectedRelation, overlordOf, vassalTypeOf, vassalsOf } from "./acce
 import { tendencyProfileOf, vassalTuning } from "./ai/tendencies.ts";
 import type { VassalTuning } from "./ai/types.ts";
 import { createDiplomaticRequest } from "./requests.ts";
-import { PP_CAP } from "./types.ts";
-import type {
-    DiplomaticRequest, DiplomaticRequestKind, GameState, Nation, VassalType,
-} from "./types.ts";
+import { deny, minus, plus } from "./decision.ts";
+import { PP_CAP } from "./types/economy.ts";
+import type { DecisionFactor, DiplomaticDecision } from "./types/decision.ts";
+import type { DiplomaticRequest, DiplomaticRequestKind, VassalType } from "./types/diplomacy.ts";
+import type { GameState } from "./types/state.ts";
+import type { Nation } from "./types/entities.ts";
 
 export interface VassalProfile {
     readonly name: string;
@@ -373,12 +375,28 @@ function applyVassalUpgrade(core: GameCore, vassalId: number, target: VassalType
     return true;
 }
 
-function aiAcceptsUpgrade(state: GameState, overlordId: number, vassalId: number): boolean {
-    const will = vassalTuningOf(state, vassalId).upgradeWill;
+/** The overlord's side of a contract upgrade; the vassal's own gate is `canRequestUpgrade`. */
+export function decideUpgrade(state: GameState, overlordId: number, vassalId: number): DiplomaticDecision {
+    if (!living(state, overlordId) || !living(state, vassalId)) return deny("契约对象已不具备资格");
     const tendency = state.nations[overlordId].tendency;
-    if (tendency === "isolated") return will >= 0.7;
-    if (tendency === "hegemon" || tendency === "militarist") return will >= 0.6;
-    return will >= UPGRADE_WILL_MIN;
+    const minimum = tendency === "isolated" ? 0.7
+        : tendency === "hegemon" || tendency === "militarist" ? 0.6
+            : UPGRADE_WILL_MIN;
+    const will = vassalTuningOf(state, vassalId).upgradeWill;
+    const tendencyFactor = tendency === "isolated"
+        ? minus("宗主倾向孤立，对契约改善格外谨慎")
+        : tendency === "hegemon" || tendency === "militarist"
+            ? minus("宗主倾向强势，对契约改善较为谨慎")
+            : plus("宗主对契约改善没有额外戒心");
+    const willFactor = will >= minimum
+        ? plus("附庸改善意愿达到其要求")
+        : minus("附庸改善意愿未达到其要求");
+    const accepts = will >= minimum;
+    return {
+        accepts,
+        factors: [tendencyFactor, willFactor],
+        verdict: accepts ? (will >= 0.7 ? "sure" : "likely") : "refuse",
+    };
 }
 
 /**
@@ -398,7 +416,7 @@ export function requestVassalUpgrade(core: GameCore, vassalId: number): boolean 
         core.emit({ type: "state" });
         return true;
     }
-    if (aiAcceptsUpgrade(state, overlord, vassalId)) {
+    if (decideUpgrade(state, overlord, vassalId).accepts) {
         const nation = state.nations[vassalId];
         nation.politicalPower = Math.max(0, nation.politicalPower - VASSAL_UPGRADE_COST);
         return applyVassalUpgrade(core, vassalId, target);
@@ -586,16 +604,31 @@ function rebelVassal(core: GameCore, vassalId: number, overlordId: number): void
     core.emit({ type: "state" });
 }
 
-function aiAcceptsVassalOffer(state: GameState, overlord: number, vassal: number, type: VassalType): boolean {
-    if (!living(state, overlord) || !living(state, vassal) || isAtWar(state, overlord, vassal)) return false;
-    const profile = state.nations[overlord].tendency;
-    if (profile === "isolated") return false;
+/** The overlord's willingness to accept a voluntary vassal offer. */
+export function decideVassalOffer(state: GameState, overlord: number, vassal: number, type: VassalType): DiplomaticDecision {
+    if (!living(state, overlord) || !living(state, vassal)) return deny("对象已不具备资格");
+    if (isAtWar(state, overlord, vassal)) return deny("正与请求方交战");
+    if (state.nations[overlord].tendency === "isolated") return deny("倾向孤立，不接纳附庸");
     const ratio = nationPower(state, overlord) / Math.max(1, nationPower(state, vassal));
     const minimum = type === "autonomous" ? 1.2 : 1.35;
-    if (ratio < minimum) return false;
+    const factors: DecisionFactor[] = [
+        ratio >= minimum
+            ? plus("实力达到接纳附庸的门槛")
+            : minus("实力未达到接纳附庸的门槛"),
+    ];
     // A protector already fighting a major war is less eager to inherit another front.
-    if (state.war[overlord].some(Boolean) && ratio < 1.8) return false;
-    return true;
+    const atWar = state.war[overlord]?.some(Boolean) === true;
+    if (atWar) {
+        factors.push(ratio >= 1.8
+            ? plus("虽在战争中，实力仍足以再保护一方")
+            : minus("自身正在战争中，无力再接纳附庸"));
+    }
+    const accepts = ratio >= minimum && (!atWar || ratio >= 1.8);
+    return {
+        accepts,
+        factors,
+        verdict: accepts ? (ratio >= 1.8 ? "sure" : "likely") : (ratio >= minimum ? "unlikely" : "refuse"),
+    };
 }
 
 /**
@@ -615,13 +648,33 @@ export function requestVassalization(
         core.emit({ type: "state" });
         return true;
     }
-    if (aiAcceptsVassalOffer(state, overlordId, vassalId, type)) {
+    if (decideVassalOffer(state, overlordId, vassalId, type).accepts) {
         return setVassal(core, vassalId, overlordId, type);
     }
     setPairCooldown(state.vassalCooldown, vassalId, overlordId, state.day + VASSAL_OFFER_COOLDOWN);
     core.log(`${core.nationChip(overlordId)} 拒绝 ${core.nationChip(vassalId)} 的附庸请求`, "diplo", overlordId);
     core.emit({ type: "state" });
     return false;
+}
+
+/** Willingness of a coerced target to submit; the player-side gate is `canBecomeVassal`. */
+export function decideVassalDemand(state: GameState, overlord: number, vassal: number): DiplomaticDecision {
+    if (!living(state, overlord) || !living(state, vassal)) return deny("对象已不具备资格");
+    const ratio = nationPower(state, overlord) / Math.max(1, nationPower(state, vassal));
+    const losing = state.war[vassal]?.some(Boolean) === true;
+    if (ratio >= 1.8) {
+        return { accepts: true, factors: [plus("实力形成压倒性优势")], verdict: "sure" };
+    }
+    if (losing && ratio >= 1.25) {
+        return {
+            accepts: true,
+            factors: [plus("对方正陷入战争"), plus("实力优势足以逼其屈服")],
+            verdict: "likely",
+        };
+    }
+    const factors: DecisionFactor[] = [minus("实力优势不足")];
+    if (!losing) factors.push(minus("对方并未陷入战争"));
+    return { accepts: false, factors, verdict: "refuse" };
 }
 
 /** Coercive demand (oppressive): only a hopelessly weaker target submits. */
@@ -637,9 +690,7 @@ export function demandVassalization(core: GameCore, overlordId: number, vassalId
         core.emit({ type: "state" });
         return true;
     }
-    const ratio = nationPower(state, overlordId) / Math.max(1, nationPower(state, vassalId));
-    const losing = state.war[vassalId]?.some(Boolean) === true;
-    if (ratio >= 1.8 || (losing && ratio >= 1.25)) {
+    if (decideVassalDemand(state, overlordId, vassalId).accepts) {
         return setVassal(core, vassalId, overlordId, "oppressive");
     }
     setPairCooldown(state.vassalCooldown, overlordId, vassalId, state.day + VASSAL_OFFER_COOLDOWN);
@@ -675,17 +726,44 @@ export function canRequestAid(state: GameState, vassalId: number): boolean {
     return aidCandidates(state, vassalId).length > 0;
 }
 
-function aiAcceptsAid(state: GameState, helperId: number, vassalId: number): boolean {
+/**
+ * Single source of truth for the AI's aid decision. `verdict` only colours the
+ * wording ("大概率会支持" vs "大概率会拒绝"); `factors` explain which threshold
+ * produced it. No roll, no numbers exposed — the outcome stays deterministic.
+ */
+export function decideAid(state: GameState, vassalId: number, helperId: number): DiplomaticDecision {
     const overlord = overlordOf(state, vassalId);
-    if (overlord < 0 || !living(state, helperId)) return false;
-    if (isAtWar(state, helperId, overlord)) return true;
-    if (commonEnemy(state, helperId, vassalId) !== null) return true;
+    if (overlord < 0 || !living(state, helperId)) return deny("目标已不具备求援资格");
+    const decisive: DecisionFactor[] = [];
+    if (isAtWar(state, helperId, overlord)) decisive.push(plus("正与宗主国交战"));
+    if (commonEnemy(state, helperId, vassalId) !== null) decisive.push(plus("有共同敌人"));
+    if (decisive.length > 0) return { accepts: true, factors: decisive, verdict: "sure" };
     const profile = state.nations[helperId].tendency;
+    const eager = profile === "militarist" || profile === "hegemon" || profile === "bully" ||
+        profile === "opportunist";
+    const open = profile === "ideologue" || profile === "trader";
+    const tendencyFactor: DecisionFactor = eager
+        ? plus("倾向乐于介入他国冲突")
+        : open
+            ? plus("倾向较愿意介入")
+            : minus("倾向不愿介入他国冲突");
+    if (!eager && !open) return { accepts: false, factors: [tendencyFactor], verdict: "refuse" };
+
+    const threshold = eager ? 0.7 : 0.8;
     const ratio = nationPower(state, helperId) / Math.max(1, nationPower(state, overlord));
-    if (profile === "militarist" || profile === "hegemon" || profile === "bully" ||
-        profile === "opportunist") return ratio >= 0.7;
-    if (profile === "ideologue" || profile === "trader") return ratio >= 0.8;
-    return false;
+    const powerFactor: DecisionFactor = ratio >= threshold
+        ? plus("实力强于宗主国")
+        : minus("实力不足以压制宗主国");
+    const accepts = ratio >= threshold;
+    return {
+        accepts,
+        factors: [tendencyFactor, powerFactor],
+        verdict: accepts ? (eager ? "likely" : "maybe") : (eager ? "unlikely" : "refuse"),
+    };
+}
+
+function aiAcceptsAid(state: GameState, helperId: number, vassalId: number): boolean {
+    return decideAid(state, vassalId, helperId).accepts;
 }
 
 function applyAid(core: GameCore, helperId: number, vassalId: number): void {

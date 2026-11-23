@@ -2,8 +2,8 @@ import { Biome } from "../../terrain/biome.ts";
 import type { BiomeMap } from "../../terrain/biome.ts";
 import type { VoronoiGraph } from "../../terrain/voronoi";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
-import { NEUTRAL } from "../types.ts";
-import type { Province } from "../types.ts";
+import { NEUTRAL } from "../types/world.ts";
+import type { Province } from "../types/entities.ts";
 
 const BIOME_INCOME: Readonly<Record<number, number>> = {
     [Biome.PLAINS]: 5,

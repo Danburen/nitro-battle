@@ -1,4 +1,4 @@
-import { MAP_SIZES, NATION_COUNT_MAX } from "../game/types.ts";
+import { MAP_SIZES, NATION_COUNT_MAX } from "../types/settings.ts";
 import { DEFAULT_TERRAIN_PARAMS } from "../terrain/biome.ts";
 import { renderGameText } from "./text.ts";
 import { tooltipAttrs } from "./tooltip.ts";

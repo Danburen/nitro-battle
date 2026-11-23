@@ -1,6 +1,7 @@
 import { activeSupplyCenter, infrastructureLevel, infrastructureSupplyMultiplier, supplySourceRange } from "./economy.ts";
-import { SUPPLY_ATTACK_MIN_FACTOR, SUPPLY_ORG_MIN_FACTOR, SUPPLY_RANGE_CENTER } from "./types.ts";
-import type { GameState, SupplyMap } from "./types.ts";
+import { SUPPLY_ATTACK_MIN_FACTOR, SUPPLY_ORG_MIN_FACTOR, SUPPLY_RANGE_CENTER } from "./types/economy.ts";
+import type { GameState } from "./types/state.ts";
+import type { SupplyMap } from "./types/economy.ts";
 
 // Separate caches prevent short-range sources from suppressing farther, longer-range sources.
 export function computeSupply(state: GameState): SupplyMap {

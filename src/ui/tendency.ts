@@ -1,7 +1,8 @@
 import { tendencyHelpBody, tendencyProfileOf } from "../game/ai/tendencies.ts";
 import type { AITendencyId } from "../game/ai/types.ts";
 import { nationDisplayColor, overlordOf } from "../game/access.ts";
-import type { GameState, Nation } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation } from "../game/types/entities.ts";
 import { helpButton } from "./panel.ts";
 import { chipToken, escapeHtml } from "./text.ts";
 

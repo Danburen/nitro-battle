@@ -1,5 +1,6 @@
-import { NEUTRAL } from "../../game/types.ts";
-import type { BattleOutcome, GameState, LogEntry } from "../../game/types.ts";
+import { NEUTRAL } from "../../game/types/world.ts";
+import type { BattleOutcome, LogEntry } from "../../game/types/log.ts";
+import type { GameState } from "../../game/types/state.ts";
 
 /**
  * Pure report digest. The floating summary only keeps headline events

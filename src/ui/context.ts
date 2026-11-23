@@ -1,5 +1,5 @@
 import type { GameEngine } from "../game/engine.ts";
-import type { BuildingKind } from "../game/types.ts";
+import type { BuildingKind } from "../game/types/building.ts";
 import type { SoundManager } from "../audio/index.ts";
 import type { ConfirmSpec } from "./confirm.ts";
 

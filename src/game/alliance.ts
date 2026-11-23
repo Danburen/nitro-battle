@@ -3,7 +3,10 @@ import { isAtWar, nationPower, setWar } from "./diplomacy.ts";
 import { tendencyProfileOf } from "./ai/tendencies.ts";
 import { isProtectedRelation, overlordOf } from "./access.ts";
 import { createDiplomaticRequest } from "./requests.ts";
-import type { Alliance, GameState } from "./types.ts";
+import { deny, minus, plus } from "./decision.ts";
+import type { Alliance } from "./types/diplomacy.ts";
+import type { DecisionFactor, DiplomaticDecision } from "./types/decision.ts";
+import type { GameState } from "./types/state.ts";
 
 export { inSameAlliance } from "./access.ts";
 
@@ -153,14 +156,25 @@ export function canInviteToAlliance(state: GameState, leader: number, target: nu
     return commonEnemy(state, leader, target) !== null || strategicKin(state, leader, target);
 }
 
-function aiAcceptsAlliance(state: GameState, leader: number, target: number): boolean {
+/** The invited nation's willingness; eligibility itself lives in `canInviteToAlliance`. */
+export function decideAllianceInvite(state: GameState, leader: number, target: number): DiplomaticDecision {
     const alliance = allianceOf(state, leader);
-    if (!alliance || alliance.members.length >= ALLIANCE_MAX_MEMBERS) return false;
-    if (commonEnemy(state, leader, target) !== null) return true;
+    if (!alliance || alliance.members.length >= ALLIANCE_MAX_MEMBERS) return deny("联盟不存在或已满员");
+    const enemy = commonEnemy(state, leader, target);
+    if (enemy !== null) {
+        return { accepts: true, factors: [plus(`共同的敌人：${state.nations[enemy].name}`)], verdict: "sure" };
+    }
     const profile = tendencyProfileOf(state.nations[target].tendency);
-    if (strategicKin(state, leader, target) && profile.alliance >= 3) return true;
-    if (profile.alliance >= 4 && nationPower(state, leader) >= nationPower(state, target) * 0.8) return true;
-    return false;
+    const kin = strategicKin(state, leader, target);
+    const factors: DecisionFactor[] = [minus("没有共同敌人")];
+    factors.push(kin ? plus("战略倾向相近") : minus("战略倾向不相近"));
+    factors.push(profile.alliance >= 3 ? plus("结盟意愿足够") : minus("结盟意愿不足"));
+    const powerOk = profile.alliance >= 4 && nationPower(state, leader) >= nationPower(state, target) * 0.8;
+    if (profile.alliance >= 4) {
+        factors.push(powerOk ? plus("我方实力达到其预期") : minus("我方实力未达到其预期"));
+    }
+    const accepts = (kin && profile.alliance >= 3) || powerOk;
+    return { accepts, factors, verdict: accepts ? "likely" : (profile.alliance >= 4 ? "unlikely" : "refuse") };
 }
 
 /**
@@ -179,7 +193,7 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
         core.emit({ type: "state" });
         return true;
     }
-    if (aiAcceptsAlliance(state, leader, target)) {
+    if (decideAllianceInvite(state, leader, target).accepts) {
         const alliance = allianceOf(state, leader);
         return alliance ? joinAlliance(core, alliance, target) : false;
     }
@@ -189,12 +203,24 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
     return false;
 }
 
-function aiAcceptsJoin(state: GameState, leader: number, applicant: number): boolean {
-    if (commonEnemy(state, leader, applicant) !== null) return true;
+/** The camp leader's willingness to accept an unsolicited join request. */
+export function decideJoinRequest(state: GameState, leader: number, applicant: number): DiplomaticDecision {
+    const enemy = commonEnemy(state, leader, applicant);
+    if (enemy !== null) {
+        return { accepts: true, factors: [plus(`共同的敌人：${state.nations[enemy].name}`)], verdict: "sure" };
+    }
     const leaderProfile = tendencyProfileOf(state.nations[leader].tendency);
-    if (strategicKin(state, leader, applicant) && leaderProfile.alliance >= 3) return true;
-    if (leaderProfile.alliance >= 4 && nationPower(state, applicant) >= nationPower(state, leader) * 0.6) return true;
-    return false;
+    const kin = strategicKin(state, leader, applicant);
+    const factors: DecisionFactor[] = [minus("没有共同敌人")];
+    factors.push(kin ? plus("战略倾向相近") : minus("战略倾向不相近"));
+    factors.push(leaderProfile.alliance >= 3 ? plus("领袖结盟意愿足够") : minus("领袖结盟意愿不足"));
+    const powerOk = leaderProfile.alliance >= 4 &&
+        nationPower(state, applicant) >= nationPower(state, leader) * 0.6;
+    if (leaderProfile.alliance >= 4) {
+        factors.push(powerOk ? plus("申请方实力达到其预期") : minus("申请方实力未达到其预期"));
+    }
+    const accepts = (kin && leaderProfile.alliance >= 3) || powerOk;
+    return { accepts, factors, verdict: accepts ? "likely" : (leaderProfile.alliance >= 4 ? "unlikely" : "refuse") };
 }
 
 /** Player (or AI) asks an existing camp to join; its leader decides immediately. */
@@ -209,7 +235,7 @@ export function requestJoinAlliance(core: GameCore, applicant: number, leader: n
     if (leader === 0) {
         return inviteToAlliance(core, 0, applicant);
     }
-    if (aiAcceptsJoin(state, leader, applicant)) return joinAlliance(core, alliance, applicant);
+    if (decideJoinRequest(state, leader, applicant).accepts) return joinAlliance(core, alliance, applicant);
     setPairCooldown(state, applicant, leader, state.day + ALLIANCE_INVITE_COOLDOWN);
     core.log(`${core.nationChip(leader)} 拒绝 ${core.nationChip(applicant)} 的入盟申请`, "diplo", leader);
     core.emit({ type: "state" });

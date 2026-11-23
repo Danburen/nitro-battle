@@ -1,6 +1,8 @@
 import type { Vec2 } from "../terrain/voronoi/index.ts";
-import type { BuildingKind, GameState } from "../game/types.ts";
-import { BUILDING_PROFILES, NEUTRAL_COLOR } from "../game/types.ts";
+import type { BuildingKind } from "../game/types/building.ts";
+import type { GameState } from "../game/types/state.ts";
+import { BUILDING_PROFILES } from "../game/types/building.ts";
+import { NEUTRAL_COLOR } from "../game/types/world.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { PROVINCE_CAPACITY_MIN_ZOOM } from "./constructionOverlay.ts";
 import type { ConstructionOverlay } from "./constructionOverlay.ts";

@@ -1,4 +1,6 @@
-import type { GameState, ProvinceBuildingKind, StateBuildingKind, UnitKind } from "../types.ts";
+import type { GameState } from "../types/state.ts";
+import type { ProvinceBuildingKind, StateBuildingKind } from "../types/building.ts";
+import type { UnitKind } from "../types/unit.ts";
 
 /**
  * Extension point for computer opponents. The engine runs every non-player

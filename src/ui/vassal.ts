@@ -3,7 +3,8 @@ import {
     VASSAL_HELP_BODY, VASSAL_PROFILES, HIGH_INDEPENDENCE_RATIO, independenceCapOf, independenceOf,
     independenceRatioOf, tributeRateOf,
 } from "../game/vassal.ts";
-import type { GameState, VassalType } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { VassalType } from "../game/types/diplomacy.ts";
 import { chipToken, escapeHtml, iconMaskStyle, textToken } from "./text.ts";
 import { helpButton } from "./panel.ts";
 import { nationFlagHtmlFor } from "./flags.ts";

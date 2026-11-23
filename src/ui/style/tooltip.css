@@ -7,3 +7,11 @@
 .global-tooltip[data-raw-body] .tooltip-body { white-space: normal; }
 .global-tooltip[data-raw-body] .kv { margin: 0; gap: 3px; }
 .global-tooltip[data-raw-body] .kv-row { font-size: calc(11px * var(--site-type, 1)); }
+.global-tooltip[data-raw-body] .tip-reason { display: grid; gap: 6px; }
+.global-tooltip[data-raw-body] .tip-desc { margin: 0; }
+.global-tooltip[data-raw-body] .tip-factors { display: grid; gap: 2px; }
+.global-tooltip[data-raw-body] .tip-factor { display: grid; grid-template-columns: 12px 1fr; gap: 4px; }
+.global-tooltip[data-raw-body] .tip-decision { display: grid; gap: 4px; }
+.global-tooltip[data-raw-body] .tip-decision + .tip-decision { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-muted); }
+.global-tooltip[data-raw-body] .tip-decision-name { font-weight: 600; }
+.global-tooltip[data-raw-body] .tip-verdict { padding-top: 6px; border-top: 1px solid var(--border-muted); font-weight: 600; }

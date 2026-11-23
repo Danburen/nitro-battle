@@ -1,6 +1,8 @@
 import { Biome } from "../terrain/biome.ts";
-import { NEUTRAL, NEUTRAL_COLOR, ORG_MAX } from "../game/types.ts";
-import type { Army, GameState } from "../game/types.ts";
+import { NEUTRAL, NEUTRAL_COLOR } from "../game/types/world.ts";
+import { ORG_MAX } from "../game/types/organization.ts";
+import type { Army } from "../game/types/organization.ts";
+import type { GameState } from "../game/types/state.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { isAtWar } from "../game/diplomacy.ts";
 import type { RelationTone } from "./text.ts";

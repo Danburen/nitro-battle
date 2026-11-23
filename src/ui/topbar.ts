@@ -1,12 +1,14 @@
 import type { GameEngine } from "../game/engine.ts";
 import type { SoundManager } from "../audio/index.ts";
-import type { GameState } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
 import { factoryTotals, resourceBreakdown, resourceRates } from "../game/economy.ts";
 import { DIPLOMATIC_PROFILES } from "../game/diplomacy.ts";
 import { policySwitchUpkeep } from "../game/policy.ts";
 import { vassalsOf } from "../game/access.ts";
 import { VASSAL_HELP_BODY } from "../game/vassal.ts";
-import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, PP_CAP, SEASONS } from "../game/types.ts";
+import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS } from "../game/types/policy.ts";
+import { PP_CAP } from "../game/types/economy.ts";
+import { SEASONS } from "../game/types/world.ts";
 import { nationOverviewBody, nationStats } from "./nation-info.ts";
 import { vassalIndependenceIcon, vassalTypeIcon } from "./vassal.ts";
 import { escapeHtml, renderGameText, setGameText, textToken } from "./text.ts";

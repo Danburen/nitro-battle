@@ -7,8 +7,12 @@ import { factoryTotals } from "../game/economy.ts";
 import { generateWorld } from "../game/generator/index.ts";
 import { makeCity } from "../game/generator/cities.ts";
 import { assignStateTerritories } from "../game/generator/nations.ts";
-import { MAX_HP, NEUTRAL, START_ORG } from "../game/types.ts";
-import type { GameState, MapSizeId, Province, StateRegion } from "../game/types.ts";
+import { MAX_HP } from "../game/types/unit.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import { START_ORG } from "../game/types/organization.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Province, StateRegion } from "../game/types/entities.ts";
+import type { MapSizeId } from "../types/settings.ts";
 
 function connected(sites: readonly number[], neighbors: (site: number) => readonly number[]): boolean {
     if (sites.length === 0) return false;

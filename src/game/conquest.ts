@@ -1,7 +1,7 @@
 import type { GameCore } from "./core.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
-import { BUILD_REFUND } from "./types.ts";
-import type { BattleReport } from "./types.ts";
+import { BUILD_REFUND } from "./types/unit.ts";
+import type { BattleReport } from "./types/log.ts";
 
 export function transferControl(core: GameCore, site: number, nation: number): boolean {
     const state = core.state;

@@ -7,8 +7,9 @@ import {
     cancelClaim, claimState, claimableStateIds, hasStateClaim, isAtWar, makePeace,
     prepareDiplomaticAction, runAIDiplomacy, setWar, startWar, stateSummary, tickDiplomaticUpkeep, truceDays,
 } from "../game/diplomacy.ts";
-import { MAX_HP, REGIMENT_CAP, UnitKind } from "../game/types.ts";
-import type { DiplomaticActionKind, GameState } from "../game/types.ts";
+import { MAX_HP, REGIMENT_CAP, UnitKind } from "../game/types/unit.ts";
+import type { DiplomaticActionKind } from "../game/types/diplomacy.ts";
+import type { GameState } from "../game/types/state.ts";
 
 function engine(seed = 42, mapSize: "small" | "standard" = "small", nationCount = 4): GameEngine {
     const core = GameEngine.create(seed, mapSize, nationCount);

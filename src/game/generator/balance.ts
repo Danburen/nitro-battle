@@ -1,5 +1,6 @@
-import { INFRASTRUCTURE_MAX } from "../types.ts";
-import type { GameState, StateRegion } from "../types.ts";
+import { INFRASTRUCTURE_MAX } from "../types/building.ts";
+import type { GameState } from "../types/state.ts";
+import type { StateRegion } from "../types/entities.ts";
 
 /**
  * Optional starting compensation (`GameSettings.balanceNations`).

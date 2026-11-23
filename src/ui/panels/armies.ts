@@ -1,7 +1,8 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { isArmyAutoManaged } from "../../game/auto.ts";
 import { armyCap, nationDeploymentCount, regimentCountByKind } from "../../game/rules.ts";
-import { ORG_MAX, REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
+import { ORG_MAX } from "../../game/types/organization.ts";
+import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types/unit.ts";
 import { AUTO_GLOBAL_LOCK_TIP, orgClass, orgPct, statusPill } from "../common.ts";
 import { escapeHtml } from "../text.ts";
 import { panelHead, renderPanel } from "../panel.ts";

@@ -1,4 +1,5 @@
-import type { GameState, Nation } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation } from "../game/types/entities.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { escapeHtml } from "./text.ts";
 

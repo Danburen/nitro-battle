@@ -2,7 +2,7 @@ import type { GameEngine } from "../../game/engine.ts";
 import { nationDisplayColor } from "../../game/access.ts";
 import { canTrain } from "../../game/economy.ts";
 import { armyCap, nationArmyCount } from "../../game/rules.ts";
-import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types.ts";
+import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types/unit.ts";
 import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, renderPanel } from "../panel.ts";

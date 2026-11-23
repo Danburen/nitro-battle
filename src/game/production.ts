@@ -2,16 +2,12 @@ import type { GameCore } from "./core.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
 import { canBuild, canBuildProvince, canTrain, constructionAssignments, factoryTotals, infrastructureLevel, REINFORCE_COST } from "./economy.ts";
 import { armyAt, armyCap, isValidDeploySite, nationArmyCount, resolveDeploySite } from "./rules.ts";
-import {
-    BUILD_REFUND,
-    BUILDING_PROFILES,
-    DEPLOY_ORG,
-    DEPLOY_REFUND,
-    MAX_HP,
-    REGIMENT_CAP,
-    UNIT_PROFILES,
-} from "./types.ts";
-import type { Army, BuildingKind, ProvinceBuildingKind, StateBuildingKind, UnitKind } from "./types.ts";
+import { BUILD_REFUND, DEPLOY_REFUND, MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "./types/unit.ts";
+import { BUILDING_PROFILES } from "./types/building.ts";
+import { DEPLOY_ORG } from "./types/organization.ts";
+import type { Army } from "./types/organization.ts";
+import type { BuildingKind, ProvinceBuildingKind, StateBuildingKind } from "./types/building.ts";
+import type { UnitKind } from "./types/unit.ts";
 import { spawnArmy } from "./armies.ts";
 
 // ---- training and deployment ----

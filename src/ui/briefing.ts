@@ -1,6 +1,6 @@
 import type { GameEngine } from "../game/engine.ts";
-import { NEUTRAL } from "../game/types.ts";
-import type { Nation } from "../game/types.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import type { Nation } from "../game/types/entities.ts";
 import { escapeHtml, renderGameText } from "./text.ts";
 import { NationPanel } from "./panels/nation.ts";
 import { nationFlagHtmlFor } from "./flags.ts";

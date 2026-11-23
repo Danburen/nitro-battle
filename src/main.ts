@@ -1,6 +1,8 @@
 import "./style/index.css";
 import { GameEngine } from "./game/engine.ts";
-import type { EngineEvent, GameSettings, GameState, MapSizeId, TerrainTuning } from "./game/types.ts";
+import type { EngineEvent } from "./game/types/events.ts";
+import type { GameState } from "./game/types/state.ts";
+import type { GameSettings, MapSizeId, TerrainTuning } from "./types/settings.ts";
 import { generateWorld, buildWorld } from "./game/generator/index.ts";
 import { DEFAULT_TERRAIN_PARAMS } from "./terrain/biome.ts";
 import { setPlayerNation } from "./game/player.ts";

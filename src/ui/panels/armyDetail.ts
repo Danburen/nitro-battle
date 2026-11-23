@@ -2,7 +2,8 @@ import type { GameEngine } from "../../game/engine.ts";
 import { isArmyAutoManaged } from "../../game/auto.ts";
 import { battleForecast } from "../../game/battle.ts";
 import { armyCap, armyMp, nationArmyCount, redeployTargets, regimentHp } from "../../game/rules.ts";
-import { MAX_HP, ORG_MAX, REGIMENT_CAP, UNIT_PROFILES } from "../../game/types.ts";
+import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "../../game/types/unit.ts";
+import { ORG_MAX } from "../../game/types/organization.ts";
 import { orgClass, orgPct, statusPill } from "../common.ts";
 import { panelHead } from "../panel.ts";
 

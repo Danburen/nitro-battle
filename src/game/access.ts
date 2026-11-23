@@ -1,5 +1,6 @@
-import { NEUTRAL, NEUTRAL_COLOR } from "./types.ts";
-import type { GameState, VassalType } from "./types.ts";
+import { NEUTRAL, NEUTRAL_COLOR } from "./types/world.ts";
+import type { GameState } from "./types/state.ts";
+import type { VassalType } from "./types/diplomacy.ts";
 
 /**
  * Read-only relation queries shared by diplomacy, movement and rendering.

@@ -1,5 +1,6 @@
-import { INFRASTRUCTURE_MAX, NEUTRAL } from "../game/types.ts";
-import type { GameState } from "../game/types.ts";
+import { INFRASTRUCTURE_MAX } from "../game/types/building.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import type { GameState } from "../game/types/state.ts";
 import { ALLIANCE_HELP_BODY, allianceOf } from "../game/alliance.ts";
 import { escapeHtml } from "./text.ts";
 import { helpButton } from "./panel.ts";

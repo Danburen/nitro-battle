@@ -4,7 +4,7 @@ import { autoMergeManagedArmies, isArmyAutoManaged } from "../game/auto.ts";
 import { spawnArmy } from "../game/armies.ts";
 import { GameEngine } from "../game/engine.ts";
 import { generateWorld } from "../game/generator/index.ts";
-import type { GameState } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
 
 function fixture(): GameEngine {
     const engine = new GameEngine(generateWorld({ seed: 7, mapSize: "small", nationCount: 4 }));

@@ -11,8 +11,11 @@ import {
     pathTo,
     redeployTargets,
 } from "./rules.ts";
-import { MAX_HP, REDEPLOY_ORG, REGIMENT_CAP } from "./types.ts";
-import type { Army, GameState, UnitKind } from "./types.ts";
+import { MAX_HP, REGIMENT_CAP } from "./types/unit.ts";
+import { REDEPLOY_ORG } from "./types/organization.ts";
+import type { Army } from "./types/organization.ts";
+import type { GameState } from "./types/state.ts";
+import type { UnitKind } from "./types/unit.ts";
 
 const ARMY_NAMES = ["第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十"];
 

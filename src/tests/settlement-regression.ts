@@ -6,8 +6,12 @@ import { setWar, isAtWar, canClaimState, claimableStateIds } from "../game/diplo
 import { enforceWarGoal, resolveWarOutcomes, settlePeace, warGoalProgress } from "../game/settlement.ts";
 import { spawnArmy } from "../game/armies.ts";
 import { resolveBattles } from "../game/combat.ts";
-import { DEFAULT_POLICIES, NEUTRAL, REGIMENT_CAP, UnitKind } from "../game/types.ts";
-import type { GameState, Nation, Province, StateRegion, War } from "../game/types.ts";
+import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import { REGIMENT_CAP, UnitKind } from "../game/types/unit.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
+import type { War } from "../game/types/diplomacy.ts";
 
 function fixture(owners = [0, 1, 1, NEUTRAL]): GameEngine {
     const provinces: Province[] = [];

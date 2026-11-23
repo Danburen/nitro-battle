@@ -6,9 +6,11 @@ import {
     ANNEX_FLIP_WILL_MAX, VASSAL_PROFILES, canAnnexVassal, setVassal, vassalTuningOf,
 } from "../game/vassal.ts";
 import { spawnArmy } from "../game/armies.ts";
-import { DEFAULT_POLICIES, UnitKind } from "../game/types.ts";
+import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import { UnitKind } from "../game/types/unit.ts";
 import type { AITendencyId } from "../game/ai/types.ts";
-import type { GameState, Nation, Province, StateRegion } from "../game/types.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
 
 /** Four nations on a straight line: 0-1-2-3, three provinces each. */
 function fixture(

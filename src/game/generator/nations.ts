@@ -1,8 +1,12 @@
 import { periodicDistance } from "../../terrain/voronoi/index.ts";
 import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
-import { DEFAULT_POLICIES, NATION_COUNT_MAX, NEUTRAL, START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types.ts";
-import type { Nation, Province, StateRegion, VassalType } from "../types.ts";
+import { DEFAULT_POLICIES } from "../types/policy.ts";
+import { NEUTRAL } from "../types/world.ts";
+import { START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types/economy.ts";
+import { NATION_COUNT_MAX } from "../../types/settings.ts";
+import type { Nation, Province, StateRegion } from "../types/entities.ts";
+import type { VassalType } from "../types/diplomacy.ts";
 import { aiTendencyDeck } from "../ai/tendencies.ts";
 import type { AITendencyId } from "../ai/types.ts";
 import { VASSAL_PROFILES } from "../vassal.ts";

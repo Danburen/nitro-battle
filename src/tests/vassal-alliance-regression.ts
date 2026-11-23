@@ -22,9 +22,12 @@ import {
 } from "../game/diplomacy.ts";
 import { reachable } from "../game/rules.ts";
 import { spawnArmy } from "../game/armies.ts";
-import { DEFAULT_POLICIES, MAX_HP, UnitKind } from "../game/types.ts";
+import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import { MAX_HP, UnitKind } from "../game/types/unit.ts";
 import type { AITendencyId } from "../game/ai/types.ts";
-import type { Army, GameState, Nation, Province, StateRegion } from "../game/types.ts";
+import type { Army } from "../game/types/organization.ts";
+import type { GameState } from "../game/types/state.ts";
+import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
 
 /** Four nations on a straight line: 0-1-2-3, three provinces each. */
 function fixture(

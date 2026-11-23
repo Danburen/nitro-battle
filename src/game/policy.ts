@@ -1,21 +1,7 @@
 import type { GameCore } from "./core.ts";
-import {
-    CONSCRIPTION_POLICIES,
-    ECONOMY_POLICIES,
-    OCCUPATION_POLICIES,
-    POLICY_SWITCH_COST,
-    POLICY_SWITCH_DAYS,
-    POLICY_SWITCH_UPKEEP,
-} from "./types.ts";
-import type {
-    ConscriptionPolicy,
-    EconomyPolicy,
-    Nation,
-    OccupationPolicy,
-    PolicyCategory,
-    PolicyModifiers,
-    PolicyTransition,
-} from "./types.ts";
+import { CONSCRIPTION_POLICIES, ECONOMY_POLICIES, OCCUPATION_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "./types/policy.ts";
+import type { ConscriptionPolicy, EconomyPolicy, OccupationPolicy, PolicyCategory, PolicyModifiers, PolicyTransition } from "./types/policy.ts";
+import type { Nation } from "./types/entities.ts";
 
 type PolicyOption = PolicyModifiers & { readonly name: string; readonly desc: string };
 

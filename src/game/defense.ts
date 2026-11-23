@@ -1,7 +1,7 @@
 import { canBuildProvince } from "./economy.ts";
 import { enqueueProvinceBuild } from "./production.ts";
 import type { GameCore } from "./core.ts";
-import type { GameState } from "./types.ts";
+import type { GameState } from "./types/state.ts";
 
 /**
  * Reaction to a territorial claim. The claimant is recorded as a threat; the

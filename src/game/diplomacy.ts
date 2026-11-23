@@ -6,8 +6,12 @@ import { joinVassalDefense, applyVassalCallToArms } from "./vassal.ts";
 import { claimedStateOwners, fortifyClaimedState } from "./defense.ts";
 import type { GameCore } from "./core.ts";
 import { settlePeace, warGoalProgress, enforceWarGoal } from "./settlement.ts";
-import { MAX_HP, NEUTRAL, UNIT_PROFILES } from "./types.ts";
-import type { DiplomaticAction, DiplomaticActionKind, GameState } from "./types.ts";
+import { minus, plus } from "./decision.ts";
+import { MAX_HP, UNIT_PROFILES } from "./types/unit.ts";
+import { NEUTRAL } from "./types/world.ts";
+import type { DiplomaticAction, DiplomaticActionKind } from "./types/diplomacy.ts";
+import type { DiplomaticDecision } from "./types/decision.ts";
+import type { GameState } from "./types/state.ts";
 
 export const CLAIM_COST = 8;
 export const DIPLOMATIC_PROFILES = {
@@ -360,13 +364,25 @@ export function dropOffers(state: GameState, a: number, b: number): void {
     }
 }
 
-export function aiWantsPeace(state: GameState, aiId: number, otherId: number): boolean {
-    if (!isAtWar(state, aiId, otherId)) return false;
+/** Whether the AI accepts a white peace; the same object feeds the player's tooltip. */
+export function decidePeace(state: GameState, aiId: number, otherId: number): DiplomaticDecision {
+    if (!isAtWar(state, aiId, otherId)) {
+        return { accepts: false, factors: [minus("双方并未交战")], verdict: "refuse" };
+    }
     const tuning = aiTuningOf(state, aiId);
     const duration = warDuration(state, aiId, otherId);
-    if (duration < MIN_PEACE_DAYS) return false;
-    if (duration >= tuning.fatigueDays) return true;
-    return nationPower(state, aiId) < nationPower(state, otherId) * tuning.peacePowerRatio;
+    if (duration < MIN_PEACE_DAYS) {
+        return { accepts: false, factors: [minus("战争尚未持续足够久")], verdict: "refuse" };
+    }
+    if (duration >= tuning.fatigueDays) {
+        return { accepts: true, factors: [plus("战争疲劳已达上限")], verdict: "sure" };
+    }
+    const outmatched = nationPower(state, aiId) < nationPower(state, otherId) * tuning.peacePowerRatio;
+    return {
+        accepts: outmatched,
+        factors: [outmatched ? plus("己方实力已处劣势") : minus("己方实力仍然占优")],
+        verdict: outmatched ? "likely" : "refuse",
+    };
 }
 
 export function aiOffersPlayerPeace(state: GameState, aiId: number): boolean {
@@ -450,7 +466,7 @@ export function makePeace(core: GameCore, a: number, b: number): void {
 export function proposePeace(core: GameCore, targetId: number): boolean {
     const state = core.state;
     if (state.winner !== null || !isAtWar(state, 0, targetId) || !livingNation(state, targetId)) return false;
-    if (aiWantsPeace(state, targetId, 0)) {
+    if (decidePeace(state, targetId, 0).accepts) {
         dropOffers(state, targetId, targetId);
         makePeace(core, 0, targetId);
         return true;
@@ -511,7 +527,9 @@ export function runAIDiplomacy(core: GameCore, nationId: number): void {
     if (state.winner !== null) return;
     for (const other of state.nations) {
         if (other.id === nationId || other.isPlayer || !other.alive || !isAtWar(state, nationId, other.id)) continue;
-        if (aiWantsPeace(state, nationId, other.id) && aiWantsPeace(state, other.id, nationId)) makePeace(core, nationId, other.id);
+        if (decidePeace(state, nationId, other.id).accepts && decidePeace(state, other.id, nationId).accepts) {
+            makePeace(core, nationId, other.id);
+        }
     }
     const player = state.nations[0];
     if (player.alive && isAtWar(state, nationId, player.id)) {

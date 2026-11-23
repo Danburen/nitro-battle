@@ -7,8 +7,10 @@ import {
     isPlayerState, playerProtected, setWar,
 } from "../game/diplomacy.ts";
 import { GameEngine } from "../game/engine.ts";
-import { MAX_HP, NEUTRAL, REGIMENT_CAP, UnitKind } from "../game/types.ts";
-import type { EngineEvent, GameState } from "../game/types.ts";
+import { MAX_HP, REGIMENT_CAP, UnitKind } from "../game/types/unit.ts";
+import { NEUTRAL } from "../game/types/world.ts";
+import type { EngineEvent } from "../game/types/events.ts";
+import type { GameState } from "../game/types/state.ts";
 
 function graphDistance(state: GameState, from: number, targets: Set<number>): number {
     const seen = new Set<number>([from]);

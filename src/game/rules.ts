@@ -2,8 +2,11 @@ import { periodicDistance } from "../terrain/voronoi/index.ts";
 import { hasMilitaryAccess } from "./access.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { infrastructureLevel, infrastructureMoveMultiplier } from "./economy.ts";
-import { NEUTRAL, REGIMENT_CAP, UNIT_PROFILES } from "./types.ts";
-import type { Army, GameState, Regiment, UnitKind } from "./types.ts";
+import { NEUTRAL } from "./types/world.ts";
+import { REGIMENT_CAP, UNIT_PROFILES } from "./types/unit.ts";
+import type { Army, Regiment } from "./types/organization.ts";
+import type { GameState } from "./types/state.ts";
+import type { UnitKind } from "./types/unit.ts";
 
 export interface ReachResult {
     /** province -> accumulated movement cost */
