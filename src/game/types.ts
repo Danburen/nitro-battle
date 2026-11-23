@@ -214,7 +214,7 @@ export const CONSCRIPTION_POLICIES: Readonly<Record<ConscriptionPolicy, { name: 
 export const OCCUPATION_POLICIES: Readonly<Record<OccupationPolicy, { name: string; desc: string } & PolicyModifiers>> = {
     lenient: { name: "宽容", desc: "[[occupation]]增长 +50%，占领省税收 [[funds:-20%]]", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1.5, occupiedIncomeMult: 0.8, ppModifier: 0 },
     balanced: { name: "均衡", desc: "无修正", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    harsh: { name: "严苛", desc: "占领省税收 [[funds:+30%]]，[[occupation]]增长 -50%，[[politics:-1]]/天", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 0.5, occupiedIncomeMult: 1.3, ppModifier: -1 },
+    harsh: { name: "严苛", desc: "占领省税收 [[funds:+30%]]，[[occupation]]增长 -50%，[[politics:-1]]/[[turn]]", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 0.5, occupiedIncomeMult: 1.3, ppModifier: -1 },
 };
 
 export const DEFAULT_POLICIES: Policies = { economy: "balanced", conscription: "volunteer", occupation: "balanced" };
@@ -228,8 +228,6 @@ export interface Nation {
     readonly isPlayer: boolean;
     /** Fixed per-nation AI temperament; omitted by hand-built test fixtures, defaults at read time. */
     readonly tendency?: AITendencyId;
-    /** Seeded 1–5 vassal temperament, generated with the nation; omitted fixtures fall back to the tendency baseline. */
-    readonly subservience?: number;
     capital: number;
     funds: number;
     manpower: number;
@@ -242,14 +240,12 @@ export interface Nation {
     /** Overlord nation id; -1 or omitted when independent. */
     overlord?: number;
     vassalType?: VassalType;
-    /** 0–100. Petitions end at 100; oppressive vassals rebel at 100. */
+    /** Current independence, clamped to the contract's cap (100 / 300 / 500). */
     independence?: number;
     /** Resource share paid to the overlord; only cooperative vassals may adjust it. */
     tributeRate?: number;
-    /** Day of the last foreign-aid request (oppressive vassals only). */
+    /** Day of the last foreign-aid request; gates `VASSAL_AID_COOLDOWN`. */
     lastAidDay?: number;
-    /** Day of the last independence petition; gates `VASSAL_PETITION_COOLDOWN`. */
-    lastPetitionDay?: number;
 }
 
 export interface Province {
@@ -295,6 +291,8 @@ export interface Army {
     acted: boolean;
     /** Multi-day march order; attack=true means assault the target on arrival. */
     march: { target: number; attack: boolean } | null;
+    /** Player corps handed to the AI; only meaningful while `GameState.autoManageArmies` is on. */
+    autoManaged?: boolean;
 }
 
 /** A persistent battle: one attacking army vs a province's defense, round per day. */
@@ -413,7 +411,7 @@ export interface BattleReport {
     readonly outcome: BattleOutcome;
 }
 
-export type LogEventKind = "capture" | "battle-round" | "production" | "season" | "war" | "peace" | "annex" | "global";
+export type LogEventKind = "capture" | "battle-round" | "production" | "season" | "war" | "peace" | "annex" | "global" | "claim";
 
 export interface LogItemCount {
     readonly label: string;
@@ -532,6 +530,8 @@ export interface GameState {
     seasonIndex: number;
     selected: number | null;
     selectedArmyId: number | null;
+    /** Master switch for player army trusteeship; per-corps overrides live on `Army.autoManaged`. */
+    autoManageArmies?: boolean;
     /** Army awaiting a strategic redeployment destination, if any. */
     redeployArmyId: number | null;
     /** Symmetric war matrix; every pair starts at peace. */
@@ -586,6 +586,7 @@ export type EngineEvent =
     | { type: "deploy"; province: number; armyId: number; nationId: number; kind: UnitKind }
     | { type: "build"; province: number; kind: BuildingKind; nationId: number }
     | { type: "war"; aggressor: number; defender: number }
+    | { type: "claim-warning"; nation: number; stateId: number; stateName: string }
     | { type: "peace"; a: number; b: number }
     | { type: "relations" }
     | { type: "day"; day: number; seasonIndex: number }

@@ -3,7 +3,7 @@ import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { DEFAULT_POLICIES, NATION_COUNT_MAX, NEUTRAL, START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types.ts";
 import type { Nation, Province, StateRegion, VassalType } from "../types.ts";
-import { aiTendencyDeck, subservienceFor, tendencyProfileOf } from "../ai/tendencies.ts";
+import { aiTendencyDeck } from "../ai/tendencies.ts";
 import type { AITendencyId } from "../ai/types.ts";
 import { VASSAL_PROFILES } from "../vassal.ts";
 import { makeCity } from "./cities.ts";
@@ -402,14 +402,12 @@ function seedWorldVassals(
         makeCity(provinces[center], true);
         const id = nations.length;
         const tendency = tendencies[id % tendencies.length] ?? "opportunist";
-        const profile = tendencyProfileOf(tendency);
         const nation: Nation = {
             id,
             name: names.nationName(),
             color: newNationColor(rand, nations.map((entry) => entry.color)),
             isPlayer: false,
             tendency,
-            subservience: subservienceFor(profile, rand),
             capital: center,
             funds: START_FUNDS,
             manpower: START_MANPOWER,
@@ -487,14 +485,12 @@ export function generateNations(
         const capital = states[id].center;
         makeCity(provinces[capital], true);
         const tendency = tendencies[nation % tendencies.length];
-        const profile = tendencyProfileOf(tendency);
         return {
             id: nation,
             name: names.nationName(),
             color: colors[nation],
             isPlayer: nation === 0,
             tendency,
-            subservience: subservienceFor(profile, rand),
             capital,
             funds: START_FUNDS,
             manpower: START_MANPOWER,

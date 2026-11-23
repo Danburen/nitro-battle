@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Camera } from "../render/camera.ts";
+import { Camera } from "../render/index.ts";
 
 const near = (actual: number, expected: number, epsilon = 1e-9): void => {
     assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} != ${expected}`);

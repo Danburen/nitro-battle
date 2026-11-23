@@ -1,5 +1,6 @@
 import type { GameEngine } from "../game/engine.ts";
 import { DEFAULT_HINT } from "./layout.ts";
+import { renderGameText } from "./text.ts";
 
 const COMMAND_HINT = "点击军团徽标切换部队 · 点击脚下地块查看地区 · 蓝色地块移动／红色地块进攻 · Esc / 右键取消";
 
@@ -19,7 +20,7 @@ export function renderModeBar(engine: GameEngine, modeBar: HTMLElement, hintEl: 
     modeBar.innerHTML = `
         <div class="mode-text">
             <b>${army?.name ?? "军团"} 战略转移</b>
-            <span>点击绿色省份完成转移 · 组织度降至 20 · 本回合结束</span>
+            <span>点击绿色省份完成转移 · 组织度降至 20 · 本${renderGameText("[[turn]]")}结束</span>
         </div>
         <div class="mode-actions">
             <button class="btn btn-sm" data-action="redeploy-cancel">取消 <kbd>Esc</kbd></button>

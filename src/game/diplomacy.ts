@@ -3,6 +3,7 @@ import type { AITuning } from "./ai/types.ts";
 import { isProtectedRelation, overlordOf } from "./access.ts";
 import { applyAllianceWar } from "./alliance.ts";
 import { joinVassalDefense, applyVassalCallToArms } from "./vassal.ts";
+import { claimedStateOwners, fortifyClaimedState } from "./defense.ts";
 import type { GameCore } from "./core.ts";
 import { settlePeace, warGoalProgress, enforceWarGoal } from "./settlement.ts";
 import { MAX_HP, NEUTRAL, UNIT_PROFILES } from "./types.ts";
@@ -15,6 +16,8 @@ export const DIPLOMATIC_PROFILES = {
 } as const satisfies Record<DiplomaticActionKind, { label: string; cost: number; days: number; validDays: number; upkeep: number }>;
 
 export const TRUCE_DAYS = 10;
+/** Opening grace period: AI nations do not expand against the human player before this day. */
+export const PLAYER_PROTECTION_DAYS = 30;
 const MIN_PEACE_DAYS = 2;
 const OFFER_COOLDOWN_DAYS = 5;
 const WAR_MIN_DAY = 5;
@@ -46,6 +49,21 @@ function adjacentState(state: GameState, nation: number, stateId: number): boole
 export function hasStateClaim(state: GameState, nation: number, stateId: number): boolean {
     if (!Number.isInteger(nation) || nation < 0 || !state.nations[nation] || !validState(state, stateId)) return false;
     return state.claims.some((claim) => claim.nation === nation && claim.stateId === stateId);
+}
+
+/** True while the opening grace period shields the player from AI expansion. */
+export function playerProtected(state: GameState): boolean {
+    return state.day < PLAYER_PROTECTION_DAYS;
+}
+
+/** A state counts as the player's when it still holds player land or a player core. */
+export function isPlayerState(state: GameState, stateId: number): boolean {
+    const region = state.states[stateId];
+    if (!region) return false;
+    return region.provinces.some((site) => {
+        const province = state.provinces[site];
+        return province.owner === 0 || province.legalOwner === 0 || province.coreNation === 0;
+    });
 }
 
 export function canClaimState(state: GameState, nation: number, stateId: number): boolean {
@@ -98,7 +116,25 @@ export function claimState(core: GameCore, nation: number, stateId: number): boo
     if (!canClaimState(state, nation, stateId)) return false;
     state.nations[nation].politicalPower -= CLAIM_COST;
     state.claims.push({ nation, stateId });
-    core.log(`${core.nationChip(nation)} 宣称 ${state.states[stateId].name}`, "diplo", nation);
+    const name = state.states[stateId].name;
+    core.log(`${core.nationChip(nation)} 宣称 ${name}`, "diplo", nation);
+    // Every nation with a legal/core stake receives a report. The player's is a
+    // prominent warning; AI owners quietly harden the threatened state.
+    const owners = new Set(claimedStateOwners(state, stateId, nation));
+    if (nation !== 0 && isPlayerState(state, stateId)) owners.add(0);
+    for (const owner of owners) {
+        if (owner === 0) {
+            core.log(`${core.nationChip(nation)} 宣称我国领土 ${name}！`, "diplo", 0, true, {
+                kind: "claim", nation, stateName: name,
+            });
+            core.emit({ type: "claim-warning", nation, stateId, stateName: name });
+        } else {
+            core.log(`${core.nationChip(nation)} 宣称 ${core.nationName(owner)} 的领土 ${name}！`, "diplo", owner, false, {
+                kind: "claim", nation, stateName: name,
+            });
+            fortifyClaimedState(core, owner, stateId);
+        }
+    }
     core.emit({ type: "state" });
     return true;
 }
@@ -352,6 +388,7 @@ export function aiWarTarget(state: GameState, aiId: number): number | null {
     let best: number | null = null;
     let bestPower = Infinity;
     for (const otherId of borderingNations(state, aiId)) {
+        if (otherId === 0 && playerProtected(state)) continue; // opening grace period shields the player
         if (!peacefulTarget(state, aiId, otherId) || !state.provinces.some((p) => p.legalOwner === otherId)) continue;
         const power = nationPower(state, otherId);
         if (power < bestPower) {
@@ -372,20 +409,31 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
     state.diplomaticActions.splice(state.diplomaticActions.indexOf(action), 1);
     state.wars.push({ aggressor, defender, goal: action.kind, stateId: action.stateId, targetSites, startedDay: state.day });
     setWar(state, aggressor, defender, true);
-    joinVassalDefense(core, aggressor, defender);
     const protector = overlordOf(state, defender);
-    if (protector >= 0) applyAllianceWar(core, aggressor, protector);
-    applyAllianceWar(core, aggressor, defender);
+    // Attacking a vassal forces its overlord into the defensive war; allies and
+    // called vassals join on both sides. Collect them all for one log headline.
+    const participants = new Set<number>();
+    const defenderProtector = joinVassalDefense(core, aggressor, defender, true);
+    if (defenderProtector >= 0) participants.add(defenderProtector);
+    if (protector >= 0) for (const id of applyAllianceWar(core, aggressor, protector, true)) participants.add(id);
+    for (const id of applyAllianceWar(core, aggressor, defender, true)) participants.add(id);
     // A war summons both sides' vassals: the defender's protector answers first,
     // then each overlord calls its own dependants.
-    if (protector >= 0) applyVassalCallToArms(core, protector, aggressor);
-    applyVassalCallToArms(core, aggressor, defender);
+    if (protector >= 0) for (const id of applyVassalCallToArms(core, protector, aggressor, true)) participants.add(id);
+    for (const id of applyVassalCallToArms(core, aggressor, defender, true)) participants.add(id);
+    participants.delete(aggressor);
+    participants.delete(defender);
     // Existing peacetime orders must not pin armies to an obsolete front.
     for (const army of state.armies.values()) {
         if (army.nation === aggressor || army.nation === defender) army.march = null;
     }
     core.invalidateReach();
-    core.log(`${core.nationChip(aggressor)} 宣战 ${core.nationChip(defender)}（${DIPLOMATIC_PROFILES[action.kind].label}）`, "diplo", aggressor, true, {
+    const joined = [...participants];
+    const named = joined.slice(0, 3).map((id) => core.nationChip(id)).join("、");
+    const suffix = joined.length === 0 ? ""
+        : joined.length > 3 ? `，${named} 等 ${joined.length} 个国家也参与战争`
+            : `，${named} 也参与战争`;
+    core.log(`${core.nationChip(aggressor)} 对 ${core.nationChip(defender)} 宣战（${DIPLOMATIC_PROFILES[action.kind].label}）${suffix}`, "diplo", aggressor, true, {
         kind: "war",
         nation: aggressor,
     });
@@ -440,6 +488,7 @@ function prepareAIExpansion(core: GameCore, nationId: number): void {
         region.provinces.some((site) => state.provinces[site].legalOwner === target))
         .sort((a, b) => Number(hasStateClaim(state, nationId, b.id)) - Number(hasStateClaim(state, nationId, a.id)) || a.id - b.id);
     for (const region of regions) {
+        if (playerProtected(state) && isPlayerState(state, region.id)) continue;
         if (!hasStateClaim(state, nationId, region.id) && !claimState(core, nationId, region.id)) continue;
         if (prepareDiplomaticAction(core, nationId, "conquest", target, region.id)) return;
         // Save up for this existing claim instead of spending PP on every adjacent state.
@@ -477,6 +526,7 @@ export function runAIDiplomacy(core: GameCore, nationId: number): void {
     const tuning = aiTuningOf(state, nationId);
     if (state.day >= Math.max(WAR_MIN_DAY, tuning.warMinDay)) {
         const action = state.diplomaticActions.find((candidate) => candidate.nation === nationId &&
+            !(playerProtected(state) && candidate.target === 0) &&
             canDeclareWar(state, nationId, candidate.target, candidate.id) &&
             nationPower(state, nationId) >= nationPower(state, candidate.target) * tuning.warPowerRatio);
         if (action && startWar(core, nationId, action.target, action.id)) return;

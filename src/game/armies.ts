@@ -39,6 +39,7 @@ export function spawnArmy(state: GameState, nation: number, province: number, ki
         moved: false,
         acted: false,
         march: null,
+        autoManaged: state.autoManageArmies === true,
     };
     state.armies.set(army.id, army);
     state.armyAt[province] = army.id;
@@ -186,8 +187,17 @@ export function disbandArmy(core: GameCore, armyId: number): boolean {
     return true;
 }
 
-/** Detach checked regiments into a fresh army in an adjacent empty own province. */
-export function splitArmy(core: GameCore, armyId: number, regimentIds: readonly number[]): number | null {
+/**
+ * Detach checked regiments into a fresh army in an adjacent empty own province.
+ * An explicit `targetSite` (used by the trusteeship border fill) forces a
+ * specific adjacent province rather than the first free neighbour.
+ */
+export function splitArmy(
+    core: GameCore,
+    armyId: number,
+    regimentIds: readonly number[],
+    targetSite?: number | null,
+): number | null {
     const state = core.state;
     const army = state.armies.get(armyId);
     if (!army || army.nation !== 0 || state.winner !== null) return null;
@@ -197,15 +207,21 @@ export function splitArmy(core: GameCore, armyId: number, regimentIds: readonly 
     if (moving.length === 0 || moving.length === army.regiments.length) return null;
     if (nationArmyCount(state, 0) >= armyCap(state, 0)) return null;
 
+    const openSite = (site: number): boolean =>
+        state.terrain.passable[site] && state.provinces[site].owner === 0 &&
+        !armyAt(state, site) && !core.battleAt(site);
     let site: number | null = null;
-    for (const edge of state.graph.adjacency[army.province]) {
-        const next = edge.site;
-        if (!state.terrain.passable[next]) continue;
-        if (state.provinces[next].owner !== 0) continue;
-        if (armyAt(state, next)) continue;
-        if (core.battleAt(next)) continue;
-        site = next;
-        break;
+    if (targetSite !== undefined && targetSite !== null) {
+        if (!state.graph.adjacency[army.province].some((edge) => edge.site === targetSite) ||
+            !openSite(targetSite)) return null;
+        site = targetSite;
+    } else {
+        for (const edge of state.graph.adjacency[army.province]) {
+            if (openSite(edge.site)) {
+                site = edge.site;
+                break;
+            }
+        }
     }
     if (site === null) return null;
 
@@ -221,6 +237,7 @@ export function splitArmy(core: GameCore, armyId: number, regimentIds: readonly 
         moved: true,
         acted: true,
         march: null,
+        autoManaged: state.autoManageArmies === true && army.autoManaged !== false,
     };
     state.armies.set(fresh.id, fresh);
     state.armyAt[site] = fresh.id;

@@ -9,7 +9,6 @@ export {
     tendencyTraits,
     tendencyTuning,
     tendencyTuningOf,
-    subservienceFor,
     vassalTuning,
 } from "./tendencies.ts";
 export type { AITrait, AITraitTone } from "./tendencies.ts";

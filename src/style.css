@@ -278,23 +278,155 @@ button {
 
 .brief-start-hint b {
     color: var(--site-accent);
+    /* Flag + name share one horizontal centreline inside the selection chip. */
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
 }
 
-.brand {
+.top-country {
     display: flex;
     align-items: center;
-    gap: calc(8px * var(--site-space, 1));
+    gap: calc(6px * var(--site-space, 1));
     min-width: 0;
-}
-
-.brand-mark {
     flex: none;
 }
 
-.brand-name {
-    font-size: calc(15px * var(--site-type, 1));
+.top-country-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 190px;
+    padding: 2px 6px;
+    border-radius: var(--site-radius);
+    color: var(--site-fg);
+    cursor: default;
+    outline: none;
+}
+
+.top-country-name:focus-visible {
+    box-shadow: 0 0 0 1px var(--site-accent);
+}
+
+.top-country-flag {
+    display: inline-flex;
+    flex: none;
+    line-height: 0;
+}
+
+.top-country-label {
+    font-size: calc(14px * var(--site-type, 1));
     font-weight: 600;
-    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.top-vassals {
+    position: relative;
+    flex: none;
+}
+
+.top-vassals.hidden { display: none; }
+
+.top-vassals-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border: 1px solid var(--site-border);
+    border-radius: 999px;
+    background: var(--site-bg);
+    color: var(--site-muted);
+    font-size: calc(11px * var(--site-type, 1));
+    white-space: nowrap;
+}
+
+.top-vassals-trigger:hover,
+.top-vassals.open .top-vassals-trigger {
+    color: var(--site-fg);
+    border-color: var(--site-accent);
+}
+
+.top-vassals-caret {
+    font-size: 9px;
+    transition: transform .15s ease;
+}
+
+.top-vassals.open .top-vassals-caret {
+    transform: rotate(180deg);
+}
+
+.top-vassals-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 120;
+    width: 300px;
+    max-width: calc(100vw - 24px);
+    padding: 10px;
+    border: 1px solid var(--site-border);
+    border-radius: var(--site-radius);
+    background: color-mix(in srgb, var(--site-surface) 98%, black);
+    box-shadow: 0 8px 30px #0009;
+}
+
+.top-vassals-menu.hidden { display: none; }
+
+.top-vassals-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: calc(11px * var(--site-type, 1));
+}
+
+.top-vassals-type { color: var(--site-muted); }
+
+.top-vassals-note {
+    margin: 6px 0 8px;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.6;
+}
+
+.top-vassals-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px;
+    border: 1px solid var(--border-muted);
+    border-radius: calc(var(--site-radius) - 2px);
+    background: var(--site-bg);
+    color: var(--site-fg);
+    text-align: left;
+    font-size: calc(11px * var(--site-type, 1));
+}
+
+.top-vassals-row + .top-vassals-row { margin-top: 4px; }
+
+.top-vassals-row:hover {
+    border-color: var(--site-accent);
+    background: color-mix(in srgb, var(--site-accent) 8%, var(--site-bg));
+}
+
+.top-vassals-label {
+    color: var(--site-fg);
+    font-weight: 600;
+}
+
+.top-vassals-row-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.top-vassals-row-ind {
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
     white-space: nowrap;
 }
 
@@ -491,6 +623,12 @@ button {
 }
 
 .game-shell.briefing-mode .hint {
+    display: none;
+}
+
+/* Focus/edit mode (construction & claims authoring): hide the combat HUD. */
+.hud.focus-mode .hud-feed,
+.hud.focus-mode .hud-tr {
     display: none;
 }
 
@@ -1477,13 +1615,15 @@ kbd {
     overflow-wrap: anywhere;
 }
 
-.diplo-vassal-row span {
+.diplo-vassal-row .diplo-vassal-name {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .diplo-vassal-row .btn,
-.diplo-vassal-section .btn,
 .diplo-alliance-section .btn,
 .diplo-alliance > .btn {
     flex: none;
@@ -1491,26 +1631,137 @@ kbd {
     font-size: calc(10px * var(--site-type, 1));
 }
 
-.diplo-vassal-section,
+/* Overlord vassal list: compact rows with a 查看附庸 button; collapse caret at the end. */
+.diplo-vassal-caret {
+    flex: none;
+    width: 18px;
+    margin-left: auto;
+    padding: 1px 4px;
+    border: 1px solid transparent;
+    border-radius: calc(var(--site-radius) - 2px);
+    background: transparent;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.4;
+    text-align: center;
+    cursor: pointer;
+}
+
+.diplo-vassal-caret:hover {
+    border-color: var(--border-muted);
+    background: var(--site-surface);
+    color: var(--site-fg);
+}
+
+.diplo-vassal-list.hidden {
+    display: none;
+}
+
 .diplo-alliance-section {
     margin-top: 6px;
 }
 
-.independence-meter {
-    display: block;
-    height: 6px;
-    margin-top: 5px;
-    border-radius: 999px;
-    background: var(--site-surface);
-    border: 1px solid var(--border-muted);
-    overflow: hidden;
+/* Compact vassal status: overlord + two icons; details live in their hovers. */
+.vassal-row > dd {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
 }
 
-.independence-meter i {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, var(--yellow), var(--green-fg));
+.vassal-head {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.vassal-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--border-muted);
+    border-radius: 999px;
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.4;
+    cursor: help;
+}
+
+.vassal-type--cooperative {
+    color: var(--green-fg);
+    border-color: color-mix(in srgb, var(--green) 50%, var(--border-muted));
+}
+
+.vassal-type--autonomous {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 50%, var(--border-muted));
+}
+
+.vassal-type--oppressive {
+    color: #f85149;
+    border-color: color-mix(in srgb, #f85149 55%, var(--border-muted));
+}
+
+.vassal-type-icon {
+    width: 12px;
+    height: 12px;
+    flex: none;
+}
+
+/* Bare contract icon: no pill, just the tinted silhouette. */
+.vassal-type-mark {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    cursor: help;
+}
+
+.vassal-type-mark svg {
+    width: 15px;
+    height: 15px;
+}
+
+.vassal-type-mark--cooperative {
+    color: var(--green-fg);
+}
+
+.vassal-type-mark--autonomous {
+    color: var(--yellow);
+}
+
+.vassal-type-mark--oppressive {
+    color: #f85149;
+}
+
+.vassal-independence-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    color: #f0883e;
+    font-size: calc(10px * var(--site-type, 1));
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+}
+
+.vassal-independence-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.vassal-independence-icon b {
+    font-weight: 600;
+}
+
+.vassal-independence-icon--high {
+    color: #f85149;
+}
+
+.vassal-tribute-label {
+    flex: none;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
 }
 
 .diplo-submenu {
@@ -3674,11 +3925,14 @@ select:focus {
 .global-tooltip[hidden] { display: none; }
 .global-tooltip strong { display: block; font-size: calc(13px * var(--site-type, 1)); font-weight: 600; }
 .global-tooltip strong:empty { display: none; }
-.global-tooltip p { margin: 8px 0 0; color: var(--site-muted); font-size: calc(11px * var(--site-type, 1)); line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
-.global-tooltip strong:empty + p { margin-top: 0; }
+.global-tooltip .tooltip-body { margin: 8px 0 0; color: var(--site-muted); font-size: calc(11px * var(--site-type, 1)); line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.global-tooltip strong:empty + .tooltip-body { margin-top: 0; }
+.global-tooltip[data-raw-body] .tooltip-body { white-space: normal; }
+.global-tooltip[data-raw-body] .kv { margin: 0; gap: 3px; }
+.global-tooltip[data-raw-body] .kv-row { font-size: calc(11px * var(--site-type, 1)); }
 @media (max-width: 1250px) {
     .top-bar { gap: 6px; }
-    .top-bar .brand-name { display: none; }
+    .top-bar .top-country-label { max-width: 104px; }
     .factory-allocation { flex-basis: 162px; }
 }
 @media (max-width: 820px) {
@@ -3885,8 +4139,12 @@ select:focus {
 }
 
 .army-line .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     flex: none;
-    max-width: 110px;
+    max-width: 150px;
+    padding: 0 5px 0 7px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3924,6 +4182,123 @@ select:focus {
 
 .merge-bar span {
     flex: 1;
+}
+
+/* ---- Army trusteeship (托管): bare cog icons, green when active, greyed lock ---- */
+
+/* Both cogs are plain clickable icons - no box, border or fill of their own. */
+.auto-manage-gear,
+.army-auto-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 17px;
+    height: 17px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #6e7681;
+    line-height: 0;
+    cursor: pointer;
+    transition: color 0.12s ease;
+}
+
+.army-auto-gear {
+    width: 15px;
+    height: 15px;
+}
+
+.auto-manage-gear:hover,
+.auto-manage-gear:focus-visible,
+.army-auto-gear:hover,
+.army-auto-gear:focus-visible {
+    color: var(--site-fg);
+    outline: none;
+}
+
+/* Active = green cog, shared by the global switch and per-corps gears. */
+.auto-manage-gear.on,
+.army-auto-gear.on {
+    color: #3fb950;
+}
+
+.gear-glyph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: 50% 50%;
+}
+
+.auto-manage-gear.on .gear-glyph,
+.army-auto-gear.on .gear-glyph {
+    animation: auto-gear-spin 3s linear infinite;
+}
+
+@keyframes auto-gear-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auto-manage-gear.on .gear-glyph,
+    .army-auto-gear.on .gear-glyph { animation: none; }
+}
+
+.army-row-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.army-row-wrap > .army-row {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Greyed + unusable while managed: the status pill AND its cog stay legible, only
+   the surrounding row content fades. Master greys the body; partial only the row. */
+.army-body.auto-locked .army-line > :not(.status-pill):not(.army-auto-gear),
+.army-body.auto-locked .army-kinds,
+.army-body.auto-locked .merge-bar,
+.army-body.auto-locked .micro-hint,
+.army-row.auto-locked .army-line > :not(.status-pill):not(.army-auto-gear),
+.army-row.auto-locked .army-kinds {
+    opacity: 0.5;
+    filter: grayscale(1);
+}
+
+.army-body.auto-locked .army-row-btn,
+.army-row.auto-locked {
+    cursor: not-allowed;
+}
+
+/* "托管" pill in the army detail header. */
+.status-pill.auto {
+    background: #2ea043;
+}
+
+.auto-manage-note {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, #d29922 45%, var(--border-muted));
+    border-radius: var(--site-radius);
+    background: color-mix(in srgb, #d29922 8%, var(--site-bg));
+}
+
+.auto-manage-note b {
+    color: #d29922;
+}
+
+.auto-manage-note span {
+    color: var(--site-muted);
+    font-size: calc(11px * var(--site-type, 1));
+    line-height: 1.6;
+}
+
+.auto-manage-note .btn {
+    align-self: flex-start;
 }
 
 .detail-close {
@@ -4404,6 +4779,52 @@ select:focus {
     line-height: 1.7;
     color: var(--site-muted);
     white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.confirm-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.confirm-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.confirm-choice:hover {
+    border-color: #7e7057;
+    background: #ffffff0a;
+}
+
+.confirm-choice input {
+    margin: 3px 0 0;
+    accent-color: #c6ad7c;
+}
+
+.confirm-choice-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.confirm-choice-label {
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-fg);
+}
+
+.confirm-choice-hint {
+    margin-top: 2px;
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.5;
+    color: var(--site-muted);
     overflow-wrap: anywhere;
 }
 

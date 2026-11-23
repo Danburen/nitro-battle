@@ -3,7 +3,7 @@ import { checkVictory, transferControl } from "./conquest.ts";
 import { advanceDiplomacy, dropOffers, isAtWar, setWar } from "./diplomacy.ts";
 import { hasMilitaryAccess, overlordOf, vassalsOf } from "./access.ts";
 import { tendencyProfileOf } from "./ai/tendencies.ts";
-import { setVassal, VASSAL_PROFILES } from "./vassal.ts";
+import { canAnnexVassal, setVassal, VASSAL_PROFILES } from "./vassal.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
 import { isHostileProvince } from "./rules.ts";
 import { clampResources, resourceRates } from "./economy.ts";
@@ -232,6 +232,44 @@ export function enforceWarGoal(
         nation,
     });
     finishTreaty(core, owners, capitals, nation, target);
+    return true;
+}
+
+/**
+ * Overlord absorbs a docile vassal without a war: its land and armies join the
+ * overlord, then the normal treaty cleanup retires the now-landless nation.
+ */
+export function annexVassal(core: GameCore, overlordId: number, vassalId: number): boolean {
+    const state = core.state;
+    if (!canAnnexVassal(state, vassalId, overlordId)) return false;
+    const owners = state.provinces.map((province) => province.owner);
+    const capitals = state.provinces.map((province) => province.isCapital);
+
+    // Reassign armies before retiring the vassal so they survive as overlord armies.
+    for (const army of state.armies.values()) {
+        if (army.nation !== vassalId) continue;
+        army.nation = overlordId;
+        army.march = null;
+    }
+    for (const province of state.provinces) {
+        if (province.legalOwner !== vassalId) continue;
+        province.legalOwner = overlordId;
+        transferControl(core, province.site, overlordId);
+    }
+    const vassal = state.nations[vassalId];
+    vassal.overlord = -1;
+    vassal.vassalType = undefined;
+    vassal.independence = undefined;
+    vassal.tributeRate = undefined;
+    for (let i = state.diplomaticRequests.length - 1; i >= 0; i--) {
+        const request = state.diplomaticRequests[i];
+        if (request.from === vassalId || request.to === vassalId) state.diplomaticRequests.splice(i, 1);
+    }
+    core.log(`${core.nationChip(overlordId)} 吞并附庸 ${core.nationChip(vassalId)}，其军团编入宗主国`, "diplo", overlordId, true, {
+        kind: "annex",
+        nation: overlordId,
+    });
+    finishTreaty(core, owners, capitals, overlordId, vassalId);
     return true;
 }
 

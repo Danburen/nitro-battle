@@ -1,4 +1,4 @@
-type TextFormat = "html" | "plain";
+type TextFormat = "html" | "plain" | "raw";
 
 interface TextTerm {
     readonly label: string;
@@ -30,7 +30,6 @@ export const TEXT_TERMS = {
     idle: { label: "闲置", tone: "construction" },
     garrison: { label: "驻军", tone: "keyword" },
     turn: { label: "回合", tone: "keyword", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/>' },
-    days: { label: "天", tone: "keyword", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/>' },
     friendly: { label: "友方", tone: "friendly" },
     neutral: { label: "中立", tone: "neutral" },
     hostile: { label: "敌方", tone: "hostile" },
@@ -108,6 +107,9 @@ function renderToken(body: string, format: TextFormat): string | null {
 }
 
 export function renderGameText(source: string, format: TextFormat = "html"): string {
+    // "raw" is for trusted markup that already contains its own attributes and
+    // game-text tokens in values (e.g. a tooltip body); pass it through untouched.
+    if (format === "raw") return source;
     const output: string[] = [];
     const literal = (value: string): void => {
         if (format !== "html") { output.push(value); return; }

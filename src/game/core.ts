@@ -15,6 +15,8 @@ const LOG_CAP = 240;
 export class GameCore {
     readonly state: GameState;
     readonly controllers: AIController[];
+    /** Reused for player army trusteeship so its seeded dice advance across turns. */
+    readonly playerAuto: StandardAI;
     readonly rand: LCGRandom;
     private readonly listeners = new Set<Listener>();
     private reachCache: ReachResult | null = null;
@@ -26,6 +28,7 @@ export class GameCore {
         this.controllers = state.nations
             .filter((nation) => !nation.isPlayer)
             .map((nation) => new StandardAI(nation.id, state.settings.seed));
+        this.playerAuto = new StandardAI(0, state.settings.seed);
     }
 
     subscribe(listener: Listener): () => void {

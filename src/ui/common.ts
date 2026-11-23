@@ -42,6 +42,9 @@ export function orgPct(org: number): number {
     return Math.max(0, Math.min(100, (org / ORG_MAX) * 100));
 }
 
+/** Shown on hover anywhere the army panel is locked by trusteeship. */
+export const AUTO_GLOBAL_LOCK_TIP = "当前已经是全局托管状态，如需手动控制请取消军团面板标题右侧全局托管";
+
 export function statusPill(state: GameState, army: Army, short: boolean): string {
     const battle = state.battles.some(
         (entry) => entry.attackerId === army.id || entry.defenderId === army.id,

@@ -71,7 +71,7 @@ export class IntelPanel {
         const occHtml = province.owner !== NEUTRAL && !isCore ? `
             <div class="kv-row"><dt>${renderGameText("[[occupation]]")}</dt><dd>
                 <div class="garrison-bar occ"><i style="width:${province.occupation}%"></i></div>
-                ${Math.floor(province.occupation)}%<span class="garrison-note ${signClass(String(occGrowth))}">${occGrowth >= 0 ? "+" : ""}${occGrowth.toFixed(0)}/天</span>
+                ${Math.floor(province.occupation)}%<span class="garrison-note ${signClass(String(occGrowth))}">${occGrowth >= 0 ? "+" : ""}${occGrowth.toFixed(0)}/${renderGameText("[[turn]]")}</span>
             </dd></div>` : "";
         const presenceHtml = occupant ? `
             <div class="army-presence" ${tooltipAttrs(escapeGameText(occupant.name), `[[organization]] ${Math.round(occupant.org)}/${ORG_MAX}`)}>
@@ -159,7 +159,7 @@ export class IntelPanel {
         const capacity = region.provinces.length;
         const controlled = region.provinces.filter((site) => state.provinces[site].owner === center.owner).length;
         const claimants = [...new Set(state.claims.filter((claim) => claim.stateId === region.id).map((claim) => claim.nation))];
-        const rules = `宣称国：${claimants.length ? claimants.map((nation) => escapeGameText(ownerName(state, nation))).join("、") : "无"}\n州中心控制国：${escapeGameText(ownerName(state, center.owner))}\n州中心正式归属：${escapeGameText(ownerName(state, center.legalOwner))}\n数量为已建/上限，待建也占容量。\n[[factory]]、[[farm]]各自独立上限为州内省份数（${capacity} 座）。\n[[infrastructure]]上限 ${INFRASTRUCTURE_MAX} 级，仅同属州中心控制者的省份生效；异主省份按 0 级倍率。\n[[admin]]每州限 1 座，州中心为核心或[[occupation]] ≥50% 时仅 [[politics:+1]]/天，不加快占领整合。`;
+        const rules = `宣称国：${claimants.length ? claimants.map((nation) => escapeGameText(ownerName(state, nation))).join("、") : "无"}\n州中心控制国：${escapeGameText(ownerName(state, center.owner))}\n州中心正式归属：${escapeGameText(ownerName(state, center.legalOwner))}\n数量为已建/上限，待建也占容量。\n[[factory]]、[[farm]]各自独立上限为州内省份数（${capacity} 座）。\n[[infrastructure]]上限 ${INFRASTRUCTURE_MAX} 级，仅同属州中心控制者的省份生效；异主省份按 0 级倍率。\n[[admin]]每州限 1 座，州中心为核心或[[occupation]] ≥50% 时仅 [[politics:+1]]/[[turn]]，不加快占领整合。`;
         const buildings = STATE_BUILDING_KINDS.map((kind) => {
             const { built, pending, limit } = stateBuildingCapacity(state, region, kind);
             const detail = kind === "factory" ? `[[production]] ${region.prodFactories} · [[idle]] ${region.factories - region.prodFactories}`

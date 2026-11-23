@@ -9,7 +9,7 @@ import { Biome, BiomeMap } from "../terrain/biome.ts";
 import {
     buildConstructionOverlay, constructionColor, CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS,
     CONSTRUCTION_PENDING_TINT, PROVINCE_CAPACITY_MIN_ZOOM,
-} from "../render/constructionOverlay.ts";
+} from "../render/index.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { GameUI } from "../ui/index.ts";
 import { renderGameText } from "../ui/text.ts";

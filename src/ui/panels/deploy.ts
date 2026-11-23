@@ -50,7 +50,7 @@ export class DeployPanel {
             const affordable = canTrain(state, 0, kind);
             const costParts = [textToken("funds", up.cost), textToken("manpower", up.manpowerCost)];
             if (up.industryCost > 0) costParts.push(textToken("industry", up.industryCost));
-            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n维护 ${textToken("funds", up.upkeep)}/天\n训练 ${textToken("days", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
+            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n维护 ${textToken("funds", up.upkeep)}/${textToken("turn")}\n训练 ${textToken("turn", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
             return `
                 <button class="deploy-kind" data-action="train" data-kind="${kind}" style="--nc:${escapeHtml(playerColor)}" ${tooltipAttrs(escapeGameText(up.name), detail)} ${affordable ? "" : "disabled"}>
                     <span class="unit-glyph small" style="--pc:${escapeHtml(playerColor)}">${escapeHtml(up.glyph)}</span>
@@ -67,7 +67,7 @@ export class DeployPanel {
             const status = order.status === "blocked"
                 ? "落点被阻断"
                 : order.daysLeft > 0
-                    ? `训练中 · 剩 ${order.daysLeft} 天`
+                    ? `训练中 · 剩 ${textToken("turn", order.daysLeft)}`
                     : "待部署";
             const options = [
                 `<option value="">自动（优先首都/城市）</option>`,

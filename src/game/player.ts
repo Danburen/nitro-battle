@@ -72,6 +72,9 @@ export function setPlayerNation(state: GameState, chosen: number): boolean {
     state.selected = null;
     state.selectedArmyId = null;
     state.redeployArmyId = null;
+    // Trusteeship is a campaign-level choice, never carried from briefing preview.
+    state.autoManageArmies = false;
+    for (const army of state.armies.values()) delete army.autoManaged;
     return true;
 }
 

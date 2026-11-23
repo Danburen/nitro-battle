@@ -171,4 +171,4 @@ vite.config.ts.timestamp-*
 .ai/
 .codegraph/
 .omo/
-.mcp-playwright/
+.playwright-mcp/

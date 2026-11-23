@@ -67,8 +67,9 @@ export class BattleReport {
         const own = event?.kind === "capture" && Boolean(event.stateFlipped);
         const lost = own && event?.previousOwner === 0 && event?.nation !== 0;
         const mark = own ? (lost ? "▼" : "▲")
-            : event?.kind === "season" ? "◈"
-                : event?.kind === "peace" ? "✓" : "★";
+            : event?.kind === "claim" ? "!"
+                : event?.kind === "season" ? "◈"
+                    : event?.kind === "peace" ? "✓" : "★";
         return `<div class="feed-highlight tone-${entry.tone}${lost ? " feed-highlight--lost" : ""}">
             <span class="feed-highlight-mark">${mark}</span>
             <span class="feed-highlight-text">${renderGameText(entry.text)}</span>
@@ -83,7 +84,7 @@ export class BattleReport {
             : "";
         this.history.innerHTML = pinned + (days.length
             ? days.map((block) => this.dayHtml(block)).join("")
-            : '<p class="feed-empty">最近三天没有可展开的战况。</p>');
+            : '<p class="feed-empty">最近 3 [[turn]]没有可展开的战况。</p>');
         for (const el of this.history.querySelectorAll<HTMLDetailsElement>("details[data-key]")) {
             el.open = this.openKeys.has(el.dataset.key!);
         }

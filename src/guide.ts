@@ -42,7 +42,7 @@ const SECTIONS: readonly GuideSection[] = [
             },
             {
                 title: "结束回合",
-                body: "按 E 或点击右上角「结束回合」。AI 行动、会战结算、行军推进、生产训练与补给恢复在同一天内结算，然后进入下一天。",
+                body: "按 E 或点击右上角「结束回合」。AI 行动、会战结算、行军推进、生产训练与补给恢复在同一[[turn]]内结算，然后进入下一[[turn]]。",
             },
             {
                 title: "快捷键",
@@ -57,15 +57,15 @@ const SECTIONS: readonly GuideSection[] = [
         items: [
             {
                 title: "军团与团",
-                body: "军团是唯一的移动单位，最多混编 12 个团。步兵廉价、坦克机动、火炮攻坚（对高[[garrison]]省份最高 [[attack:+60%]]）。受损的团在[[supply]]充足（≥50%）时每天自动补充 1 HP，消耗少量资源。",
+                body: "军团是唯一的移动单位，最多混编 12 个团。步兵廉价、坦克机动、火炮攻坚（对高[[garrison]]省份最高 [[attack:+60%]]）。受损的团在[[supply]]充足（≥50%）时每[[turn]]自动补充 1 HP，消耗少量资源。",
             },
             {
                 title: "[[organization]]",
-                body: "[[organization]]（0–100）按比例放大军团战力，每天按[[supply]]恢复（满[[supply]] +9）。降到 15 以下军团溃退：进攻方退回原地，防守方撤往相邻己方空省，无路可退则被歼灭。战略转移后[[organization]]降为 20。",
+                body: "[[organization]]（0–100）按比例放大军团战力，每[[turn]]按[[supply]]恢复（满[[supply]] +9）。降到 15 以下军团溃退：进攻方退回原地，防守方撤往相邻己方空省，无路可退则被歼灭。战略转移后[[organization]]降为 20。",
             },
             {
                 title: "会战",
-                body: "进攻相邻敌对省份发起会战，每天结算一轮：双方按攻防比例互相杀伤并损失[[organization]]。[[garrison]]每天恢复约 10%（交战中不恢复）。摧毁[[garrison]]并击溃守军后占领省份；攻方[[organization]]先崩溃则攻势瓦解。可随时「停止进攻」。",
+                body: "进攻相邻敌对省份发起会战，每[[turn]]结算一轮：双方按攻防比例互相杀伤并损失[[organization]]。[[garrison]]每[[turn]]恢复约 10%（交战中不恢复）。摧毁[[garrison]]并击溃守军后占领省份；攻方[[organization]]先崩溃则攻势瓦解。可随时「停止进攻」。",
             },
             {
                 title: "[[garrison]]",
@@ -88,15 +88,15 @@ const SECTIONS: readonly GuideSection[] = [
         items: [
             {
                 title: "四资源",
-                body: "[[funds]]来自省份税收、[[farm]]与[[production]][[factory]]，支付训练、建造与军团维护；[[manpower]]来自人口与[[farm]]，用于训练；[[industry]]来自城市与[[production]][[factory]]，用于训练、兵力补充与建筑；[[politics]]基础每天 +2，[[admin]]每座再 +1，用于切换政策、提出州宣称和准备战争借口。发不出维护费的军团每天掉[[organization]]。",
+                body: "[[funds]]来自省份税收、[[farm]]与[[production]][[factory]]，支付训练、建造与军团维护；[[manpower]]来自人口与[[farm]]，用于训练；[[industry]]来自城市与[[production]][[factory]]，用于训练、兵力补充与建筑；[[politics]]基础每[[turn]] +2，[[admin]]每座再 +1，用于切换政策、提出州宣称和准备战争借口。发不出维护费的军团每[[turn]]掉[[organization]]。",
             },
             {
                 title: "训练与部署",
-                body: "「部署」页签训练步兵/坦克/火炮，立即扣除三种资源，1–2 天后部署。优先补充落点的未满军团，否则新建军团。军团上限 = 3 + 领土省数 ÷ 6，扩张领土才能养更多军团。",
+                body: "「部署」页签训练步兵/坦克/火炮，立即扣除三种资源，1–2 [[turn]]后部署。优先补充落点的未满军团，否则新建军团。军团上限 = 3 + 领土省数 ÷ 6，扩张领土才能养更多军团。",
             },
             {
                 title: "六种建筑与归属",
-                body: "[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]建在州；[[supply]]中心、[[fort]]建在具体省份。采用州级统一区域加成方案，而非逐省重复堆叠：经济与区域增益归州管理，[[supply]]辐射与[[garrison]]防护保留本地落点。[[factory]]、[[farm]]各自上限等于州内省份数，已建与待建都占容量；[[admin]]每州限 1 座，仅 [[politics:+1]]/天。",
+                body: "[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]建在州；[[supply]]中心、[[fort]]建在具体省份。采用州级统一区域加成方案，而非逐省重复堆叠：经济与区域增益归州管理，[[supply]]辐射与[[garrison]]防护保留本地落点。[[factory]]、[[farm]]各自上限等于州内省份数，已建与待建都占容量；[[admin]]每州限 1 座，仅 [[politics:+1]]/[[turn]]。",
             },
             {
                 title: "州[[infrastructure]]",
@@ -104,7 +104,7 @@ const SECTIONS: readonly GuideSection[] = [
             },
             {
                 title: "[[construction]]与全国队列",
-                body: "建筑消耗[[construction]]，不是固定回合数。队列按顺序分配[[idle]][[factory]]，每项最多 5 座，多余[[factory]]用于下一项；每座每天提供 0.5 基础点 × 来源州产出倍率 × 目标州建造倍率（均为 0.8 + 0.05L）。没有[[idle]][[factory]]就暂停。拖动可重排优先级；取消返还已付[[funds]]和[[industry]]的一半。项目完成后，[[factory]]从下一回合重新分配，不在当天再次投入。",
+                body: "建筑消耗[[construction]]，不是固定回合数。队列按顺序分配[[idle]][[factory]]，每项最多 5 座，多余[[factory]]用于下一项；每座每[[turn]]提供 0.5 基础点 × 来源州产出倍率 × 目标州建造倍率（均为 0.8 + 0.05L）。没有[[idle]][[factory]]就暂停。拖动可重排优先级；取消返还已付[[funds]]和[[industry]]的一半。项目完成后，[[factory]]从下一回合重新分配，不在当[[turn]]再次投入。",
             },
             {
                 title: "建造地图与图层",
@@ -112,11 +112,11 @@ const SECTIONS: readonly GuideSection[] = [
             },
             {
                 title: "州与[[factory]]分配",
-                body: "开局先划州，再把全部陆地州分配给各国：大陆按省份数量均衡扩张，剩余省份并入最邻近的接壤国家，海外州整块划给最近海岸的国家，全图不存在中立地区。每州以城市为中心；战时按省争夺实际控制，攻占州中心只改变本省控制与州属建筑使用权，不令其他省份或正式归属自动易主。[[production]][[factory]]每座基础每天 [[funds:+2]]、[[industry:+2]]，受来源州产出倍率影响；[[idle]][[factory]]投入全国建设。顶部[[factory]]分配栏滚轮向上增加[[production]]、向下增加[[idle]]；聚焦后也可用方向键或 +/− 调整。"
+                body: "开局先划州，再把全部陆地州分配给各国：大陆按省份数量均衡扩张，剩余省份并入最邻近的接壤国家，海外州整块划给最近海岸的国家，全图不存在中立地区。每州以城市为中心；战时按省争夺实际控制，攻占州中心只改变本省控制与州属建筑使用权，不令其他省份或正式归属自动易主。[[production]][[factory]]每座基础每[[turn]] [[funds:+2]]、[[industry:+2]]，受来源州产出倍率影响；[[idle]][[factory]]投入全国建设。顶部[[factory]]分配栏滚轮向上增加[[production]]、向下增加[[idle]]；聚焦后也可用方向键或 +/− 调整。"
             },
             {
                 title: "[[occupation]]",
-                body: "攻占的非核心省份从 0% 开始整合，基础每天 +4，可受占领政策调整；[[admin]]不增加整合速度。效率决定该省产出与[[supply]]通行：25% 起步，100% 满效。历史核心省份（开局领土）被夺回后立即满效；提出宣称、占领或正式割让都不会把非核心变为历史核心。",
+                body: "攻占的非核心省份从 0% 开始整合，基础每[[turn]] +4，可受占领政策调整；[[admin]]不增加整合速度。效率决定该省产出与[[supply]]通行：25% 起步，100% 满效。历史核心省份（开局领土）被夺回后立即满效；提出宣称、占领或正式割让都不会把非核心变为历史核心。",
             },
         ],
     },
@@ -147,7 +147,7 @@ const SECTIONS: readonly GuideSection[] = [
             },
             {
                 title: "州宣称与战争借口",
-                body: `宣称只能在「扩张」页或州模式的地图上提出：目标州须含他国正式领土，且与己方邻接或拥有历史核心，满足条件后花 [[politics:${CLAIM_COST}]]。夺取宣称州借口另需 [[politics:${DIPLOMATIC_PROFILES.conquest.cost}]]、准备 ${DIPLOMATIC_PROFILES.conquest.days} 天（每天维护 [[politics:${DIPLOMATIC_PROFILES.conquest.upkeep}]]），就绪有效 ${DIPLOMATIC_PROFILES.conquest.validDays} 天，目标州必须已宣称。全面吞并借口不要求州宣称，需 [[politics:${DIPLOMATIC_PROFILES.annex.cost}]]、准备 ${DIPLOMATIC_PROFILES.annex.days} 天（每天维护 [[politics:${DIPLOMATIC_PROFILES.annex.upkeep}]]），有效 ${DIPLOMATIC_PROFILES.annex.validDays} 天。有效借口就绪且停战期结束后才能宣战，开战消耗所用借口；取消宣称会令对应的夺取借口失效。`,
+                body: `宣称只能在「扩张」页或州模式的地图上提出：目标州须含他国正式领土，且与己方邻接或拥有历史核心，满足条件后花 [[politics:${CLAIM_COST}]]。夺取宣称州借口另需 [[politics:${DIPLOMATIC_PROFILES.conquest.cost}]]、准备 [[turn:${DIPLOMATIC_PROFILES.conquest.days}]]（每[[turn]]维护 [[politics:${DIPLOMATIC_PROFILES.conquest.upkeep}]]），就绪有效 [[turn:${DIPLOMATIC_PROFILES.conquest.validDays}]]，目标州必须已宣称。全面吞并借口不要求州宣称，需 [[politics:${DIPLOMATIC_PROFILES.annex.cost}]]、准备 [[turn:${DIPLOMATIC_PROFILES.annex.days}]]（每[[turn]]维护 [[politics:${DIPLOMATIC_PROFILES.annex.upkeep}]]），有效 [[turn:${DIPLOMATIC_PROFILES.annex.validDays}]]。有效借口就绪且停战期结束后才能宣战，开战消耗所用借口；取消宣称会令对应的夺取借口失效。`,
             },
             {
                 title: "准备队列与时限",
@@ -159,7 +159,7 @@ const SECTIONS: readonly GuideSection[] = [
             },
             {
                 title: "白和平与撤军",
-                body: `战争中可提议白和平，AI 依据战局接受或拒绝，弱势时也会主动求和。白和平不保留临时占领，双方返还占领区，不转移第三国土地；白和平或目标议和都会解除双方会战，双方部队退回可控地区，并进入 ${TRUCE_DAYS} 天停战期。没有空位撤军时会整编或遣散，回收相应人力。`,
+                body: `战争中可提议白和平，AI 依据战局接受或拒绝，弱势时也会主动求和。白和平不保留临时占领，双方返还占领区，不转移第三国土地；白和平或目标议和都会解除双方会战，双方部队退回可控地区，并进入 [[turn:${TRUCE_DAYS}]]停战期。没有空位撤军时会整编或遣散，回收相应人力。`,
             },
             {
                 title: "AI 对手",
@@ -174,7 +174,7 @@ const SECTIONS: readonly GuideSection[] = [
         items: [
             {
                 title: "四季与积雪",
-                body: "每 8 天换季。冬季积雪拖慢行军并削弱攻势，深雪地区影响更大，适合转入防御与整补。",
+                body: "每 [[turn:8]]换季。冬季积雪拖慢行军并削弱攻势，深雪地区影响更大，适合转入防御与整补。",
             },
             {
                 title: "胜利条件",

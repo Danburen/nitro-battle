@@ -49,19 +49,23 @@ export function mountLayout(app: HTMLElement): void {
         <canvas id="game-canvas"></canvas>
         <div class="hint" id="hint">${DEFAULT_HINT}</div>
         <div id="toast" class="toast" role="status"></div>
-        <div id="global-tooltip" class="global-tooltip" role="tooltip" hidden><strong></strong><p></p></div>
+        <div id="global-tooltip" class="global-tooltip" role="tooltip" hidden><strong></strong><div class="tooltip-body"></div></div>
 
         <div class="hud" id="hud">
             <div class="top-bar">
-                <div class="brand">
-                    <svg class="brand-mark" width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
-                        <rect width="32" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
-                        <path d="M8 24V8l16 16V8" stroke="#1f6feb" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                        <circle cx="24" cy="8" r="3" fill="#1f883d"/>
-                    </svg>
-                    <span class="brand-name">Nitro Battle</span>
+                <div class="top-country">
+                    <span class="top-country-name" id="top-country-name" tabindex="0" role="note">
+                        <span class="top-country-flag" id="top-country-flag"></span>
+                        <span class="top-country-label" id="top-country-label"></span>
+                    </span>
+                    <div class="top-vassals hidden" id="top-vassals">
+                        <button type="button" class="top-vassals-trigger" id="top-vassals-trigger" aria-expanded="false" aria-controls="top-vassals-menu">
+                            <span class="top-vassals-label">附庸</span><span id="top-vassals-summary"></span><span class="top-vassals-caret" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="top-vassals-menu hidden" id="top-vassals-menu" role="menu"></div>
+                    </div>
                 </div>
-                <span class="pill" id="day-pill">第 1 天</span>
+                <span class="pill" id="day-pill">${renderGameText("第 [[turn:1]]")}</span>
                 <span class="pill" id="season-pill">春季</span>
                 <div class="top-resources">
                     <span class="res-pill" id="res-funds">§300</span>
@@ -87,7 +91,7 @@ export function mountLayout(app: HTMLElement): void {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     </button>
                     <button id="btn-menu" class="btn">新游戏</button>
-                    <button id="btn-endturn" class="btn btn-primary">结束回合 <kbd>E</kbd></button>
+                    <button id="btn-endturn" class="btn btn-primary">${renderGameText("结束[[turn]]")} <kbd>E</kbd></button>
                     <div class="brief-start-hint hidden" id="brief-start-hint" role="status"></div>
                 </div>
             </div>
@@ -200,7 +204,7 @@ export function mountLayout(app: HTMLElement): void {
                 </div>
                 <ul class="start-summary">
                     <li><b>军团作战</b>每省最多一个军团，混编步兵/坦克/火炮；会战逐日结算，组织度决定胜负。</li>
-                    <li><b>四资源经济</b>资金、人力、工业、政治点；建筑与政策塑造你的战争机器，补给线决定前线战力。</li>
+                    <li><b>四资源经济</b>${renderGameText("[[funds]]、[[manpower]]、[[industry]]、[[politics]]；建筑与政策塑造你的战争机器，补给线决定前线战力。")}</li>
                     <li><b>便捷指挥</b>顶部资源栏 + 可收起页签；选中军团自动进入指挥模式，列表多选合并、详情窗拆分编组。</li>
                 </ul>
                 <p class="start-note">完整规则与操作见「玩法说明」。</p>
@@ -271,7 +275,6 @@ export function mountLayout(app: HTMLElement): void {
                             <input id="cells-range" type="range" min="${MAP_CELLS_MIN}" max="${MAP_CELLS_MAX}" step="100" value="${DEFAULT_MAP_CELLS}" aria-label="自定义地图大小" />
                             <b id="cells-value">${DEFAULT_MAP_CELLS.toLocaleString("zh-CN")} 省</b>
                         </div>
-                        <p class="field-hint">自定义范围 ${MAP_CELLS_MIN}–${MAP_CELLS_MAX} 省，步长 100；预设按小型 / 标准 / 大型轮廓等比缩放。</p>
                     </div>
                     <div class="field">
                         <span class="field-label">国家强度平衡

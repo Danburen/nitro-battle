@@ -1,4 +1,5 @@
 import { GameCore } from "./core.ts";
+import { isArmyAutoManaged, setArmyAutoManage, toggleArmyAutoManage } from "./auto.ts";
 import {
     beginRedeploy,
     cancelMarch,
@@ -14,11 +15,11 @@ import {
 } from "./armies.ts";
 import { attack, cancelAttack } from "./combat.ts";
 import { cancelDiplomaticAction, claimState, cancelClaim, prepareDiplomaticAction, proposePeace, respondPeace, startWar } from "./diplomacy.ts";
-import { enforceWarGoal } from "./settlement.ts";
+import { annexVassal as annexVassalOf, enforceWarGoal } from "./settlement.ts";
 import {
     adjustTributeRate as adjustTributeRateOf,
+    changeVassalType as changeVassalTypeOf,
     demandVassalization as demandVassalizationOf,
-    petitionIndependence as petitionIndependenceOf,
     releaseVassal as releaseVassalOf,
     requestForeignAid as requestForeignAidOf,
     requestVassalization as requestVassalizationOf,
@@ -61,26 +62,46 @@ export class GameEngine extends GameCore {
         return new GameEngine(generateWorld({ seed, mapSize, nationCount }));
     }
 
+    // ---- player army trusteeship (game/auto.ts) ----
+
+    /** Master switch: hand every player corps to the AI, or reclaim them all. */
+    setAutoManageArmies(enabled: boolean): void {
+        setArmyAutoManage(this.state, enabled);
+        this.emit({ type: "state" });
+    }
+
+    /** Per-corps override; works only while the master switch is on. */
+    toggleArmyAutoManaged(armyId: number): boolean {
+        const changed = toggleArmyAutoManage(this.state, armyId);
+        if (changed) this.emit({ type: "state" });
+        return changed;
+    }
+
+    /** Guards every player command; AI actions bypass the facade and keep working. */
+    private canCommand(armyId: number): boolean {
+        return !isArmyAutoManaged(this.state, this.state.armies.get(armyId));
+    }
+
     // ---- movement & army management (game/armies.ts) ----
 
     moveArmy(armyId: number, to: number): boolean {
-        return moveArmy(this, armyId, to);
+        return this.canCommand(armyId) && moveArmy(this, armyId, to);
     }
 
     orderMarch(armyId: number, target: number, attack: boolean): boolean {
-        return orderMarch(this, armyId, target, attack);
+        return this.canCommand(armyId) && orderMarch(this, armyId, target, attack);
     }
 
     cancelMarch(armyId: number): boolean {
-        return cancelMarch(this, armyId);
+        return this.canCommand(armyId) && cancelMarch(this, armyId);
     }
 
     waitArmy(armyId: number): boolean {
-        return waitArmy(this, armyId);
+        return this.canCommand(armyId) && waitArmy(this, armyId);
     }
 
     beginRedeploy(armyId: number): boolean {
-        return beginRedeploy(this, armyId);
+        return this.canCommand(armyId) && beginRedeploy(this, armyId);
     }
 
     cancelRedeploy(): void {
@@ -92,29 +113,29 @@ export class GameEngine extends GameCore {
     }
 
     redeploy(armyId: number, to: number): boolean {
-        return redeploy(this, armyId, to);
+        return this.canCommand(armyId) && redeploy(this, armyId, to);
     }
 
     disbandArmy(armyId: number): boolean {
-        return disbandArmy(this, armyId);
+        return this.canCommand(armyId) && disbandArmy(this, armyId);
     }
 
     splitArmy(armyId: number, regimentIds: readonly number[]): number | null {
-        return splitArmy(this, armyId, regimentIds);
+        return this.canCommand(armyId) ? splitArmy(this, armyId, regimentIds) : null;
     }
 
     orderMerge(armyIds: readonly number[]): boolean {
-        return orderMerge(this, armyIds);
+        return armyIds.every((id) => this.canCommand(id)) && orderMerge(this, armyIds);
     }
 
     // ---- battles (game/combat.ts) ----
 
     attack(armyId: number, target: number): boolean {
-        return attack(this, armyId, target);
+        return this.canCommand(armyId) && attack(this, armyId, target);
     }
 
     cancelAttack(armyId: number): boolean {
-        return cancelAttack(this, armyId);
+        return this.canCommand(armyId) && cancelAttack(this, armyId);
     }
 
     // ---- production (game/production.ts) ----
@@ -210,17 +231,20 @@ export class GameEngine extends GameCore {
         return demandVassalizationOf(this, 0, targetId);
     }
 
-    /** One-shot independence petition: pay the contract's cost, gain, then cool down. */
-    petitionIndependence(): boolean {
-        return petitionIndependenceOf(this, 0);
-    }
-
     adjustTributeRate(delta: number): boolean {
         return adjustTributeRateOf(this, 0, delta);
     }
 
     releaseVassal(vassalId: number): boolean {
         return releaseVassalOf(this, vassalId, true);
+    }
+
+    changeVassalType(vassalId: number, type: VassalType): boolean {
+        return changeVassalTypeOf(this, vassalId, type);
+    }
+
+    annexVassal(vassalId: number): boolean {
+        return annexVassalOf(this, 0, vassalId);
     }
 
     requestForeignAid(helperId?: number): boolean {

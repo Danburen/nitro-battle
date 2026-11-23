@@ -17,6 +17,8 @@ export interface PanelHeadSpec {
     readonly help?: HelpSpec;
     /** Extra attributes for the [i] button (focus keys, panel-specific hooks). */
     readonly helpAttrs?: string;
+    /** Rendered right after the title, before the [i] button (inside `.panel-head-main`). */
+    readonly titleExtras?: string;
     /** Rendered HTML between the help button and the status slot. */
     readonly extras?: string;
     /** Right-aligned status HTML; wrapped in `.objective`. */
@@ -30,7 +32,7 @@ export function helpButton(help: HelpSpec, attrs = ""): string {
 }
 
 export function panelHead(spec: PanelHeadSpec): string {
-    return `<div class="panel-head"><div class="panel-head-main"><h2>${escapeHtml(spec.title)}</h2>${
+    return `<div class="panel-head"><div class="panel-head-main"><h2>${escapeHtml(spec.title)}</h2>${spec.titleExtras ?? ""}${
         spec.help ? helpButton(spec.help, spec.helpAttrs ?? "") : ""
     }</div>${spec.extras ?? ""}${spec.status ? `<span class="objective">${spec.status}</span>` : ""}</div>`;
 }

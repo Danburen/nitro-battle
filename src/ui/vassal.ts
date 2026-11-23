@@ -1,73 +1,96 @@
-import { nationDisplayColor, overlordOf, vassalTypeOf, vassalsOf } from "../game/access.ts";
+import { nationDisplayColor, overlordOf, vassalsOf, vassalTypeOf } from "../game/access.ts";
 import {
-    VASSAL_HELP_BODY, VASSAL_PROFILES, VASSAL_UPGRADE_COST, canRequestUpgrade, independenceOf,
-    subservienceOf, subservienceTone, tributeRateOf, upgradeTargetOf,
+    VASSAL_HELP_BODY, VASSAL_PROFILES, HIGH_INDEPENDENCE_RATIO, independenceCapOf, independenceOf,
+    independenceRatioOf, tributeRateOf,
 } from "../game/vassal.ts";
-import type { GameState } from "../game/types.ts";
-import { chipToken, escapeHtml, renderGameText } from "./text.ts";
+import type { GameState, VassalType } from "../game/types.ts";
+import { chipToken, escapeHtml, textToken } from "./text.ts";
 import { helpButton } from "./panel.ts";
+import { nationFlagHtmlFor } from "./flags.ts";
+import { tooltipAttrs } from "./tooltip.ts";
 
 /**
- * Shared nation-card fragment for vassal status. The tooltip and the card use
- * the same words so the player never has to learn two vocabularies.
+ * Shared nation-card fragment for vassal status. The row stays compact —
+ * "附庸于 [flag] [name] [type icon] [independence icon] ⓘ" — and each icon's
+ * hover carries the full contract, independence and tribute explanation.
  */
 
-const ATTITUDE_TEXT: Readonly<Record<"pos" | "note" | "neg", string>> = {
-    pos: "主动配合宗主战争，缴纳稳定",
-    note: "按契约行事，既不特别积极也不急于脱离",
-    neg: "缴纳敷衍，较少响应宗主召唤，独立倾向强",
+/** Minimal line icons — one silhouette per contract, tinted by its icon. */
+const VASSAL_TYPE_ICON: Record<VassalType, string> = {
+    cooperative: '<circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/>',
+    autonomous: '<circle cx="8" cy="12" r="4"/><path d="M12 12h9m-3 0v4m-3-4v4"/>',
+    oppressive: '<circle cx="7" cy="14" r="3"/><circle cx="17" cy="14" r="3"/><path d="M10 14h4M7 11V6h3m10 5V6h-3"/>',
 };
 
-function tributeText(type: "cooperative" | "autonomous" | "oppressive", rate: number): string {
-    if (type === "cooperative") return `上缴资源 ${Math.round(rate * 100)}%`;
-    if (type === "autonomous") return `每日上缴 ${VASSAL_PROFILES.autonomous.tributePP} 政治点`;
-    return `固定 ${Math.round(VASSAL_PROFILES.oppressive.resourceShare * 100)}% 资源 · 每日 ${VASSAL_PROFILES.oppressive.tributePP} 政治点`;
+/** Rising bars plus a dashed threshold: independence read at a glance. */
+const INDEPENDENCE_ICON = '<path d="M4 20h16"/><path d="M7 20v-5"/><path d="M12 20v-9"/><path d="M17 20v-13"/><path d="M4 7h16" stroke-dasharray="2 2"/>';
+
+/** "独立性 X / cap（NN%）" — one format used on every vassal surface. */
+function independenceText(state: GameState, nationId: number): string {
+    const value = Math.round(independenceOf(state, nationId));
+    const cap = independenceCapOf(state, nationId);
+    return `独立性 ${value} / ${cap}（${Math.round(independenceRatioOf(state, nationId) * 100)}%）`;
 }
 
-/** One-line "附属于" text without markup, used by the war/diplomacy summaries. */
-export function vassalStatusText(state: GameState, nationId: number): string {
-    const overlord = overlordOf(state, nationId);
-    if (overlord >= 0) {
-        const type = vassalTypeOf(state, nationId);
-        return `附属于：${state.nations[overlord]?.name ?? "?"}（${type ? VASSAL_PROFILES[type].name : "附庸"}）`;
-    }
-    const vassals = vassalsOf(state, nationId);
-    return vassals.length ? `宗主国 · ${vassals.length} 个附庸` : "独立国家";
-}
-
-/**
- * Plain-text tooltip body appended after the tendency description. Values stay
- * readable (no axis scores or thresholds), matching the v1 observation format.
- */
-export function vassalTooltipBody(state: GameState, nationId: number): string {
-    const nation = state.nations[nationId];
-    if (!nation) return "";
-    const overlord = overlordOf(state, nationId);
-    if (overlord < 0) {
-        const vassals = vassalsOf(state, nationId);
-        return vassals.length
-            ? `\n\n宗主国：拥有 ${vassals.length} 个附庸；对所有附庸拥有通行权，并在其遭攻击时履行保护义务。`
-            : "";
-    }
+/** Tribute as colour-coded, negative resource tokens (plus PP where applicable). */
+export function vassalTributeTokens(state: GameState, nationId: number): string {
     const type = vassalTypeOf(state, nationId);
     if (!type) return "";
     const profile = VASSAL_PROFILES[type];
-    const independence = Math.round(independenceOf(state, nationId));
-    const attitude = subservienceTone(subservienceOf(nation));
-    const lines = [
-        `附属于：${chipToken(nationDisplayColor(state, overlord), state.nations[overlord].name)}（${profile.name}）`,
-        `独立性 ${independence} / 100 · ${tributeText(type, tributeRateOf(state, nationId))}`,
-        `[[${attitude.tone}:${attitude.label}：${ATTITUDE_TEXT[attitude.tone]}]]`,
-    ];
-    if (type === "oppressive") lines.push("[[neg:独立性不可主动提升，只能被动增长]]");
-    const target = upgradeTargetOf(type);
-    if (target && canRequestUpgrade(state, nationId)) {
-        lines.push(`[[note:可花费 ${VASSAL_UPGRADE_COST} 政治点请求改善为${VASSAL_PROFILES[target].name}]]`);
+    const share = tributeRateOf(state, nationId);
+    const parts: string[] = [];
+    if (share > 0) {
+        const percent = `-${Math.round(share * 100)}%`;
+        parts.push(textToken("funds", percent), textToken("manpower", percent), textToken("industry", percent));
     }
-    return `\n\n${lines.join("\n")}`;
+    if (profile.tributePP > 0) parts.push(textToken("politics", -profile.tributePP));
+    return parts.join(" · ");
 }
 
-/** `<div class="kv-row">` blocks inserted after the tendency row in a nation card. */
+/** Hover body shared by the icon and the named badge: who, what, how restless, what it costs. */
+function vassalContractBody(state: GameState, nationId: number): string {
+    const type = vassalTypeOf(state, nationId)!;
+    const overlord = overlordOf(state, nationId);
+    const lord = chipToken(nationDisplayColor(state, overlord), state.nations[overlord]?.name ?? "?");
+    return [
+        `这个国家是 ${lord} 的${VASSAL_PROFILES[type].name}附庸。`,
+        VASSAL_PROFILES[type].blurb,
+        independenceText(state, nationId),
+        `贡赋 ${vassalTributeTokens(state, nationId)}`,
+    ].join("\n");
+}
+
+/** Compact contract icon: hover explains the vassal's overlord, type, independence and tribute. */
+export function vassalTypeIcon(state: GameState, nationId: number): string {
+    const type = vassalTypeOf(state, nationId);
+    if (!type) return "";
+    return `<span class="vassal-type-mark vassal-type-mark--${type}" aria-label="${VASSAL_PROFILES[type].name}附庸" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${VASSAL_TYPE_ICON[type]}</svg>
+    </span>`;
+}
+
+/** Named variant used where the label still fits (e.g. the vassal-action note). */
+export function vassalTypeBadge(state: GameState, nationId: number): string {
+    const type = vassalTypeOf(state, nationId);
+    if (!type) return "";
+    return `<span class="vassal-type vassal-type--${type}" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
+        <svg class="vassal-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${VASSAL_TYPE_ICON[type]}</svg>
+        <span>${VASSAL_PROFILES[type].name}</span>
+    </span>`;
+}
+
+/** Orange independence marker with its value; red once past the 80% threshold. */
+export function vassalIndependenceIcon(state: GameState, nationId: number): string {
+    const value = Math.round(independenceOf(state, nationId));
+    const cap = independenceCapOf(state, nationId);
+    const high = independenceRatioOf(state, nationId) >= HIGH_INDEPENDENCE_RATIO ? " vassal-independence-icon--high" : "";
+    return `<span class="vassal-independence-icon${high}" aria-label="独立性 ${value} / ${cap}" ${tooltipAttrs("独立性", `${independenceText(state, nationId)}。高位（80%）时更易倒戈或起义。`)}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">${INDEPENDENCE_ICON}</svg>
+        <b>${value}/${cap}</b>
+    </span>`;
+}
+
+/** `<div class="kv-row">` block inserted after the tendency row in a nation card. */
 export function vassalStatusHtml(state: GameState, nationId: number): string {
     const nation = state.nations[nationId];
     if (!nation) return "";
@@ -77,13 +100,8 @@ export function vassalStatusHtml(state: GameState, nationId: number): string {
         if (vassals.length === 0) return "";
         return `<div class="kv-row"><dt>附庸</dt><dd>宗主国 · ${vassals.length} 个附庸 ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</dd></div>`;
     }
-    const type = vassalTypeOf(state, nationId);
-    if (!type) return "";
-    const profile = VASSAL_PROFILES[type];
-    const independence = Math.round(independenceOf(state, nationId));
-    const attitude = subservienceTone(subservienceOf(nation));
-    const status = `[[${attitude.tone}:${attitude.label}]] · 独立性 ${independence} / 100 · ${tributeText(type, tributeRateOf(state, nationId))}`;
-    return `<div class="kv-row"><dt>附属于</dt><dd>${renderGameText(chipToken(nationDisplayColor(state, overlord), state.nations[overlord].name))}（${profile.name}）</dd></div>
-        <div class="kv-row"><dt>附庸状态</dt><dd>${renderGameText(status)} ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</dd></div>
-        <div class="kv-row"><dt>独立性</dt><dd><span class="independence-meter"><i style="width:${independence}%"></i></span> ${escapeHtml(`${independence} / 100`)}</dd></div>`;
+    if (!vassalTypeOf(state, nationId)) return "";
+    return `<div class="kv-row vassal-row"><dt>附庸于</dt><dd>
+        <span class="vassal-head">${nationFlagHtmlFor(state, overlord, 20)}${escapeHtml(state.nations[overlord].name)}${vassalTypeIcon(state, nationId)}${vassalIndependenceIcon(state, nationId)}${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</span>
+    </dd></div>`;
 }

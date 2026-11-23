@@ -1,7 +1,7 @@
 import type { GameEngine } from "../game/engine.ts";
 import { NEUTRAL } from "../game/types.ts";
 import type { Nation } from "../game/types.ts";
-import { escapeHtml } from "./text.ts";
+import { escapeHtml, renderGameText } from "./text.ts";
 import { NationPanel } from "./panels/nation.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 
@@ -85,14 +85,14 @@ export class Briefing {
     }
 
     private renderHint(nation: Nation): void {
-        this.hintEl.innerHTML = `${nationFlagHtmlFor(this.engine.state, nation.id, 18)}<span>当前选中【<b>${escapeHtml(nation.name)}</b>】· 点击「开始游戏」</span>`;
+        this.hintEl.innerHTML = `<span>当前选中【<b>${nationFlagHtmlFor(this.engine.state, nation.id, 18)}${escapeHtml(nation.name)}</b>】 点击「开始游戏」</span>`;
     }
 
     private close(): void {
         this.active = false;
         this.hud.classList.remove("briefing-mode");
         this.shell.classList.remove("briefing-mode");
-        this.endTurnBtn.innerHTML = `结束回合 <kbd>E</kbd>`;
+        this.endTurnBtn.innerHTML = `${renderGameText("结束[[turn]]")} <kbd>E</kbd>`;
         this.hintEl.classList.add("hidden");
         this.hintEl.innerHTML = "";
         this.el.classList.add("hidden");

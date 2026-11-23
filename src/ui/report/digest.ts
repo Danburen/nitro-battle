@@ -199,7 +199,7 @@ export function highlightEntries(state: Pick<GameState, "day" | "log">): LogEntr
         if (entry.day < earliest) continue;
         const event = entry.event;
         const kind = event?.kind;
-        const headline = kind === "war" || kind === "peace" || kind === "season"
+        const headline = kind === "war" || kind === "peace" || kind === "season" || kind === "claim"
             || (kind === "capture" && Boolean(event?.stateFlipped) && (event?.nation === 0 || event?.previousOwner === 0));
         if (!headline || seen.has(entry.text)) continue;
         seen.add(entry.text);

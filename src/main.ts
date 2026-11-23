@@ -260,6 +260,7 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
         onCenterSite: (site) => renderer?.centerOnSite(site),
         onBriefingInspect: (nationId) => {
             renderer?.setNationHighlight(nationId);
+            renderer?.centerOnNation(nationId);
         },
         onBriefingEnd: (nationId) => {
             // Commit the inspected nation, then rebuild the UI as the campaign HUD.
@@ -298,6 +299,9 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
                 break;
             case "war":
                 sound.play("attack", soundContext(null, event.aggressor === 0 || event.defender === 0));
+                break;
+            case "claim-warning":
+                ui?.toast(`${engine?.state.nations[event.nation]?.name ?? "他国"} 宣称了我国领土「${event.stateName}」，注意防守！`);
                 break;
             case "peace":
                 sound.play("select", soundContext(null, event.a === 0 || event.b === 0));

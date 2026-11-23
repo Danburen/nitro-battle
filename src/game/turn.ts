@@ -1,4 +1,6 @@
 import type { GameCore } from "./core.ts";
+import { autoFillClaimedBorder, autoMergeManagedArmies, isArmyAutoManaged } from "./auto.ts";
+import { claimedDefenseSites } from "./defense.ts";
 import type { AIAction } from "./ai/index.ts";
 import { advanceMarches, moveArmy, orderMarch } from "./armies.ts";
 import { garrisonRecoveryRate } from "./battle.ts";
@@ -36,6 +38,23 @@ export function endTurn(core: GameCore): void {
         for (const action of controller.takeTurn(core.state)) {
             applyAIAction(core, action, controller.nationId);
         }
+    }
+
+    // 托管: the player's managed corps use the exact same army planner as an AI
+    // nation, plus an automatic consolidation pass; manual corps stay untouched.
+    // This also covers partial trusteeship with the master switch off.
+    const hasManaged = [...core.state.armies.values()].some((army) => isArmyAutoManaged(core.state, army));
+    if (hasManaged) {
+        // Keep claimed-border garrisons in place while consolidating the rest,
+        // then split spare regiments into any border province still vacant.
+        const border = claimedDefenseSites(core.state, 0);
+        autoMergeManagedArmies(core, border);
+        autoFillClaimedBorder(core);
+        const actions = core.playerAuto.takeArmyTurn(
+            core.state,
+            (army) => isArmyAutoManaged(core.state, army),
+        );
+        for (const action of actions) applyAIAction(core, action, 0);
     }
 
     resolveBattles(core);

@@ -17,7 +17,7 @@ export const ALLIANCE_HELP_BODY = [
     "联盟由领袖花费 40 政治点创建阵营，再邀请志同道合的国家加入。",
     "成员共享通行权，并把彼此的敌人视为共同敌人：任一成员开战或被攻击时，其他成员会加入同一场战争。",
     "邀约前提是双方有共同敌人，或同属扩张主义/同属防御倾向且外交意愿足够。孤立主义国家不会主动创建联盟，也极少接受邀请。",
-    "玩家拒绝结盟邀请后，15 天内不会再次收到邀请，也不能主动申请加入同一联盟。",
+    "玩家拒绝结盟邀请后，[[turn:15]]内不会再次收到邀请，也不能主动申请加入同一联盟。",
 ].join("\n");
 
 function living(state: GameState, nation: number): boolean {
@@ -247,20 +247,25 @@ export function tickAlliances(core: GameCore): void {
 /**
  * Shared enemies: when any member fights, the rest join that side. Joining is
  * a raw war-matrix change (no extra war goal), matching the simplified system.
+ * Returns the members that joined; `quiet` lets `startWar` emit one headline.
  */
-export function applyAllianceWar(core: GameCore, aggressor: number, defender: number): void {
+export function applyAllianceWar(core: GameCore, aggressor: number, defender: number, quiet = false): number[] {
     const state = core.state;
+    const joined: number[] = [];
     const defenderAlliance = allianceOf(state, defender);
     if (defenderAlliance) {
         for (const member of [...defenderAlliance.members]) {
             if (member === defender || member === aggressor || isProtectedRelation(state, member, aggressor)) continue;
             if (isAtWar(state, member, aggressor)) continue;
             setWar(state, member, aggressor, true);
-            core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(aggressor)} 的战争`, "diplo", member, true, {
-                kind: "war",
-                nation: member,
-            });
-            core.emit({ type: "war", aggressor: member, defender: aggressor });
+            joined.push(member);
+            if (!quiet) {
+                core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(aggressor)} 的战争`, "diplo", member, true, {
+                    kind: "war",
+                    nation: member,
+                });
+                core.emit({ type: "war", aggressor: member, defender: aggressor });
+            }
         }
     }
     const aggressorAlliance = allianceOf(state, aggressor);
@@ -269,13 +274,17 @@ export function applyAllianceWar(core: GameCore, aggressor: number, defender: nu
             if (member === aggressor || member === defender || isProtectedRelation(state, member, defender)) continue;
             if (isAtWar(state, member, defender)) continue;
             setWar(state, member, defender, true);
-            core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(defender)} 的战争`, "diplo", member, true, {
-                kind: "war",
-                nation: member,
-            });
-            core.emit({ type: "war", aggressor: member, defender });
+            joined.push(member);
+            if (!quiet) {
+                core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(defender)} 的战争`, "diplo", member, true, {
+                    kind: "war",
+                    nation: member,
+                });
+                core.emit({ type: "war", aggressor: member, defender });
+            }
         }
     }
+    return joined;
 }
 
 function eligibleInviteTargets(state: GameState, leader: number): number[] {

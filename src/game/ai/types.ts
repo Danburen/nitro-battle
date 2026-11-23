@@ -32,8 +32,9 @@ export type AITendencyId =
     | "militarist";
 
 /**
- * Six 1–5 axes. They never change the rules; they only shift decision
- * thresholds and the dice the controller rolls.
+ * Five 1–5 axes. They never change the rules; they only shift decision
+ * thresholds and the dice the controller rolls. Vassals read the very same
+ * axes as everyone else — there is no separate subservience dimension.
  */
 export interface AITendencyProfile {
     readonly id: AITendencyId;
@@ -50,30 +51,23 @@ export interface AITendencyProfile {
     readonly alliance: number;
     /** 对长期战争、军备竞赛与冲突升级的接受程度。 */
     readonly warTolerance: number;
-    /**
-     * 1–5, 3 neutral. Only read while the nation is a vassal; the generated
-     * world adds a seeded ±1 jitter per nation and stores it on `Nation`.
-     */
-    readonly subservience: number;
 }
 
 /**
- * Vassal-only thresholds derived from subservience and the contract type.
- * Non-vassals never read these fields.
+ * Vassal-only thresholds derived from the nation's tendency axes and its
+ * contract type. Non-vassals never read these fields.
  */
 export interface VassalTuning {
-    /** Independence change per day; positive drifts toward revolt. */
+    /** Non-negative passive independence growth per day, scaled by the contract cap. */
     readonly independenceDrift: number;
-    /** Daily probability that a manually-freeing vassal spends PP on independence. */
-    readonly raiseIndependenceWill: number;
     /** Share of the nominal resource tribute actually paid (0.8–1.2). */
     readonly tributeCompliance: number;
-    /** Chance an AI vassal answers an overlord's call to arms. */
+    /** Base willingness (0–1) to answer an overlord's call to arms. */
     readonly callToArmsAccept: number;
-    /** 0–1 trust used by upgrade and downgrade decisions. */
-    readonly overlordTrust: number;
-    /** 0–1 weight for defecting to a third party at high independence. */
-    readonly defectRisk: number;
+    /** 0–1 readiness to flip to a stronger attacker when the overlord looks weak. */
+    readonly flipWill: number;
+    /** 0–1 willingness to seek a gentler contract; also gates upgrade acceptance. */
+    readonly upgradeWill: number;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import { battleForecast } from "../battle.ts";
+import { claimedDefenseSites } from "../defense.ts";
 import { canBuild, canBuildProvince, canTrain, economicValue, factoryTotals } from "../economy.ts";
 import { supplyLevel } from "../supply.ts";
 import { armyAt, armyCap, attackTargets, isHostileProvince, nationArmyCount, reachable } from "../rules.ts";
@@ -11,6 +12,9 @@ import type { AIAction, AIController, AITendencyProfile, AITuning } from "./type
 const FUNDS_RESERVE = 150;
 const MAX_TRAINS_PER_TURN = 2;
 const MAX_BUILDS_PER_TURN = 1;
+/** Claimed hostile ground is a preferred assault target; claim guard/assault ground outranks equal-distance front. */
+const CLAIM_ASSAULT_SCORE_BONUS = 1;
+const CLAIM_OBJECTIVE_EDGE = 6;
 
 /**
  * Army-level opponent: commit corps to favorable assaults, push the rest
@@ -35,27 +39,7 @@ export class StandardAI implements AIController {
         const profile = tendencyProfileOf(state.nations[this.nationId]?.tendency);
         const tuning = tendencyTuning(profile);
         const frontDistance = this.frontDistance(state);
-        const inBattle = new Set<number>();
-        for (const battle of state.battles) {
-            inBattle.add(battle.attackerId);
-            if (battle.defenderId !== null) inBattle.add(battle.defenderId);
-        }
-        const armies = [...state.armies.values()].filter(
-            (army) => army.nation === this.nationId && !army.acted && !inBattle.has(army.id),
-        );
-        const committed = new Set<number>();
-
-        actions.push(...this.pickAttacks(state, armies, committed, tuning));
-
-        const reserved = new Set<number>();
-        for (const army of armies) {
-            if (committed.has(army.id)) continue;
-            const destination = this.pickAdvance(state, army, frontDistance, reserved, profile);
-            if (destination === null) continue;
-            reserved.add(destination);
-            committed.add(army.id);
-            actions.push({ kind: "move", armyId: army.id, to: destination });
-        }
+        actions.push(...this.planArmies(state, this.eligibleArmies(state), frontDistance, tuning, profile));
 
         const builds = this.pickBuilds(state, frontDistance, profile);
         actions.push(...builds);
@@ -65,6 +49,106 @@ export class StandardAI implements AIController {
         actions.push({ kind: "factoryProduction", prod: total - idle });
         actions.push(...this.pickTrains(state, frontDistance, profile));
         return actions;
+    }
+
+    /**
+     * Army-only planning, shared with the human player's 托管 mode. The same
+     * assault/advance decisions run for managed corps; economy stays with the
+     * player, so no build/train/production actions are produced here.
+     */
+    takeArmyTurn(state: GameState, only?: (army: Army) => boolean): AIAction[] {
+        if (!state.nations[this.nationId]?.alive) return [];
+        const profile = tendencyProfileOf(state.nations[this.nationId]?.tendency);
+        const tuning = tendencyTuning(profile);
+        const frontDistance = this.frontDistance(state);
+        return this.planArmies(state, this.eligibleArmies(state, only), frontDistance, tuning, profile);
+    }
+
+    private eligibleArmies(state: GameState, only?: (army: Army) => boolean): Army[] {
+        const inBattle = new Set<number>();
+        for (const battle of state.battles) {
+            inBattle.add(battle.attackerId);
+            if (battle.defenderId !== null) inBattle.add(battle.defenderId);
+        }
+        return [...state.armies.values()].filter((army) =>
+            army.nation === this.nationId && !army.acted && !inBattle.has(army.id) && (only?.(army) ?? true));
+    }
+
+    private planArmies(
+        state: GameState,
+        armies: Army[],
+        frontDistance: Int32Array,
+        tuning: AITuning,
+        profile: AITendencyProfile,
+    ): AIAction[] {
+        const claim = this.claimFocus(state);
+        const committed = new Set<number>();
+        const actions: AIAction[] = [];
+        actions.push(...this.pickAttacks(state, armies, committed, tuning, claim.assaultSites));
+
+        const reserved = new Set<number>();
+        for (const army of armies) {
+            if (committed.has(army.id)) continue;
+            const destination = this.pickAdvance(state, army, frontDistance, claim.distance, reserved, profile);
+            if (destination === null) continue;
+            reserved.add(destination);
+            committed.add(army.id);
+            actions.push({ kind: "move", armyId: army.id, to: destination });
+        }
+        return actions;
+    }
+
+    /**
+     * Claim objectives shared by AI nations and the player's 托管 corps:
+     *  - guard our own ground inside states a rival claimed (defensive destination)
+     *  - assault hostile ground inside states we claimed (war still required to attack)
+     * The distance field intentionally mirrors `frontDistance` but is kept separate
+     * so build/train priorities, which also read `frontDistance`, stay unchanged.
+     */
+    private claimFocus(state: GameState): { distance: Int32Array; assaultSites: Set<number> } {
+        const distance = new Int32Array(state.provinces.length).fill(-1);
+        const assaultSites = new Set<number>();
+        const queue: number[] = [];
+        const seed = (site: number): void => {
+            if (!state.terrain.passable[site] || distance[site] >= 0) return;
+            distance[site] = 0;
+            queue.push(site);
+        };
+        for (const claim of state.claims) {
+            const region = state.states[claim.stateId];
+            if (!region) continue;
+            if (claim.nation !== this.nationId) {
+                for (const site of region.provinces) {
+                    if (state.provinces[site].owner === this.nationId) seed(site);
+                }
+            } else {
+                for (const site of region.provinces) {
+                    if (!isHostileProvince(state, this.nationId, site)) continue;
+                    seed(site);
+                    assaultSites.add(site);
+                }
+            }
+        }
+        // Flood across our own territory. A hostile seed hands off to an adjacent
+        // friendly province, so armies stage next to a claimed enemy state.
+        for (let head = 0; head < queue.length; head++) {
+            for (const edge of state.graph.adjacency[queue[head]]) {
+                const next = edge.site;
+                if (!state.terrain.passable[next] || distance[next] >= 0) continue;
+                if (state.provinces[next].owner !== this.nationId) continue;
+                distance[next] = distance[queue[head]] + 1;
+                queue.push(next);
+            }
+        }
+        return { distance, assaultSites };
+    }
+
+    /** Lower is better; claim objectives slightly outrank equal-distance front ground. */
+    private targetScore(frontDistance: Int32Array, claimDistance: Int32Array, site: number): number {
+        const claim = claimDistance[site];
+        if (claim >= 0) return claim * 10 - CLAIM_OBJECTIVE_EDGE;
+        const front = frontDistance[site];
+        return front < 0 ? Infinity : front * 10;
     }
 
     private frontDistance(state: GameState): Int32Array {
@@ -96,6 +180,7 @@ export class StandardAI implements AIController {
         armies: Army[],
         committed: Set<number>,
         tuning: AITuning,
+        assaultSites: Set<number>,
     ): AIAction[] {
         interface Candidate { army: Army; target: number; score: number }
         const candidates: Candidate[] = [];
@@ -108,7 +193,8 @@ export class StandardAI implements AIController {
                 const forecast = battleForecast(state, army, target);
                 const ratio = forecast.attackPower / Math.max(1, forecast.defensePower);
                 if (forecast.defensePower > 0 && ratio < tuning.attackRatio) continue;
-                const score = ratio * (1 + economicValue(state, state.provinces[target]));
+                const claimPriority = assaultSites.has(target) ? 1 + CLAIM_ASSAULT_SCORE_BONUS : 1;
+                const score = ratio * (1 + economicValue(state, state.provinces[target])) * claimPriority;
                 if (!best || score > best.score) best = { army, target, score };
             }
             if (best) candidates.push(best);
@@ -130,26 +216,25 @@ export class StandardAI implements AIController {
         state: GameState,
         army: Army,
         frontDistance: Int32Array,
+        claimDistance: Int32Array,
         reserved: Set<number>,
         profile: AITendencyProfile,
     ): number | null {
         const reach = reachable(state, army);
         const current = army.province;
-        const currentDistance = frontDistance[current];
-        const currentScore = currentDistance < 0 ? Infinity : currentDistance * 10;
+        const currentScore = this.targetScore(frontDistance, claimDistance, current);
         // Defensive nations pull back onto threatened cities harder; aggressive ones advance sooner.
         const holdBonus = 8 + Math.max(0, profile.defense - 3) * 4 - Math.max(0, profile.aggression - 3) * 2;
         let best: number | null = null;
         let bestScore = currentScore;
 
         for (const [site, cost] of reach.cost) {
-            const distance = frontDistance[site];
-            if (distance < 0) continue;
-            if (reserved.has(site)) continue;
+            const objective = this.targetScore(frontDistance, claimDistance, site);
+            if (!Number.isFinite(objective) || reserved.has(site)) continue;
             const occupant = armyAt(state, site);
             if (occupant && occupant.regiments.length + army.regiments.length > REGIMENT_CAP) continue;
 
-            let score = distance * 10 + cost * 0.2 + (occupant ? 3 : 0);
+            let score = objective + cost * 0.2 + (occupant ? 3 : 0);
             // Defend rich ground: fall back onto a threatened city or capital.
             const province = state.provinces[site];
             if ((province.isCity || province.isCapital) && this.threatened(state, site)) score -= holdBonus;
@@ -204,11 +289,16 @@ export class StandardAI implements AIController {
                 break;
             }
         }
-        for (const province of state.provinces) {
+        // A rival's claim is a standing threat: harden those provinces first.
+        const claimedSites = claimedDefenseSites(state, this.nationId);
+        const ownedProvinces = state.provinces
+            .filter((province) => province.owner === this.nationId)
+            .sort((a, b) => Number(claimedSites.has(b.site)) - Number(claimedSites.has(a.site)));
+        for (const province of ownedProvinces) {
             if (actions.length >= maxBuilds) break;
-            if (province.owner !== this.nationId) continue;
+            const claimedFort = claimedSites.has(province.site);
             const frontierFort = defensive && frontDistance[province.site] >= 0 && frontDistance[province.site] <= 2;
-            const kind: ProvinceBuildingKind | null = this.threatened(state, province.site) || frontierFort ? "fort"
+            const kind: ProvinceBuildingKind | null = this.threatened(state, province.site) || claimedFort || frontierFort ? "fort"
                 : frontDistance[province.site] > 0 && supplyLevel(state, province.site) < 0.5 ? "supply" : null;
             if (kind && canBuildProvince(state, this.nationId, province.site, kind) && spend(kind)) {
                 actions.push({ kind: "provinceBuild", site: province.site, buildingKind: kind });
@@ -225,13 +315,15 @@ export class StandardAI implements AIController {
             );
         if (!hasRoom) return [];
 
+        const claimedSites = claimedDefenseSites(state, this.nationId);
         const cities = state.provinces
             .filter((province) => province.owner === this.nationId && province.isCity)
             .map((province) => ({
                 site: province.site,
                 distance: frontDistance[province.site] < 0 ? Infinity : frontDistance[province.site],
+                claimPriority: claimedSites.has(province.site),
             }))
-            .sort((a, b) => a.distance - b.distance);
+            .sort((a, b) => Number(b.claimPriority) - Number(a.claimPriority) || a.distance - b.distance);
 
         // Aggressive nations lean on armour; defensive ones keep an infantry core.
         const artilleryBias = Math.max(0.08, 0.2 + (profile.defense - 3) * 0.02 + (profile.expansion - 3) * 0.01);

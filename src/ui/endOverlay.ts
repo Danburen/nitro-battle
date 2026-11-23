@@ -1,6 +1,7 @@
 import type { GameEngine } from "../game/engine.ts";
 import type { SoundManager } from "../audio/index.ts";
 import { nationProvinceCount } from "../game/rules.ts";
+import { renderGameText, textToken } from "./text.ts";
 
 /** Victory / defeat overlay with campaign statistics. */
 export function showEndOverlay(engine: GameEngine, sound: SoundManager, winner: number): void {
@@ -9,7 +10,7 @@ export function showEndOverlay(engine: GameEngine, sound: SoundManager, winner: 
     const won = winner >= 0;
     sound.play(won ? "victory" : "defeat");
     const stats = [
-        ["历时", `${state.day} 天`],
+        ["历时", renderGameText(textToken("turn", state.day))],
         ["占领", `${state.stats.captures} 省`],
         ["会战", `${state.stats.battles} 次`],
         ["部署", `${state.stats.recruited} 团`],

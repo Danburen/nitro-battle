@@ -18,7 +18,7 @@ export type MapTooltipRequest = { action: "hide"; anchor: HTMLCanvasElement } | 
 export class GlobalTooltip {
     private readonly el = document.querySelector<HTMLElement>("#global-tooltip")!;
     private readonly titleEl = this.el.querySelector<HTMLElement>("strong")!;
-    private readonly bodyEl = this.el.querySelector<HTMLElement>("p")!;
+    private readonly bodyEl = this.el.querySelector<HTMLElement>(".tooltip-body") ?? this.el.querySelector<HTMLElement>("p")!;
     private width = 0;
     private height = 0;
     private viewportWidth = 0;
@@ -111,7 +111,7 @@ export class GlobalTooltip {
     };
 
     private findAnchor(target: EventTarget | null): HTMLElement | null {
-        return target instanceof Element ? target.closest<HTMLElement>("[data-tooltip-title], [data-tooltip-body], [title]") : null;
+        return target instanceof Element ? target.closest<HTMLElement>("[data-tooltip-title], [data-tooltip-body], [data-tooltip-html], [title]") : null;
     }
 
     private show(anchor: HTMLElement | null, refresh = false, source?: { title: string; body: string }): void {
@@ -125,7 +125,11 @@ export class GlobalTooltip {
         }
         const title = source?.title ?? anchor.dataset.tooltipTitle ?? "";
         const body = source?.body ?? anchor.dataset.tooltipBody ?? "";
-        if (!title && !body) {
+        // A raw-HTML body lets a tooltip reuse the exact same markup as a panel.
+        const htmlBody = !source && anchor.dataset.tooltipHtml ? anchor.dataset.tooltipHtml : undefined;
+        if (htmlBody !== undefined) this.el.dataset.rawBody = "";
+        else delete this.el.dataset.rawBody;
+        if (!title && !body && htmlBody === undefined) {
             this.hide();
             return;
         }
@@ -138,7 +142,9 @@ export class GlobalTooltip {
             anchor.setAttribute("aria-describedby", [...ids].join(" "));
         }
         const titleChanged = setGameText(this.titleEl, title);
-        const bodyChanged = setGameText(this.bodyEl, body);
+        const bodyChanged = htmlBody !== undefined
+            ? setGameText(this.bodyEl, htmlBody, "raw")
+            : setGameText(this.bodyEl, body);
         this.el.hidden = false;
         if (moved || refresh || titleChanged || bodyChanged || this.viewportWidth !== window.innerWidth || this.viewportHeight !== window.innerHeight) {
             this.width = this.el.offsetWidth;

@@ -7,7 +7,8 @@ import type { AITendencyId, AITendencyProfile, AITuning, VassalTuning } from "./
  *
  * Behaviour stays rule-driven and seeded-random: a tendency only moves the
  * thresholds and dice weights, never the rules themselves. The five axes are
- * 1–5, so 3 is neutral and 1/5 are the extremes.
+ * 1–5, so 3 is neutral and 1/5 are the extremes. Vassals use these same axes —
+ * no separate temperament is stored on a nation.
  */
 export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = {
     pacifist: {
@@ -19,7 +20,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 1,
         alliance: 4,
         warTolerance: 1,
-        subservience: 4,
     },
     defensive: {
         id: "defensive",
@@ -30,7 +30,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 1,
         alliance: 3,
         warTolerance: 2,
-        subservience: 3,
     },
     bully: {
         id: "bully",
@@ -41,7 +40,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 3,
         alliance: 2,
         warTolerance: 3,
-        subservience: 2,
     },
     opportunist: {
         id: "opportunist",
@@ -52,7 +50,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 4,
         alliance: 2,
         warTolerance: 3,
-        subservience: 2,
     },
     hegemon: {
         id: "hegemon",
@@ -63,7 +60,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 5,
         alliance: 3,
         warTolerance: 4,
-        subservience: 1,
     },
     trader: {
         id: "trader",
@@ -74,7 +70,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 2,
         alliance: 4,
         warTolerance: 2,
-        subservience: 4,
     },
     ideologue: {
         id: "ideologue",
@@ -85,7 +80,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 3,
         alliance: 4,
         warTolerance: 3,
-        subservience: 2,
     },
     isolated: {
         id: "isolated",
@@ -96,7 +90,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 1,
         alliance: 1,
         warTolerance: 2,
-        subservience: 3,
     },
     militarist: {
         id: "militarist",
@@ -107,7 +100,6 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
         expansion: 4,
         alliance: 2,
         warTolerance: 5,
-        subservience: 2,
     },
 };
 
@@ -165,38 +157,46 @@ export function tendencyTuning(profile: AITendencyProfile): AITuning {
         offerMinDays: clamp(5 + tolerance, 2, 10),
         offerPowerRatio: clamp(0.65 - tolerance * 0.05 - defense * 0.02, 0.4, 0.95),
         fortAppetite: clamp((profile.defense - 1) / 4, 0, 1),
-        ...vassalTuning(profile, null, profile.subservience),
+        ...vassalTuning(profile, null),
     };
 }
 
 /**
- * Vassal-only thresholds. `subservience` defaults to the tendency baseline and
- * is overridden by the per-nation seeded value stored on `Nation`.
- *
- * The formulas are the v2 contract: loyal vassals pay more reliably, answer
- * calls to arms and drift toward dependence; proud ones skimp, refuse and
- * eventually defect. Oppressive contracts lock manual independence but keep
- * the drift, which is what makes them unstable rather than inert.
+ * Vassal-only thresholds, derived purely from the nation's five tendency axes
+ * and its contract type. Independence never falls passively: tribute paid to
+ * the overlord pushes it up and the overlord's protection gifts push it down.
+ * Offensive/expansionist nations answer offensive calls more readily, while
+ * defensive ones hang back; bully/opportunist/expansionist nations flip more
+ * easily, especially under an oppressive contract.
  */
-export function vassalTuning(
-    profile: AITendencyProfile,
-    vassalType?: VassalType | null,
-    subservience = profile.subservience,
-): VassalTuning {
-    const s = clamp(subservience, 1, 5);
+export function vassalTuning(profile: AITendencyProfile, vassalType?: VassalType | null): VassalTuning {
+    const offense = profile.aggression - 3 + profile.expansion - 3;
+    const fortify = profile.defense - 3;
+    const sociable = profile.alliance - 3;
+    const endurance = profile.warTolerance - 3;
+    // Independence caps are 100 / 300 / 500, so the drift is scaled by the cap
+    // to keep all three contracts comparably unstable.
+    const capScale = vassalType === "oppressive" ? 5 : vassalType === "cooperative" ? 3 : 1;
+    const flipBonus = vassalType === "oppressive" ? 0.25 : vassalType === "autonomous" ? -0.12 : -0.05;
     return {
-        independenceDrift: (3 - s) * 0.5,
-        raiseIndependenceWill: vassalType === "oppressive" ? 0 : clamp(0.15 * (3 - s), 0, 1),
-        tributeCompliance: clamp(0.7 + 0.1 * s, 0.8, 1.2),
-        callToArmsAccept: clamp(0.3 + 0.15 * s, 0, 1),
-        overlordTrust: clamp(s / 5, 0, 1),
-        defectRisk: clamp((6 - s) / 5, 0, 1),
+        independenceDrift: clamp(
+            (0.12 + 0.04 * Math.max(0, offense) + (vassalType === "oppressive" ? 0.06 : 0)) * capScale,
+            0.05, 2,
+        ),
+        tributeCompliance: clamp(
+            1 - 0.05 * Math.max(0, offense) + 0.04 * Math.max(0, fortify) + 0.03 * sociable, 0.8, 1.2,
+        ),
+        callToArmsAccept: clamp(
+            0.55 + 0.1 * offense + 0.06 * endurance - 0.12 * Math.max(0, fortify) + 0.03 * sociable, 0.05, 1,
+        ),
+        flipWill: clamp(
+            0.18 + 0.1 * offense - 0.1 * Math.max(0, fortify) - 0.06 * sociable + flipBonus, 0, 1,
+        ),
+        upgradeWill: clamp(
+            0.55 + 0.08 * sociable - 0.05 * Math.max(0, profile.aggression - 3)
+            - 0.04 * Math.max(0, profile.expansion - 3) + (vassalType === "oppressive" ? 0.15 : 0), 0, 1,
+        ),
     };
-}
-
-/** Per-nation subservience: seeded jitter around the tendency baseline. */
-export function subservienceFor(profile: AITendencyProfile, rand: LCGRandom): number {
-    return clamp(profile.subservience + rand.nextInt(-1, 2), 1, 5);
 }
 
 export function tendencyTuningOf(id: AITendencyId | undefined): AITuning {
