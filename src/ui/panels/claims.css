@@ -1,0 +1,99 @@
+/* ---- diplomatic claims, preparation and settlement ---- */
+
+.diplo-card {
+    flex: none;
+    min-width: 0;
+}
+
+.diplo-card .diplo-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.diplo-card .status-pill {
+    flex: none;
+}
+
+.diplo-note,
+.diplo-requirement {
+    margin: 4px 0 0;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.diplo-requirement {
+    color: var(--yellow);
+}
+
+.diplo-actions-head {
+    margin-top: 2px;
+    font-size: calc(10px * var(--site-type, 1));
+    letter-spacing: 0.06em;
+    color: var(--site-muted);
+    text-transform: uppercase;
+}
+
+.diplo-button-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.diplo-button-row .btn {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    padding: 3px 7px;
+    font-size: calc(11px * var(--site-type, 1));
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.diplo-button-row [data-action="declare-open"]:disabled {
+    background: var(--site-surface);
+    color: var(--site-muted);
+    border-color: var(--border-muted);
+    opacity: 0.7;
+}
+
+.diplo-divider {
+    height: 1px;
+    margin: 6px 0;
+    background: var(--border-muted);
+}
+
+.diplo-projects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+}
+
+.diplo-project-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid var(--border-muted);
+    border-radius: 999px;
+    background: var(--site-surface);
+    font-size: calc(10px * var(--site-type, 1));
+    color: var(--site-muted);
+    overflow-wrap: anywhere;
+}
+
+.diplo-project-chip.ready {
+    color: var(--green-fg);
+    border-color: color-mix(in srgb, var(--green) 55%, var(--border-muted));
+}
+
+.diplo-project-chip.expired {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+

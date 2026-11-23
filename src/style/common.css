@@ -1,0 +1,151 @@
+:root {
+    --site-bg: #0d1117;
+    --site-fg: #e6edf3;
+    --site-accent: #1f6feb;
+    --site-on-accent: #ffffff;
+    --site-surface: #161b22;
+    --site-muted: #8b949e;
+    --site-border: #30363d;
+    --site-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    --site-radius: 6px;
+    --site-space: 1;
+    --site-type: 1;
+    --site-motion: 1;
+
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --green: #1f883d;
+    --green-hover: #1a7f37;
+    --green-fg: #3fb950;
+    --red: #da3633;
+    --red-fg: #f85149;
+    --yellow: #d29922;
+    --purple: #8957e5;
+    --canvas-inset: #010409;
+    --border-muted: #21262d;
+    --resource-funds: #f2ce73;
+    --resource-manpower: #79d7d0;
+    --resource-industry: #f4b183;
+    --resource-politics: #c6a7f5;
+    --resource-construction: #90c5f7;
+    --text-keyword: #c5d1df;
+    --relation-friendly: #7ee787;
+    --relation-neutral: #e3b341;
+    --relation-hostile: #ff7b72;
+}
+
+.game-text { font-weight: 600; }
+.game-text--funds { color: var(--resource-funds); }
+.game-text--manpower { color: var(--resource-manpower); }
+.game-text--industry { color: var(--resource-industry); }
+.game-text--politics { color: var(--resource-politics); }
+.game-text--construction { color: var(--resource-construction); }
+.game-text--keyword { color: var(--text-keyword); }
+.game-text--friendly { color: var(--relation-friendly); }
+.game-text--neutral { color: var(--relation-neutral); }
+.game-text--hostile { color: var(--relation-hostile); }
+.game-text--pos { color: #3fb950; }
+.game-text--neg { color: #f85149; }
+.game-text--note { color: var(--site-fg); }
+.game-text--zero { color: var(--site-fg); }
+.game-text--chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--pc, var(--site-muted)) 55%, transparent);
+    background: color-mix(in srgb, var(--pc, var(--site-muted)) 18%, transparent);
+    color: var(--site-text);
+    font-size: 0.92em;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.game-text--chip::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--pc, var(--site-muted));
+}
+.game-text-amount { display: inline-flex; align-items: center; gap: 0.18em; white-space: nowrap; }
+
+/* External monochrome icons: the URL comes from an inline --icon custom property so it
+   resolves against the document (browser + Electron), and currentColor supplies the ink. */
+.icon-glyph,
+.resource-icon {
+    display: inline-block;
+    flex: none;
+    background: currentColor;
+    -webkit-mask-image: var(--icon);
+    mask-image: var(--icon);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+.resource-icon { width: 1em; height: 1em; vertical-align: -0.12em; }
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    background: var(--site-bg);
+    color: var(--site-fg);
+    font-family: var(--site-font);
+    font-size: calc(14px * var(--site-type, 1));
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    height: 100dvh;
+}
+
+/* 桌面端（Electron）：禁掉滚动回弹与整页拖拽选择，输入框仍可选。 */
+html.is-desktop body {
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+html.is-desktop input,
+html.is-desktop textarea {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+button {
+    font-family: inherit;
+}
+
+/* ---- scrollbars ---- */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--site-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--site-border);
+    border-radius: 999px;
+    border: 2px solid var(--site-bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #484f58;
+}
+

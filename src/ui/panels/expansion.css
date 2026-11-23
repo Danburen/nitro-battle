@@ -1,0 +1,165 @@
+/* ---- claims management (expansion tab) ---- */
+
+.panel-head .objective {
+    margin-left: auto;
+}
+
+.diplo-overview-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: calc(6px * var(--site-space, 1)) 0;
+}
+
+.diplo-swatches {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 2px 0 4px;
+}
+
+/* Nation tab: a tiny flag on a nation-tinted card, not a flat colour chip. */
+.diplo-swatch {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+    border-radius: 7px;
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--pc, var(--site-muted)) 34%, #0b1016),
+        color-mix(in srgb, var(--pc, var(--site-muted)) 14%, #0b1016));
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.diplo-swatch .nation-flag {
+    pointer-events: none;
+}
+
+.diplo-kv {
+    margin: calc(7px * var(--site-space, 1)) 0 calc(6px * var(--site-space, 1));
+}
+
+.diplo-swatch:hover {
+    transform: translateY(-1px) scale(1.06);
+}
+
+.diplo-swatch:focus-visible {
+    outline: 2px solid var(--site-accent);
+    outline-offset: 2px;
+}
+
+.diplo-swatch.selected {
+    box-shadow: 0 0 0 2px var(--site-bg), 0 0 0 4px var(--pc, var(--site-accent));
+}
+
+.diplo-swatch.war {
+    border-color: var(--red);
+    box-shadow: 0 0 0 1px var(--red);
+}
+
+.diplo-swatch.war.selected {
+    box-shadow: 0 0 0 2px var(--site-bg), 0 0 0 4px var(--red);
+}
+
+.diplo-swatch.truce {
+    border-color: var(--yellow);
+}
+
+.diplo-swatch.dead {
+    opacity: 0.35;
+    filter: grayscale(0.8);
+}
+
+/* AI temperament: a plain label plus the shared [i] tooltip. */
+.tendency-name {
+    color: var(--site-fg);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.kv dd .tendency-name {
+    margin-right: 2px;
+}
+
+.btn-danger {
+    color: #f85149;
+    border-color: color-mix(in srgb, #f85149 55%, var(--border-muted));
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, #f85149 16%, transparent);
+    border-color: #f85149;
+    color: #ff7b72;
+}
+
+.claim-focused {
+    border: 1px solid color-mix(in srgb, var(--site-accent) 55%, var(--border-muted));
+    border-radius: var(--site-radius);
+    padding: calc(7px * var(--site-space, 1));
+    background: color-mix(in srgb, var(--site-accent) 7%, var(--site-bg));
+}
+
+.claim-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: calc(5px * var(--site-space, 1)) calc(6px * var(--site-space, 1));
+    border: 1px solid var(--border-muted);
+    border-radius: var(--site-radius);
+    background: var(--site-bg);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.claim-row:hover {
+    border-color: color-mix(in srgb, var(--site-accent) 45%, var(--border-muted));
+    background: var(--site-surface);
+}
+
+.claim-row:focus-visible {
+    outline: 2px solid var(--site-accent);
+    outline-offset: 1px;
+}
+
+.claim-row.focused {
+    border-color: color-mix(in srgb, var(--site-accent) 70%, transparent);
+    background: color-mix(in srgb, var(--site-accent) 10%, var(--site-bg));
+}
+
+.claim-name {
+    font-weight: 600;
+    font-size: calc(11px * var(--site-type, 1));
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.claim-owner {
+    flex: 1;
+    min-width: 60px;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    overflow-wrap: anywhere;
+}
+
+.claim-badge {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-muted);
+    color: var(--site-muted);
+    font-size: calc(9px * var(--site-type, 1));
+}
+
+.claim-row .btn {
+    flex: none;
+    padding: 2px 8px;
+    font-size: calc(10px * var(--site-type, 1));
+}
+

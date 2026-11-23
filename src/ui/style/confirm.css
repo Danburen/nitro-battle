@@ -1,0 +1,95 @@
+/* ---- shared confirm dialog & map legend ---- */
+
+.confirm-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(1, 4, 9, 0.6);
+    pointer-events: auto;
+}
+
+.confirm-card {
+    width: 320px;
+    max-width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #7e7057;
+    border-top: 2px solid #c6ad7c;
+    border-radius: var(--site-radius);
+    background: var(--site-surface);
+    box-shadow: 0 14px 40px #000a;
+}
+
+.confirm-head {
+    display: flex;
+    align-items: center;
+    font-size: calc(13px * var(--site-type, 1));
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.confirm-body {
+    margin: 8px 0 0;
+    font-size: calc(11px * var(--site-type, 1));
+    line-height: 1.7;
+    color: var(--site-muted);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.confirm-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.confirm-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.confirm-choice:hover {
+    border-color: #7e7057;
+    background: #ffffff0a;
+}
+
+.confirm-choice input {
+    margin: 3px 0 0;
+    accent-color: #c6ad7c;
+}
+
+.confirm-choice-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.confirm-choice-label {
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-fg);
+}
+
+.confirm-choice-hint {
+    margin-top: 2px;
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.5;
+    color: var(--site-muted);
+    overflow-wrap: anywhere;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+

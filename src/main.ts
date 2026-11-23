@@ -1,4 +1,4 @@
-import "./style.css";
+import "./style/index.css";
 import { GameEngine } from "./game/engine.ts";
 import type { EngineEvent, GameSettings, GameState, MapSizeId, TerrainTuning } from "./game/types.ts";
 import { generateWorld, buildWorld } from "./game/generator/index.ts";

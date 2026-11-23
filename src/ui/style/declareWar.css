@@ -1,0 +1,100 @@
+/* ---- declare-war popover ---- */
+
+.declare-pop {
+    position: fixed;
+    z-index: 60;
+    width: 236px;
+    max-width: calc(100vw - 16px);
+    padding: 9px;
+    border: 1px solid color-mix(in srgb, var(--red) 45%, var(--border-muted));
+    border-radius: var(--site-radius);
+    background: var(--site-surface);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.declare-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: calc(12px * var(--site-type, 1));
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.declare-x {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--site-muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.declare-x:hover {
+    background: color-mix(in srgb, var(--red) 25%, transparent);
+    color: var(--site-fg);
+}
+
+.declare-hint {
+    margin: 6px 0 4px;
+    font-size: calc(10px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.declare-options {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 180px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.declare-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-muted);
+    border-radius: var(--site-radius);
+    background: var(--site-bg);
+    color: var(--site-fg);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.declare-option b {
+    font-size: calc(11px * var(--site-type, 1));
+    overflow-wrap: anywhere;
+}
+
+.declare-option span {
+    font-size: calc(10px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.declare-option:hover {
+    border-color: var(--site-accent);
+}
+
+.declare-option.picked {
+    border-color: var(--red);
+    background: color-mix(in srgb, var(--red) 14%, var(--site-bg));
+}
+
+.declare-confirm {
+    width: 100%;
+    margin-top: 8px;
+    padding: 5px 8px;
+    font-size: calc(11px * var(--site-type, 1));
+}
+

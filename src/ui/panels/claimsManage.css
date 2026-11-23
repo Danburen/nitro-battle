@@ -1,0 +1,54 @@
+/* ---- claim management mode ---- */
+
+.claim-manage-banner {
+    position: absolute;
+    top: calc(var(--hud-top, 54px) + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 26;
+    padding: 5px 14px;
+    border: 1px solid #d5b67466;
+    border-radius: 999px;
+    background: rgba(13, 17, 23, 0.55);
+    color: #e3b341;
+    font-size: calc(10px * var(--site-type, 1));
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+.claim-manage-banner.hidden {
+    display: none;
+}
+
+.hud.claim-managing .hud-feed {
+    top: calc(var(--hud-top, 54px) + 36px);
+}
+
+.claim-manage-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: calc(6px * var(--site-space, 1));
+}
+
+.claim-manage-hint {
+    flex: 1;
+    min-width: 120px;
+    color: var(--site-muted);
+    font-size: calc(9px * var(--site-type, 1));
+    line-height: 1.5;
+}
+
+.claim-row.pending {
+    border-style: dashed;
+    border-color: #d5b67488;
+    background: color-mix(in srgb, #d5b674 8%, var(--site-bg));
+}
+
+.claim-row.pending .claim-badge {
+    color: #d5b674;
+    border-color: #d5b67488;
+}

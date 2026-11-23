@@ -1,0 +1,27 @@
+/* ---- nations ---- */
+
+.objective {
+    font-size: calc(11px * var(--site-type, 1));
+    font-family: var(--mono);
+    color: var(--site-muted);
+}
+
+.objective-text {
+    margin: 0 0 calc(8px * var(--site-space, 1));
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.nation-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--pc, var(--site-muted));
+}
+
+.nation-name {
+    font-weight: 600;
+    white-space: nowrap;
+}
+

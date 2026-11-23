@@ -1,0 +1,92 @@
+/* ---- responsive ---- */
+
+@media (max-width: 1100px) {
+    .hud-tl,
+    .hud-tr {
+        width: 300px;
+    }
+
+    .hud-tl {
+        width: 340px;
+    }
+
+    .hud-bl {
+        width: 340px;
+    }
+
+    .hud-bc {
+        right: calc(12px + 172px + 12px);
+        left: calc(12px + 340px + 12px);
+        transform: none;
+        justify-content: center;
+    }
+
+    .mode-bar {
+        max-width: 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .hint {
+        display: none;
+    }
+}
+
+@media (max-width: 820px) {
+    .hud-tl,
+    .hud-tr {
+        width: 272px;
+    }
+
+    .deploy-workbench {
+        grid-template-columns: 1fr;
+    }
+
+    .hud-actions {
+        flex-wrap: wrap;
+    }
+
+    .hud-bl {
+        bottom: 84px;
+        width: 300px;
+        max-height: 52dvh;
+    }
+
+    .hud-bc {
+        left: 12px;
+    }
+
+    .hud-status {
+        gap: 6px;
+    }
+
+    .btn {
+        padding: 5px 10px;
+    }
+
+    #btn-endturn kbd {
+        display: none;
+    }
+
+    .guide-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-text span {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}

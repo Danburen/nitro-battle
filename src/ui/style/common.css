@@ -1,0 +1,96 @@
+/* ---- buttons ---- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 16px;
+    font-size: calc(14px * var(--site-type, 1));
+    font-weight: 500;
+    color: var(--site-fg);
+    background: #21262d;
+    border: 1px solid var(--site-border);
+    border-radius: var(--site-radius);
+    cursor: pointer;
+    transition: background calc(80ms * var(--site-motion, 1)) ease-out,
+        border-color calc(80ms * var(--site-motion, 1)) ease-out,
+        transform calc(80ms * var(--site-motion, 1)) ease-out;
+    white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+    background: #30363d;
+    border-color: #8b949e;
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--site-accent);
+    outline-offset: 1px;
+}
+
+.btn-primary {
+    background: var(--green);
+    border-color: rgba(240, 246, 252, 0.1);
+    color: #ffffff;
+    box-shadow: 0 1px 0 rgba(1, 4, 9, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--green-hover);
+    border-color: rgba(240, 246, 252, 0.1);
+}
+
+.btn-outline {
+    background: transparent;
+    color: #79c0ff;
+}
+
+.btn-outline:hover:not(:disabled) {
+    background: var(--site-accent);
+    color: var(--site-on-accent);
+    border-color: var(--site-accent);
+}
+
+.btn-icon {
+    padding: 5px 8px;
+    color: var(--site-muted);
+}
+
+.btn-icon:hover:not(:disabled) {
+    color: var(--site-fg);
+}
+
+.btn-icon.muted {
+    color: var(--red-fg);
+}
+
+.btn-lg {
+    padding: 9px 24px;
+    font-size: calc(15px * var(--site-type, 1));
+    font-weight: 600;
+}
+
+.btn-block {
+    width: 100%;
+}
+
+kbd {
+    font-family: var(--mono);
+    font-size: calc(11px * var(--site-type, 1));
+    padding: 0 5px;
+    border: 1px solid rgba(240, 246, 252, 0.25);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: rgba(1, 4, 9, 0.25);
+}
+

@@ -1,0 +1,148 @@
+.detail-close {
+    margin-left: auto;
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: var(--site-muted);
+    font-size: calc(12px * var(--site-type, 1));
+    cursor: pointer;
+}
+
+.detail-close:hover {
+    color: var(--site-fg);
+}
+
+.detail-org {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-muted);
+    border-radius: var(--site-radius);
+    background: rgba(88, 166, 255, 0.05);
+}
+
+.detail-org-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+    font-size: calc(10px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.detail-org-info b {
+    font-family: var(--mono);
+    font-size: calc(12px * var(--site-type, 1));
+    color: var(--site-fg);
+}
+
+.detail-org .army-meta {
+    text-align: right;
+    line-height: 1.5;
+}
+
+.detail-loc {
+    margin-top: 6px;
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.reg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+}
+
+.reg-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-muted);
+    border-radius: 6px;
+    background: var(--site-bg);
+    font-size: calc(11px * var(--site-type, 1));
+    cursor: pointer;
+}
+
+.reg-row:hover {
+    border-color: var(--site-accent);
+}
+
+.reg-row input {
+    margin: 0;
+    accent-color: var(--site-accent);
+    flex: none;
+}
+
+.reg-glyph {
+    width: 14px;
+    text-align: center;
+    flex: none;
+}
+
+.reg-name {
+    width: 30px;
+    flex: none;
+}
+
+.reg-row .reg-hp {
+    flex: 1;
+    width: auto;
+    min-width: 20px;
+}
+
+.reg-hp-num {
+    font-family: var(--mono);
+    font-size: calc(9px * var(--site-type, 1));
+    color: var(--site-muted);
+    width: 14px;
+    text-align: right;
+    flex: none;
+}
+
+.reg-stats {
+    font-family: var(--mono);
+    font-size: calc(9px * var(--site-type, 1));
+    color: var(--site-muted);
+    white-space: nowrap;
+    flex: none;
+}
+
+.reg-org {
+    font-family: var(--mono);
+    font-size: calc(10px * var(--site-type, 1));
+    color: #58a6ff;
+    width: 22px;
+    text-align: right;
+    flex: none;
+}
+
+.split-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.split-row .micro-hint {
+    margin: 0;
+}
+
+.army-presence {
+    margin-top: calc(8px * var(--site-space, 1));
+    padding: 5px 8px;
+    border: 1px dashed var(--border-muted);
+    border-radius: var(--site-radius);
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.army-presence span {
+    color: var(--pc, var(--site-fg));
+    font-weight: 600;
+}
+

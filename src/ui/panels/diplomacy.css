@@ -1,0 +1,50 @@
+/* ---- diplomacy ---- */
+
+.status-pill.war {
+    background: var(--red);
+}
+
+.status-pill.peace {
+    background: var(--green);
+}
+
+.diplo-body {
+    display: flex;
+    flex-direction: column;
+    gap: calc(6px * var(--site-space, 1));
+    padding-top: calc(8px * var(--site-space, 1));
+    padding-bottom: calc(8px * var(--site-space, 1));
+}
+
+.diplo-row {
+    border: 1px solid var(--border-muted);
+    border-radius: var(--site-radius);
+    padding: calc(7px * var(--site-space, 1));
+    background: var(--site-bg);
+}
+
+.diplo-row.offer {
+    border-color: color-mix(in srgb, var(--site-accent) 55%, transparent);
+    background: color-mix(in srgb, var(--site-accent) 8%, var(--site-bg));
+}
+
+.diplo-row.dead {
+    opacity: 0.55;
+}
+
+.diplo-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: calc(12px * var(--site-type, 1));
+}
+
+.diplo-name {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.diplo-head .status-pill {
+    margin-left: auto;
+}
+

@@ -1,0 +1,233 @@
+/* ---- corner docks ---- */
+
+.dock {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px 4px 0;
+    background: color-mix(in srgb, var(--site-surface) 92%, transparent);
+    border: 1px solid var(--site-border);
+    border-bottom: none;
+    border-radius: var(--site-radius) var(--site-radius) 0 0;
+    align-self: flex-start;
+    backdrop-filter: blur(6px);
+}
+
+.tab {
+    padding: 4px 16px 6px;
+    border: none;
+    border-radius: 4px 4px 0 0;
+    background: transparent;
+    color: var(--site-muted);
+    font-size: calc(12px * var(--site-type, 1));
+    font-weight: 600;
+    cursor: pointer;
+    transition: background calc(80ms * var(--site-motion, 1)) ease-out,
+        color calc(80ms * var(--site-motion, 1)) ease-out;
+}
+
+.tab:hover {
+    color: var(--site-fg);
+    background: #21262d;
+}
+
+.tab.active {
+    color: #ffffff;
+    background: var(--site-accent);
+}
+
+.dock-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-radius: 0 var(--site-radius) var(--site-radius) var(--site-radius);
+    box-shadow: 0 8px 28px rgba(1, 4, 9, 0.45);
+    backdrop-filter: blur(6px);
+}
+
+.dock-panel.hidden {
+    display: none;
+}
+
+.dock-panel .panel-body {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.hud-tl .dock-panel {
+    max-height: calc(60dvh - 120px);
+}
+
+.hud-tr .dock-panel {
+    max-height: 60dvh;
+}
+
+.dock-toggle {
+    padding: 4px 9px 6px;
+    font-weight: 700;
+    color: var(--site-fg);
+}
+
+.hud.dock-collapsed .hud-tl .tab:not(.dock-toggle) {
+    display: none;
+}
+
+.hud.dock-collapsed .hud-tl .dock-panel {
+    display: none;
+}
+
+/* Command mode: an army is selected, so the global dock and province panel
+   yield the left side to the detail window. */
+.hud.command-mode .hud-tl,
+.hud.command-mode .hud-bl {
+    display: none;
+}
+
+.army-detail {
+    position: absolute;
+    top: 54px;
+    left: 12px;
+    width: 300px;
+    max-height: calc(100dvh - 170px);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    pointer-events: auto;
+    box-shadow: 0 8px 28px rgba(1, 4, 9, 0.45);
+    backdrop-filter: blur(6px);
+}
+
+.army-detail.hidden {
+    display: none;
+}
+
+.army-detail .panel-body {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* Pre-game inspection: map + one nation panel, all normal HUD hidden. */
+.brief-panel {
+    position: absolute;
+    top: 54px;
+    left: 12px;
+    width: 320px;
+    max-height: calc(100dvh - 66px);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    pointer-events: auto;
+    box-shadow: 0 8px 28px rgba(1, 4, 9, 0.45);
+    backdrop-filter: blur(6px);
+}
+
+.brief-panel.hidden {
+    display: none;
+}
+
+.brief-panel .panel-body {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.brief-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: calc(14px * var(--site-type, 1));
+    font-weight: 700;
+}
+
+.hud.briefing-mode .hud-tl,
+.hud.briefing-mode .hud-tr,
+.hud.briefing-mode .hud-bl,
+.hud.briefing-mode .hud-feed,
+.hud.briefing-mode .map-layers,
+.hud.briefing-mode .hud-br,
+.hud.briefing-mode .army-detail,
+.hud.briefing-mode .mode-bar,
+.hud.briefing-mode .factory-allocation {
+    display: none;
+}
+
+.game-shell.briefing-mode .hint {
+    display: none;
+}
+
+/* Focus/edit mode (construction & claims authoring): hide the combat HUD. */
+.hud.focus-mode .hud-feed,
+.hud.focus-mode .hud-tr {
+    display: none;
+}
+
+.hud-feed {
+    position: absolute;
+    top: 54px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(580px, 46vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+    z-index: 25;
+}
+
+/* Center the feed in the gap between the detail window and the army list. */
+.hud.command-mode .hud-feed {
+    left: calc((100vw - 8px) / 2);
+    width: clamp(200px, calc(100vw - 680px), 560px);
+}
+
+.hud-bl .dock-panel {
+    flex: 0 1 auto;
+}
+
+#intel-panel {
+    max-height: 40dvh;
+}
+
+.mode-bar {
+    display: flex;
+    align-items: center;
+    gap: calc(16px * var(--site-space, 1));
+    padding: 8px 16px;
+    background: color-mix(in srgb, var(--site-surface) 94%, transparent);
+    border: 1px solid var(--site-border);
+    border-radius: 999px;
+    box-shadow: 0 8px 28px rgba(1, 4, 9, 0.5);
+    backdrop-filter: blur(6px);
+}
+
+.mode-bar.hidden {
+    display: none;
+}
+
+.mode-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.35;
+}
+
+.mode-text b {
+    font-size: calc(12px * var(--site-type, 1));
+}
+
+.mode-text span {
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.mode-actions {
+    display: flex;
+    gap: 6px;
+}
+
+

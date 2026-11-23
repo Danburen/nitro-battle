@@ -1,0 +1,57 @@
+/* ---- log ---- */
+
+.log-body {
+    padding: 0;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.log-entry {
+    display: flex;
+    gap: 8px;
+    padding: calc(6px * var(--site-space, 1)) calc(12px * var(--site-space, 1));
+    border-bottom: 1px solid var(--border-muted);
+    border-left: 2px solid transparent;
+    font-size: calc(12px * var(--site-type, 1));
+    line-height: 1.45;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-day {
+    flex: none;
+    font-family: var(--mono);
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+    padding-top: 1px;
+}
+
+.log-entry.tone-combat {
+    border-left-color: var(--red-fg);
+}
+
+.log-entry.tone-capture {
+    border-left-color: var(--green-fg);
+}
+
+.log-entry.tone-econ {
+    border-left-color: var(--yellow);
+}
+
+.log-entry.tone-diplo {
+    border-left-color: var(--site-accent);
+}
+
+.log-entry.tone-system {
+    border-left-color: var(--purple);
+    background: color-mix(in srgb, var(--purple) 6%, transparent);
+}
+

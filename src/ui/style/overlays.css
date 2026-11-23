@@ -1,0 +1,275 @@
+/* ---- overlays ---- */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(1, 4, 9, 0.78);
+    backdrop-filter: blur(5px);
+    padding: calc(16px * var(--site-space, 1));
+    overflow-y: auto;
+    transition: opacity calc(200ms * var(--site-motion, 1)) ease-out;
+}
+
+.overlay.hidden {
+    display: none;
+}
+
+.overlay-top {
+    z-index: 70;
+}
+
+.gen-card {
+    width: min(380px, 100%);
+}
+
+.gen-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: calc(28px * var(--site-space, 1));
+    text-align: center;
+}
+
+.gen-inner h2 {
+    margin: 0;
+    font-size: calc(18px * var(--site-type, 1));
+}
+
+.gen-spinner {
+    width: 38px;
+    height: 38px;
+    border: 3px solid color-mix(in srgb, var(--site-accent) 25%, transparent);
+    border-top-color: var(--site-accent);
+    border-radius: 50%;
+    animation: gen-spin 0.9s linear infinite;
+}
+
+@keyframes gen-spin {
+    to { transform: rotate(360deg); }
+}
+
+.gen-progress {
+    width: 100%;
+    height: 8px;
+    overflow: hidden;
+    border: 1px solid var(--site-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--site-bg) 70%, var(--site-surface));
+}
+
+.gen-progress > i {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #1f6feb, #58a6ff);
+    transition: width 180ms ease-out;
+}
+
+.gen-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+}
+
+.gen-percent {
+    flex: none;
+    font-family: var(--mono);
+    font-size: calc(11px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.picker-card {
+    width: min(620px, 100%);
+}
+
+.picker-title {
+    margin: 0 0 4px;
+}
+
+.nation-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 6px;
+    max-height: 44dvh;
+    overflow-y: auto;
+    margin: calc(12px * var(--site-space, 1)) 0;
+    padding: 2px;
+}
+
+.nation-option {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 9px;
+    border: 1px solid var(--site-border);
+    border-left: 3px solid var(--nc, var(--site-accent));
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--site-surface) 92%, transparent);
+    color: var(--site-fg);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.nation-option:hover,
+.nation-option:focus-visible {
+    background: color-mix(in srgb, var(--nc, var(--site-accent)) 16%, var(--site-surface));
+    border-color: var(--nc, var(--site-accent));
+    outline: none;
+}
+
+.nation-option-name {
+    overflow: hidden;
+    font-size: calc(12px * var(--site-type, 1));
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.nation-swatch {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--nc, var(--site-accent));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--nc, var(--site-accent)) 30%, transparent);
+}
+
+.nation-flag {
+    display: inline-block;
+    flex: none;
+    width: var(--flag-w, 24px);
+    height: var(--flag-h, 14px);
+    position: relative;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--flag-bg, #444);
+    vertical-align: middle;
+    box-shadow: 0 0 0 1px rgba(1, 4, 9, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.nation-flag i {
+    position: absolute;
+    inset: 0;
+    display: block;
+    background: var(--flag-fg, #fff);
+    -webkit-mask-image: var(--flag-emblem);
+    mask-image: var(--flag-emblem);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+/* A shared background colour is broken only by the emblem and this small vassal corner mark. */
+.nation-flag.is-vassal::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 5px;
+    height: 5px;
+    background: var(--flag-fg, #fff);
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    opacity: 0.9;
+    pointer-events: none;
+}
+
+/* Industry: one compact bar plus the raw factory count, no tier wording. */
+.industry-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.industry-meter {
+    display: inline-block;
+    width: 62px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--site-bg);
+    border: 1px solid var(--border-muted);
+    overflow: hidden;
+}
+
+.industry-meter i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--site-accent);
+}
+
+.industry-line b {
+    font-family: var(--mono);
+    font-size: calc(13px * var(--site-type, 1));
+}
+
+.kv-note {
+    color: var(--site-muted);
+    font-size: calc(11px * var(--site-type, 1));
+}
+
+.nation-option-meta {
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.5;
+}
+
+.start-card {
+    width: min(560px, 100%);
+    background: var(--site-surface);
+    border: 1px solid var(--site-border);
+    border-radius: calc(var(--site-radius) * 2);
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(1, 4, 9, 0.6);
+    margin: auto;
+}
+
+.start-strip {
+    height: 4px;
+    background: linear-gradient(90deg, #1f6feb, #8957e5 45%, #da3633 75%, #d29922);
+}
+
+.start-inner {
+    padding: calc(24px * var(--site-space, 1));
+}
+
+.start-brand {
+    display: flex;
+    align-items: center;
+    gap: calc(14px * var(--site-space, 1));
+    margin-bottom: calc(20px * var(--site-space, 1));
+}
+
+.start-brand h1 {
+    margin: 0;
+    font-size: calc(28px * var(--site-type, 1));
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.start-sub {
+    margin: 2px 0 0;
+    font-size: calc(12px * var(--site-type, 1));
+    color: var(--site-muted);
+}
+
+.start-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(12px * var(--site-space, 1));
+    margin-bottom: calc(16px * var(--site-space, 1));
+}
+

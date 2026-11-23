@@ -3,6 +3,7 @@ type TextFormat = "html" | "plain" | "raw";
 interface TextTerm {
     readonly label: string;
     readonly tone: string;
+    /** Name of the external SVG in `public/assets/icons/`, not inline markup. */
     readonly icon?: string;
 }
 
@@ -15,11 +16,11 @@ export const RELATION_COLORS = {
 export type RelationTone = keyof typeof RELATION_COLORS;
 
 export const TEXT_TERMS = {
-    funds: { label: "财政", tone: "funds", icon: '<path d="M12 2v20m5-16H9a4 4 0 0 0 0 8h6a4 4 0 0 1 0 8H6"/>' },
-    manpower: { label: "人力", tone: "manpower", icon: '<circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/>' },
-    industry: { label: "工业", tone: "industry", icon: '<path d="M3 21V10l6 3V8l6 3V3h5l1 18H3Zm4-4h1m4 0h1m4 0h1"/>' },
-    politics: { label: "政治点", tone: "politics", icon: '<path d="m2 8 10-5 10 5H2Zm2 13h16M6 11v7m6-7v7m6-7v7"/>' },
-    construction: { label: "建造点", tone: "construction", icon: '<path d="m5 3 16 16-3 3L2 6l3-3Zm0 5 3-3m1 7 3-3m1 7 3-3"/>' },
+    funds: { label: "财政", tone: "funds", icon: "funds" },
+    manpower: { label: "人力", tone: "manpower", icon: "manpower" },
+    industry: { label: "工业", tone: "industry", icon: "industry" },
+    politics: { label: "政治点", tone: "politics", icon: "politics" },
+    construction: { label: "建造点", tone: "construction", icon: "construction" },
     factory: { label: "工厂", tone: "industry" },
     farm: { label: "农场", tone: "funds" },
     infrastructure: { label: "基础设施", tone: "construction" },
@@ -29,7 +30,7 @@ export const TEXT_TERMS = {
     production: { label: "生产", tone: "industry" },
     idle: { label: "闲置", tone: "construction" },
     garrison: { label: "驻军", tone: "keyword" },
-    turn: { label: "回合", tone: "keyword", icon: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/>' },
+    turn: { label: "回合", tone: "keyword", icon: "turn" },
     friendly: { label: "友方", tone: "friendly" },
     neutral: { label: "中立", tone: "neutral" },
     hostile: { label: "敌方", tone: "hostile" },
@@ -50,6 +51,15 @@ export function escapeHtml(value: string): string {
 
 export function escapeGameText(value: string): string {
     return value.replace(/[\\[]/g, "\\$&");
+}
+
+/**
+ * External icon reference: the mask URL is injected inline, so it resolves
+ * against the document (browser + Electron) just like the flag emblems do.
+ * SVG geometry lives in `public/assets/icons/`, never in UI source.
+ */
+export function iconMaskStyle(name: string): string {
+    return `style="--icon:url('./assets/icons/${name}.svg')"`;
 }
 
 export function textToken(key: TextKey, value?: number | string): string {
@@ -103,7 +113,7 @@ function renderToken(body: string, format: TextFormat): string | null {
     if (amount === undefined) return `<span class="game-text game-text--${term.tone}">${plain}</span>`;
     const signed = `<span class="${signClass(match[2]!)}">${amount}</span>`;
     if (!term.icon) return `<span class="game-text game-text--${term.tone}">${signed} ${term.label}</span>`;
-    return `<span class="game-text game-text--${term.tone} game-text-amount" role="img" aria-label="${plain}"><span aria-hidden="true" class="${signClass(match[2]!)}">${amount}</span><svg class="resource-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${term.icon}</svg></span>`;
+    return `<span class="game-text game-text--${term.tone} game-text-amount" role="img" aria-label="${plain}"><span aria-hidden="true" class="${signClass(match[2]!)}">${amount}</span><span class="resource-icon" aria-hidden="true" ${iconMaskStyle(term.icon)}></span></span>`;
 }
 
 export function renderGameText(source: string, format: TextFormat = "html"): string {

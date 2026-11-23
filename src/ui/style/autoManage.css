@@ -1,0 +1,117 @@
+/* ---- Army trusteeship (托管): bare cog icons, green when active, greyed lock ---- */
+
+/* Both cogs are plain clickable icons - no box, border or fill of their own. */
+.auto-manage-gear,
+.army-auto-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 17px;
+    height: 17px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #6e7681;
+    line-height: 0;
+    cursor: pointer;
+    transition: color 0.12s ease;
+}
+
+.army-auto-gear {
+    width: 15px;
+    height: 15px;
+}
+
+.auto-manage-gear:hover,
+.auto-manage-gear:focus-visible,
+.army-auto-gear:hover,
+.army-auto-gear:focus-visible {
+    color: var(--site-fg);
+    outline: none;
+}
+
+/* Active = green cog, shared by the global switch and per-corps gears. */
+.auto-manage-gear.on,
+.army-auto-gear.on {
+    color: #3fb950;
+}
+
+.gear-glyph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: 50% 50%;
+}
+
+.auto-manage-gear.on .gear-glyph,
+.army-auto-gear.on .gear-glyph {
+    animation: auto-gear-spin 3s linear infinite;
+}
+
+@keyframes auto-gear-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auto-manage-gear.on .gear-glyph,
+    .army-auto-gear.on .gear-glyph { animation: none; }
+}
+
+.army-row-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.army-row-wrap > .army-row {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Greyed + unusable while managed: the status pill AND its cog stay legible, only
+   the surrounding row content fades. Master greys the body; partial only the row. */
+.army-body.auto-locked .army-line > :not(.status-pill):not(.army-auto-gear),
+.army-body.auto-locked .army-kinds,
+.army-body.auto-locked .merge-bar,
+.army-body.auto-locked .micro-hint,
+.army-row.auto-locked .army-line > :not(.status-pill):not(.army-auto-gear),
+.army-row.auto-locked .army-kinds {
+    opacity: 0.5;
+    filter: grayscale(1);
+}
+
+.army-body.auto-locked .army-row-btn,
+.army-row.auto-locked {
+    cursor: not-allowed;
+}
+
+/* "托管" pill in the army detail header. */
+.status-pill.auto {
+    background: #2ea043;
+}
+
+.auto-manage-note {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, #d29922 45%, var(--border-muted));
+    border-radius: var(--site-radius);
+    background: color-mix(in srgb, #d29922 8%, var(--site-bg));
+}
+
+.auto-manage-note b {
+    color: #d29922;
+}
+
+.auto-manage-note span {
+    color: var(--site-muted);
+    font-size: calc(11px * var(--site-type, 1));
+    line-height: 1.6;
+}
+
+.auto-manage-note .btn {
+    align-self: flex-start;
+}
+

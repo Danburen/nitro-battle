@@ -1,0 +1,311 @@
+/* ---- vassals, alliances and pending offers ---- */
+
+.diplo-requests,
+.diplo-vassal-self,
+.diplo-alliance {
+    flex: none;
+    margin-top: 6px;
+    padding: 7px;
+    border: 1px solid var(--border-muted);
+    border-radius: var(--site-radius);
+    background: var(--site-bg);
+}
+
+.diplo-requests {
+    border-color: color-mix(in srgb, var(--site-accent) 45%, var(--border-muted));
+}
+
+.diplo-requests-head,
+.diplo-vassal-head,
+.diplo-alliance-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: calc(11px * var(--site-type, 1));
+}
+
+.diplo-requests-head {
+    margin-bottom: 5px;
+    color: var(--site-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.diplo-request {
+    padding: 6px;
+    border: 1px solid var(--border-muted);
+    border-radius: calc(var(--site-radius) - 2px);
+    background: var(--site-surface);
+}
+
+.diplo-request + .diplo-request {
+    margin-top: 5px;
+}
+
+.diplo-request-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: calc(11px * var(--site-type, 1));
+}
+
+.diplo-request-days {
+    margin-left: auto;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    white-space: nowrap;
+}
+
+.diplo-request-body {
+    margin: 4px 0 0;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.diplo-request-actions {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.diplo-request-actions .btn {
+    flex: 1;
+    padding: 2px 6px;
+    font-size: calc(10px * var(--site-type, 1));
+}
+
+.diplo-vassal-head b,
+.diplo-alliance-head b {
+    color: var(--site-fg);
+}
+
+.diplo-vassal-meta {
+    margin-top: 4px;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.5;
+}
+
+.diplo-vassal-tribute {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.diplo-vassal-tribute .btn {
+    padding: 1px 6px;
+    font-size: calc(10px * var(--site-type, 1));
+}
+
+.diplo-vassal-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    font-size: calc(10px * var(--site-type, 1));
+    overflow-wrap: anywhere;
+}
+
+.diplo-vassal-row .diplo-vassal-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.diplo-vassal-row .btn,
+.diplo-alliance-section .btn,
+.diplo-alliance > .btn {
+    flex: none;
+    padding: 2px 7px;
+    font-size: calc(10px * var(--site-type, 1));
+}
+
+/* Overlord vassal list: compact rows with a 查看附庸 button; collapse caret at the end. */
+.diplo-vassal-caret {
+    flex: none;
+    width: 18px;
+    margin-left: auto;
+    padding: 1px 4px;
+    border: 1px solid transparent;
+    border-radius: calc(var(--site-radius) - 2px);
+    background: transparent;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.4;
+    text-align: center;
+    cursor: pointer;
+}
+
+.diplo-vassal-caret:hover {
+    border-color: var(--border-muted);
+    background: var(--site-surface);
+    color: var(--site-fg);
+}
+
+.diplo-vassal-list.hidden {
+    display: none;
+}
+
+.diplo-alliance-section {
+    margin-top: 6px;
+}
+
+/* Compact vassal status: overlord + two icons; details live in their hovers. */
+.vassal-row > dd {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.vassal-head {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.vassal-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--border-muted);
+    border-radius: 999px;
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.4;
+    cursor: help;
+}
+
+.vassal-type--cooperative {
+    color: var(--green-fg);
+    border-color: color-mix(in srgb, var(--green) 50%, var(--border-muted));
+}
+
+.vassal-type--autonomous {
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 50%, var(--border-muted));
+}
+
+.vassal-type--oppressive {
+    color: #f85149;
+    border-color: color-mix(in srgb, #f85149 55%, var(--border-muted));
+}
+
+.vassal-type-icon {
+    width: 12px;
+    height: 12px;
+    flex: none;
+}
+
+/* Bare contract icon: no pill, just the tinted silhouette. */
+.vassal-type-mark {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    cursor: help;
+}
+
+.vassal-type-mark .icon-glyph {
+    width: 15px;
+    height: 15px;
+}
+
+.vassal-type-mark--cooperative {
+    color: var(--green-fg);
+}
+
+.vassal-type-mark--autonomous {
+    color: var(--yellow);
+}
+
+.vassal-type-mark--oppressive {
+    color: #f85149;
+}
+
+.vassal-independence-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    color: #f0883e;
+    font-size: calc(10px * var(--site-type, 1));
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+}
+
+.vassal-independence-icon .icon-glyph {
+    width: 14px;
+    height: 14px;
+}
+
+.vassal-independence-icon b {
+    font-weight: 600;
+}
+
+.vassal-independence-icon--high {
+    color: #f85149;
+}
+
+.vassal-tribute-label {
+    flex: none;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+}
+
+.diplo-submenu {
+    margin-top: 5px;
+    border: 1px solid var(--border-muted);
+    border-radius: calc(var(--site-radius) - 2px);
+    background: var(--site-surface);
+}
+
+.diplo-submenu summary {
+    padding: 4px 7px;
+    color: var(--site-fg);
+    font-size: calc(11px * var(--site-type, 1));
+    cursor: pointer;
+}
+
+.diplo-submenu-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0 7px 7px;
+}
+
+.diplo-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    color: var(--site-muted);
+    font-size: calc(10px * var(--site-type, 1));
+    line-height: 1.45;
+    cursor: pointer;
+}
+
+.diplo-radio input {
+    margin-top: 2px;
+}
+
+.diplo-radio b {
+    color: var(--site-fg);
+}
+
+
+.diplo-goal {
+    margin-top: 6px;
+    padding: 5px 7px;
+    background: var(--site-surface);
+    border-left: 2px solid var(--red);
+    font-size: calc(11px * var(--site-type, 1));
+    overflow-wrap: anywhere;
+    cursor: help;
+}
+

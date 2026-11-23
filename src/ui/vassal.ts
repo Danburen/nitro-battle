@@ -4,7 +4,7 @@ import {
     independenceRatioOf, tributeRateOf,
 } from "../game/vassal.ts";
 import type { GameState, VassalType } from "../game/types.ts";
-import { chipToken, escapeHtml, textToken } from "./text.ts";
+import { chipToken, escapeHtml, iconMaskStyle, textToken } from "./text.ts";
 import { helpButton } from "./panel.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 import { tooltipAttrs } from "./tooltip.ts";
@@ -15,15 +15,15 @@ import { tooltipAttrs } from "./tooltip.ts";
  * hover carries the full contract, independence and tribute explanation.
  */
 
-/** Minimal line icons — one silhouette per contract, tinted by its icon. */
+/** One external SVG per contract, tinted by the surrounding mark's colour. */
 const VASSAL_TYPE_ICON: Record<VassalType, string> = {
-    cooperative: '<circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/>',
-    autonomous: '<circle cx="8" cy="12" r="4"/><path d="M12 12h9m-3 0v4m-3-4v4"/>',
-    oppressive: '<circle cx="7" cy="14" r="3"/><circle cx="17" cy="14" r="3"/><path d="M10 14h4M7 11V6h3m10 5V6h-3"/>',
+    cooperative: "vassal-cooperative",
+    autonomous: "vassal-autonomous",
+    oppressive: "vassal-oppressive",
 };
 
 /** Rising bars plus a dashed threshold: independence read at a glance. */
-const INDEPENDENCE_ICON = '<path d="M4 20h16"/><path d="M7 20v-5"/><path d="M12 20v-9"/><path d="M17 20v-13"/><path d="M4 7h16" stroke-dasharray="2 2"/>';
+const INDEPENDENCE_ICON = "vassal-independence";
 
 /** "独立性 X / cap（NN%）" — one format used on every vassal surface. */
 function independenceText(state: GameState, nationId: number): string {
@@ -65,7 +65,7 @@ export function vassalTypeIcon(state: GameState, nationId: number): string {
     const type = vassalTypeOf(state, nationId);
     if (!type) return "";
     return `<span class="vassal-type-mark vassal-type-mark--${type}" aria-label="${VASSAL_PROFILES[type].name}附庸" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${VASSAL_TYPE_ICON[type]}</svg>
+        <span class="icon-glyph" aria-hidden="true" ${iconMaskStyle(VASSAL_TYPE_ICON[type])}></span>
     </span>`;
 }
 
@@ -74,7 +74,7 @@ export function vassalTypeBadge(state: GameState, nationId: number): string {
     const type = vassalTypeOf(state, nationId);
     if (!type) return "";
     return `<span class="vassal-type vassal-type--${type}" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
-        <svg class="vassal-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${VASSAL_TYPE_ICON[type]}</svg>
+        <span class="vassal-type-icon icon-glyph" aria-hidden="true" ${iconMaskStyle(VASSAL_TYPE_ICON[type])}></span>
         <span>${VASSAL_PROFILES[type].name}</span>
     </span>`;
 }
@@ -85,7 +85,7 @@ export function vassalIndependenceIcon(state: GameState, nationId: number): stri
     const cap = independenceCapOf(state, nationId);
     const high = independenceRatioOf(state, nationId) >= HIGH_INDEPENDENCE_RATIO ? " vassal-independence-icon--high" : "";
     return `<span class="vassal-independence-icon${high}" aria-label="独立性 ${value} / ${cap}" ${tooltipAttrs("独立性", `${independenceText(state, nationId)}。高位（80%）时更易倒戈或起义。`)}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">${INDEPENDENCE_ICON}</svg>
+        <span class="icon-glyph" aria-hidden="true" ${iconMaskStyle(INDEPENDENCE_ICON)}></span>
         <b>${value}/${cap}</b>
     </span>`;
 }

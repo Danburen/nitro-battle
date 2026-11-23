@@ -1,0 +1,107 @@
+/* ---- shell ---- */
+
+.game-shell {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--site-bg);
+}
+
+#game-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.hud {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.hud-corner {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: calc(8px * var(--site-space, 1));
+    min-height: 0;
+}
+
+.hud-corner > * {
+    pointer-events: auto;
+}
+
+.hud-tl {
+    top: 54px;
+    left: calc(12px * var(--site-space, 1));
+    width: 384px;
+    max-height: calc(100dvh - 66px);
+}
+
+.hud-tr {
+    top: 54px;
+    right: calc(12px * var(--site-space, 1));
+    width: 320px;
+    align-items: flex-end;
+}
+
+.hud-bl {
+    bottom: calc(12px * var(--site-space, 1));
+    left: calc(12px * var(--site-space, 1));
+    width: 392px;
+    max-height: 62dvh;
+}
+
+.hud-bc {
+    bottom: calc(12px * var(--site-space, 1));
+    left: 50%;
+    transform: translateX(-50%);
+    align-items: center;
+}
+
+.hud-br {
+    bottom: 136px;
+    right: calc(12px * var(--site-space, 1));
+    align-items: flex-end;
+}
+
+.top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: calc(10px * var(--site-space, 1));
+    padding: 6px 12px;
+    background: color-mix(in srgb, var(--site-surface) 94%, transparent);
+    border-bottom: 1px solid var(--site-border);
+    box-shadow: 0 4px 18px rgba(1, 4, 9, 0.45);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
+.top-resources {
+    display: flex;
+    align-items: center;
+    gap: calc(8px * var(--site-space, 1));
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.top-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex: none;
+    position: relative;
+}
+

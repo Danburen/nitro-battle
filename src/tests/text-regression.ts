@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { chipToken, escapeGameText, escapeHtml, RELATION_COLORS, renderGameText, setGameText, TEXT_TERMS, textToken } from "../ui/text.ts";
 import type { RelationTone, TextKey } from "../ui/text.ts";
@@ -8,6 +8,21 @@ import { garrisonRelation } from "../ui/common.ts";
 import { setWar } from "../game/diplomacy.ts";
 import { NEUTRAL } from "../game/types.ts";
 import type { GameState } from "../game/types.ts";
+
+/** CSS assertions span the split style package and the per-component stylesheets. */
+function readStyles(): string {
+    const chunks: string[] = [];
+    const walk = (dir: URL): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const target = new URL(entry.isDirectory() ? `${entry.name}/` : entry.name, dir);
+            if (entry.isDirectory()) walk(target);
+            else if (entry.name.endsWith(".css")) chunks.push(readFileSync(target, "utf8"));
+        }
+    };
+    walk(new URL("../style/", import.meta.url));
+    walk(new URL("../ui/", import.meta.url));
+    return chunks.join("\n");
+}
 
 for (const key of Object.keys(TEXT_TERMS) as TextKey[]) {
     test(`${key} has a consistent colored label and plain equivalent`, () => {
@@ -56,8 +71,10 @@ test("resource amounts have suffix icons and accessible names without duplicate 
     const html = renderGameText("消耗 [[funds:1234]] 与 [[industry:20]]");
     assert.match(html, /aria-label="1,234 财政"/);
     assert.match(html, /aria-label="20 工业"/);
-    assert.match(html, /<span aria-hidden="true" class="game-text--pos">1,234<\/span><svg/);
-    assert.equal((html.match(/<svg class="resource-icon" aria-hidden="true"/g) ?? []).length, 2);
+    assert.match(html, /<span aria-hidden="true" class="game-text--pos">1,234<\/span><span class="resource-icon"/);
+    assert.equal((html.match(/<span class="resource-icon" aria-hidden="true"/g) ?? []).length, 2);
+    assert.match(html, /--icon:url\('\.\/assets\/icons\/funds\.svg'\)/);
+    assert.ok(!html.includes("<path"));
     assert.equal(renderGameText("消耗 [[funds:1234]] 与 [[industry:20]]", "plain"), "消耗 1,234 财政 与 20 工业");
 });
 
@@ -144,7 +161,7 @@ test("nation chips render colored labels and round-trip hostile names safely", (
         assert.equal(renderGameText(`[[chip:${color}|X]]`), escapeHtml(`[[chip:${color}|X]]`));
         assert.equal(chipToken(color, "X"), "X");
     }
-    const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+    const css = readStyles();
     assert.match(css, /\.game-text--chip\s*\{/);
 });
 
@@ -185,7 +202,7 @@ test("large unmatched and unknown input stays literal without recursion", () => 
 
 test("relation palette matches CSS semantic classes and garrison bar inheritance", () => {
     assert.deepEqual(RELATION_COLORS, { friendly: "#7ee787", neutral: "#e3b341", hostile: "#ff7b72" });
-    const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+    const css = readStyles();
     for (const [tone, color] of Object.entries(RELATION_COLORS)) {
         const hex = css.match(new RegExp(`--relation-${tone}:\\s*(#[0-9a-f]{6})\\s*;`))?.[1];
         assert.equal(hex, color, `${tone} CSS and Canvas palette must agree`);
@@ -196,7 +213,7 @@ test("relation palette matches CSS semantic classes and garrison bar inheritance
 });
 
 test("semantic text colors maintain readable contrast on dark panel and tooltip surfaces", () => {
-    const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+    const css = readStyles();
     const luminance = (hex: string): number => {
         const rgb = hex.match(/\w\w/g)!.map((channel) => Number.parseInt(channel, 16) / 255)
             .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);

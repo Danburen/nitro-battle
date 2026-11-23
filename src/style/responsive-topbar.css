@@ -1,0 +1,10 @@
+@media (max-width: 1250px) {
+    .top-bar { gap: 6px; }
+    .top-bar .top-country-label { max-width: 104px; }
+    .factory-allocation { flex-basis: 162px; }
+}
+@media (max-width: 820px) {
+    .top-bar { flex-wrap: wrap; }
+    .top-resources { flex: 1 1 55%; }
+    .factory-allocation { flex-basis: 190px; }
+}
