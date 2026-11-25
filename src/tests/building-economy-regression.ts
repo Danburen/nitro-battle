@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { createRequestCooldown } from "../game/requests.ts";
 import {
     buildingCount, canBuild, canBuildProvince, constructionPlan, factoryTotals,
     infrastructureLevel, infrastructureOutputMultiplier, infrastructureBuildMultiplier,
@@ -18,7 +19,7 @@ import { generateWorld } from "../game/generator/index.ts";
 import { spawnArmy } from "../game/armies.ts";
 import { LCGRandom } from "../utils/LCGRandom.ts";
 import { BUILDING_PROFILES, STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS } from "../game/types/building.ts";
-import { DEFAULT_POLICIES } from "../game/types/policy.ts";
+import { CONSCRIPTION_POLICIES, DEFAULT_POLICIES } from "../game/types/policy.ts";
 import { UnitKind } from "../game/types/unit.ts";
 import type { BuildingKind } from "../game/types/building.ts";
 import type { GameState } from "../game/types/state.ts";
@@ -41,7 +42,7 @@ function fixture(sizes = [16, 16], owners = [0, 1]): GameState {
             provinces.push({
                 site, name: `P${site}`, owner: owners[id], legalOwner: owners[id], isCity: false, isCapital: false,
                 garrison: 20, garrisonMax: 20, income: 4, defense: 1, population: 2,
-                coreNation: owners[id], occupation: 100, buildings: [], stateId: id,
+                coreNation: owners[id], occupation: 100, buildings: [], deposits: { raw: 0, strategic: 0 }, stateId: id,
             });
         }
         states.push({ id, name: `S${id}`, center, provinces: members, culture: 0,
@@ -50,7 +51,8 @@ function fixture(sizes = [16, 16], owners = [0, 1]): GameState {
     const nations: Nation[] = [0, 1].map((id) => ({
         id, name: `N${id}`, color: "#000000", isPlayer: id === 0,
         capital: states.find((region) => provinces[region.center].owner === id)?.center ?? 0,
-        alive: true, funds: 10000, industry: 10000, manpower: 10000, politicalPower: 20,
+        alive: true, funds: 10000, industry: 10000, manpower: 10000,
+        raw: 0, food: 0, strategic: 0, politicalPower: 20,
         policies: { ...DEFAULT_POLICIES },
     }));
     const count = provinces.length;
@@ -72,7 +74,9 @@ function fixture(sizes = [16, 16], owners = [0, 1]): GameState {
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
         alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
-        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
+        vassalCooldown: [[-1, -1], [-1, -1]], requestCooldown: createRequestCooldown(2),
+        nextAllianceId: 1, nextRequestId: 1,
+        tradeAgreements: [], nextTradeId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };
@@ -87,7 +91,7 @@ function engine(state = fixture()): GameEngine {
 test("unified scoped building profiles and exact costs", () => {
     assert.deepEqual(STATE_BUILDING_KINDS, ["factory", "farm", "infrastructure", "admin"]);
     assert.deepEqual(PROVINCE_BUILDING_KINDS, ["supply", "fort"]);
-    assert.equal(BUILDING_PROFILES.fort.glyph, "🛡️");
+    assert.equal(BUILDING_PROFILES.fort.glyph, "防");
     const costs: Record<BuildingKind, number[]> = {
         factory: [180, 30, 8], farm: [80, 15, 4], infrastructure: [80, 15, 5],
         admin: [100, 15, 6], supply: [250, 40, 30], fort: [120, 15, 8],
@@ -96,7 +100,8 @@ test("unified scoped building profiles and exact costs", () => {
         const profile = BUILDING_PROFILES[kind];
         assert.deepEqual([profile.costFunds, profile.costIndustry, profile.constructionPoints], costs[kind]);
         assert.equal(profile.scope, kind === "supply" || kind === "fort" ? "province" : "state");
-        assert.ok(/\p{Extended_Pictographic}/u.test(profile.glyph));
+        assert.match(profile.icon, /^building-[a-z-]+$/u);
+        assert.ok(!/\p{Extended_Pictographic}/u.test(profile.glyph));
         assert.ok(!("turns" in profile));
     }
 });
@@ -125,19 +130,20 @@ test("L0/L8 coefficients, center ownership, target movement cost", () => {
 test("center-based resource yields, repeated farms and admin threshold without occupation bonus", () => {
     const state = fixture();
     const region = state.states[0];
+    const fundsPolicy = CONSCRIPTION_POLICIES[DEFAULT_POLICIES.conscription].fundsMult;
     const base = resourceRates(state, 0);
     region.prodFactories = 1;
     let rates = resourceRates(state, 0);
-    near(rates.fundsGross - base.fundsGross, 1.6 * 1.1);
+    near(rates.fundsGross - base.fundsGross, 1.6 * fundsPolicy);
     near(rates.industry - base.industry, 1.6);
     region.infrastructure = 8;
     rates = resourceRates(state, 0);
     near(rates.industry - base.industry, 2.4);
-    near(rates.fundsGross - base.fundsGross, 2.4 * 1.1);
+    near(rates.fundsGross - base.fundsGross, 2.4 * fundsPolicy);
     region.buildings.push("farm", "farm", "admin");
     const built = resourceRates(state, 0);
-    near(built.manpower - rates.manpower, 0.8);
-    near(built.fundsGross - rates.fundsGross, 4 * 1.1);
+    near(built.manpower - rates.manpower, 0);
+    near(built.fundsGross - rates.fundsGross, 4 * fundsPolicy);
     assert.equal(built.politicalPower, 3);
     state.provinces[0].coreNation = 1;
     state.provinces[0].occupation = 49;

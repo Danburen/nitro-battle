@@ -7,6 +7,8 @@ import {
 } from "../terrain/voronoi/index.ts";
 import type { Vec2 } from "../terrain/voronoi/index.ts";
 import { claimableStateIds, isAtWar, stateSummary } from "../game/diplomacy.ts";
+import { provinceResourceOutput, resourceYieldMultiplier } from "../game/economy.ts";
+import { provincePopulationView } from "../game/stability.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { pathTo } from "../game/rules.ts";
 import { BUILDING_PROFILES } from "../game/types/building.ts";
@@ -33,13 +35,16 @@ import {
     drawProvinceCapacityMarkers,
     drawProvinceMarkers,
     drawRegionMarkers,
+    drawResourceMarkers,
 } from "./markers.ts";
 import type { MarkerOptions } from "./markers.ts";
+import { resourceTint } from "./resources.ts";
+import { iconVersion } from "./icons.ts";
 import type { ColorMode, MapMode, NationHighlight } from "./types.ts";
 export type { MapMode } from "./types.ts";
 import { drawTerrainDecorCell } from "./terrainDecor.ts";
 import { BIOME_ZH, garrisonRelation, ownerName } from "../ui/common.ts";
-import { chipToken, escapeGameText, textToken } from "../ui/text.ts";
+import { chipToken, escapeGameText, peopleCount, textToken } from "../ui/text.ts";
 import { MAP_TOOLTIP_DISMISS_EVENT, MAP_TOOLTIP_EVENT } from "../ui/tooltip.ts";
 import type { MapTooltipRequest } from "../ui/tooltip.ts";
 
@@ -110,6 +115,7 @@ export class MapRenderer {
     private colorMode: ColorMode = "gradient";
     private deepZoom = 0.8;
     private colorLevel = "";
+    private iconLoadVersion = -1;
     private hover: number | null = null;
     private tooltipHover: {
         site: number;
@@ -265,6 +271,7 @@ export class MapRenderer {
             constructionKind: this.currentConstructionKind,
             constructionOverlay: this.constructionOverlay,
             zoom: this.camera.zoom,
+            resourceMode: this.colorMode === "resource",
         };
     }
 
@@ -374,7 +381,7 @@ export class MapRenderer {
     private readColorSettings(): void {
         try {
             const mode = localStorage.getItem("nitro-color-mode");
-            if (mode === "uniform" || mode === "gradient") this.colorMode = mode;
+            if (mode === "uniform" || mode === "gradient" || mode === "resource") this.colorMode = mode;
             const zoom = Number(localStorage.getItem("nitro-deep-zoom"));
             if (Number.isFinite(zoom) && zoom >= 0.4 && zoom <= 1.6) this.deepZoom = zoom;
         } catch { /* private mode */ }
@@ -409,7 +416,7 @@ export class MapRenderer {
         this.resetMapTooltip();
         const point = this.engine.state.graph.sites[site];
         this.camera.centerOn(point.x, point.y);
-        this.camera.zoom = Math.min(this.camera.maxZoom, Math.max(this.camera.zoom, 1.4));
+        this.camera.zoom = Math.min(this.camera.maxZoom, Math.max(this.camera.minZoom, this.camera.zoom, 1.4));
     }
 
     public isSiteVisible(site: number): boolean {
@@ -688,7 +695,16 @@ export class MapRenderer {
         const region = state.states[province.stateId];
         const title = escapeGameText(province.name);
         const relation = garrisonRelation(state, province.owner);
-        const body = `所属州：${escapeGameText(region?.name ?? "未属州")}\n控制国：${escapeGameText(ownerName(state, province.owner))}\n正式归属：${escapeGameText(ownerName(state, province.legalOwner))}\n地形：${escapeGameText(BIOME_ZH[state.terrain.biomeAt(province.site)])}\n${textToken(relation)}驻军 ${Math.round(province.garrison)}/${province.garrisonMax}`;
+        const output = provinceResourceOutput(state, province);
+        const population = provincePopulationView(state, province);
+        const fmt = (value: number): string => (Math.round(value * 10) / 10).toFixed(1);
+        const resourceLines = [
+            `${textToken("raw")} ${province.deposits.raw} 级 · ${textToken("raw", fmt(output.raw))}/[[turn]]`,
+            `${textToken("strategic")} ${province.deposits.strategic} 级 · ${textToken("strategic", fmt(output.strategic))}/[[turn]]`,
+            `${textToken("food")} ${textToken("food", fmt(output.food + output.farmFood))}/[[turn]]`,
+            `矿产系数：有效[[infrastructure]] ${output.infrastructure} 级 ×${resourceYieldMultiplier(output.infrastructure).toFixed(2)}；[[occupation]] ×${output.occupation.toFixed(2)}`,
+        ].join("\n");
+        const body = `所属州：${escapeGameText(region?.name ?? "未属州")}\n控制国：${escapeGameText(ownerName(state, province.owner))}\n正式归属：${escapeGameText(ownerName(state, province.legalOwner))}\n地形：${escapeGameText(BIOME_ZH[state.terrain.biomeAt(province.site)])}\n${textToken(relation)}驻军 ${Math.round(province.garrison)}/${province.garrisonMax}\n${textToken("manpower")} 全部人口 ${peopleCount(population.people)}（可招募 ${peopleCount(population.eligible)}）\n资源产出：\n${resourceLines}`;
         // Refresh stationary details without repeated DOM writes or measurements.
         if (title === pending.title && body === pending.body) return;
         pending.title = title;
@@ -894,7 +910,10 @@ export class MapRenderer {
         yield;
         for (let from = 0; from < provinces.length; from += MapRenderer.PROVINCE_CHUNK) {
             const to = Math.min(provinces.length, from + MapRenderer.PROVINCE_CHUNK);
-            for (let i = from; i < to; i++) drawProvinceMarkers(ctx, this.engine.state, provinces[i].site, this.markerOptions);
+            for (let i = from; i < to; i++) {
+                drawProvinceMarkers(ctx, this.engine.state, provinces[i].site, this.markerOptions);
+                drawResourceMarkers(ctx, this.engine.state, provinces[i].site, this.markerOptions);
+            }
             yield;
         }
     }
@@ -907,8 +926,16 @@ export class MapRenderer {
         const region = states[province.stateId];
         const occupied = region && province.owner !== provinces[region.center].owner;
         const owner = occupied || !region ? province.owner : provinces[region.center].owner;
-        ctx.fillStyle = this.stateColor(owner, province.stateId, this.landFactor());
+        if (this.colorMode === "resource") {
+            const tint = resourceTint(this.engine.state, province);
+            ctx.globalAlpha = tint.alpha + 0.1;
+            ctx.fillStyle = tint.color;
+        } else {
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = this.stateColor(owner, province.stateId, this.landFactor());
+        }
         fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
+        ctx.globalAlpha = 1;
         if (!occupied) return;
         ctx.save();
         ctx.beginPath();
@@ -928,11 +955,18 @@ export class MapRenderer {
     private paintProvinceTint(ctx: CanvasRenderingContext2D, province: Province): void {
         const { graph, terrain } = this.engine.state;
         const { width, height } = graph.domain;
-        if (province.owner === NEUTRAL || !terrain.passable[province.site]) return;
+        if (!terrain.passable[province.site]) return;
         const cell = graph.cells[province.site];
         if (!cell.bounded) return;
-        ctx.globalAlpha = this.tintAlpha();
-        ctx.fillStyle = nationDisplayColor(this.engine.state, province.owner);
+        if (this.colorMode === "resource") {
+            const tint = resourceTint(this.engine.state, province);
+            ctx.globalAlpha = tint.alpha;
+            ctx.fillStyle = tint.color;
+        } else {
+            if (province.owner === NEUTRAL) return;
+            ctx.globalAlpha = this.tintAlpha();
+            ctx.fillStyle = nationDisplayColor(this.engine.state, province.owner);
+        }
         fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
     }
 
@@ -986,21 +1020,16 @@ export class MapRenderer {
 
         ctx.globalAlpha = 0.8;
         for (const site of sites) drawTerrainDecorCell(ctx, graph, terrain, site);
-        for (const site of sites) {
-            const province = provinces[site];
-            if (province.owner === NEUTRAL || !terrain.passable[site]) continue;
-            const cell = graph.cells[site];
-            if (!cell.bounded) continue;
-            ctx.globalAlpha = this.tintAlpha();
-            ctx.fillStyle = nationDisplayColor(this.engine.state, province.owner);
-            fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
-        }
+        for (const site of sites) this.paintProvinceTint(ctx, provinces[site]);
         ctx.globalAlpha = 1;
 
         drawEdges(ctx, this.engine.state, sites,
             this.currentMapMode, this.colorMode === "gradient" && this.camera.zoom > this.deepZoom);
         // A marker in a clean neighbor may extend into the clipped dirty area.
-        for (const province of provinces) drawProvinceMarkers(ctx, this.engine.state, province.site, this.markerOptions);
+        for (const province of provinces) {
+            drawProvinceMarkers(ctx, this.engine.state, province.site, this.markerOptions);
+            drawResourceMarkers(ctx, this.engine.state, province.site, this.markerOptions);
+        }
         ctx.restore();
     }
 
@@ -1058,6 +1087,11 @@ export class MapRenderer {
         const level = this.colorMode === "uniform" ? "u" : this.camera.zoom <= this.deepZoom ? "d" : "g";
         if (level !== this.colorLevel) {
             this.colorLevel = level;
+            this.baseDirty = true;
+        }
+        // Marker icons load asynchronously; repaint once when the artwork arrives.
+        if (this.iconLoadVersion !== iconVersion()) {
+            this.iconLoadVersion = iconVersion();
             this.baseDirty = true;
         }
         if (this.baseDirty && !this.baseBuild) this.beginBaseRebuild();

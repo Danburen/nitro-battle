@@ -5,6 +5,7 @@ import { armyCap, armyMp, nationArmyCount, redeployTargets, regimentHp } from ".
 import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "../../game/types/unit.ts";
 import { ORG_MAX } from "../../game/types/organization.ts";
 import { orgClass, orgPct, statusPill } from "../common.ts";
+import { iconMaskStyle } from "../text.ts";
 import { panelHead } from "../panel.ts";
 
 const ARMY_DETAIL_TIP = `勾选团后点击拆分编组，新军团进驻相邻空省；合并需移动到友军省份，或在右侧军团列表 Ctrl+多选后合并。\n组织度每日按[[supply]]恢复，低于 15 溃退；欠饷会降低全军组织度。\n进攻相邻敌军省份前需先宣战；按钮上的战力对比按攻击/防御与地形估算。\n战略转移将未行动军团撤往后方；待命结束本回合行动。\n解散军团后所属团复员，无法恢复。\n已托管的军团仅可查看；点击「取消托管」后恢复手动指挥。`;
@@ -120,7 +121,7 @@ export class ArmyDetailPanel {
                     </div>
                     <span class="army-meta">${army.regiments.length}/${REGIMENT_CAP} 团 · ${regimentHp(army)} HP · 机动 ${armyMp(army)}</span>
                 </div>
-                <div class="detail-loc">📍 ${state.provinces[army.province].name}</div>
+                <div class="detail-loc"><span class="icon-glyph detail-loc-icon" aria-hidden="true" ${iconMaskStyle("location")}></span>${state.provinces[army.province].name}</div>
                 <div class="reg-list">${regRows}</div>
                 ${splitRow}
                 ${marchHtml}

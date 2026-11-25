@@ -4,9 +4,11 @@ import { AUTO_GLOBAL_LOCK_TIP } from "./common.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
 import { ALLIANCE_CREATE_COST } from "../game/alliance.ts";
 import { VASSAL_PROFILES, validVassalType } from "../game/vassal.ts";
+import { REQUEST_COOLDOWN_DAYS, requestCooldownDays } from "../game/requests.ts";
 import { REGIMENT_CAP } from "../game/types/unit.ts";
-import type { VassalType } from "../game/types/diplomacy.ts";
+import type { DiplomaticRequestKind, VassalType } from "../game/types/diplomacy.ts";
 import { textToken } from "./text.ts";
+import { proposalCooldownTip } from "./trade.ts";
 
 /** Training, construction and policy switches (dock panels). */
 export function handleEconomyAction(ctx: UIContext, action: string, target: HTMLElement): boolean {
@@ -64,8 +66,16 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
         ctx.sound.play("error");
         ctx.toast(message);
     };
+    const proposalFail = (kind: DiplomaticRequestKind, targetId: number, fallback: string): void => {
+        const days = requestCooldownDays(state, kind, targetId);
+        fail(days > 0 ? proposalCooldownTip(days) : fallback);
+    };
     if (state.winner !== null) {
         fail("战役已结束，无法进行外交操作");
+        return true;
+    }
+    if (target.classList.contains("cooldown")) {
+        fail(target.dataset.tooltipBody ?? "向该国家发送请求太频繁，请稍后再尝试");
         return true;
     }
     const nationId = Number(target.dataset.nation);
@@ -132,21 +142,18 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
         const details = target.closest("details");
         const picked = details?.querySelector<HTMLInputElement>("input[type='radio']:checked")?.value ?? "cooperative";
         if (!Number.isInteger(nationId)) fail("附庸请求目标无效");
-        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast(`${nationName} 接受了附庸请求，契约已生效`);
-        else fail("附庸请求未获接受：需与目标邻接、双方均无宗主国，且对方认为你有足够价值");
+        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast("附庸请求已送出，下一回合答复");
+        else proposalFail("vassalize", nationId, "附庸请求无法送出：需与目标邻接、双方均无宗主国，且对方认为你有足够价值");
     } else if (action === "vassal-demand") {
         if (!Number.isInteger(nationId)) fail("附庸目标无效");
         else ctx.confirm({
             title: `要求 ${nationName} 成为附庸`,
-            body: "以压迫型附庸结束：不割让领土，对方上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性不可主动提升。对方可能拒绝，并因此保持敌对。",
+            body: `以压迫型附庸结束：不割让领土，对方上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性不可主动提升。确认后送出，下一回合答复；对方拒绝后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内不能再次要求。`,
             confirmLabel: "提出要求",
             danger: true,
             onConfirm: () => {
-                if (ctx.engine.demandVassalization(nationId)) ctx.toast(`${nationName} 接受了附庸要求`);
-                else {
-                    ctx.sound.play("error");
-                    ctx.toast(`${nationName} 拒绝成为附庸：需明显弱于我方或无望继续战争`);
-                }
+                if (ctx.engine.demandVassalization(nationId)) ctx.toast("附庸要求已送出，下一回合答复");
+                else proposalFail("vassalize", nationId, "附庸要求无法送出：需明显弱于我方或无望继续战争");
             },
         });
     } else if (action === "tribute-rate") {
@@ -202,11 +209,11 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
         if (ctx.engine.annexVassal(nationId)) ctx.toast(`${nationName} 已被吞并，领土与军团并入我方`);
         else fail("无法吞并：仅能吞并独立性极低且无反叛意图的附庸");
     } else if (action === "request-aid") {
-        if (ctx.engine.requestForeignAid(nationId)) ctx.toast(`${nationName} 已同意求援：提供[[funds]]与[[politics]]，甚至可能对宗主国宣战`);
-        else fail("求援未成功：对方拒绝，或冷却未结束、暂无可用的非宗主国");
+        if (ctx.engine.requestForeignAid(nationId)) ctx.toast("求援已送出，下一回合答复");
+        else proposalFail("aid", nationId, "求援无法送出：冷却未结束、暂无可用的非宗主国，或条件已变化");
     } else if (action === "request-upgrade") {
-        if (ctx.engine.requestVassalUpgrade()) ctx.toast("契约改善请求已发出，等待宗主国答复");
-        else fail("无法请求改善契约：需独立性达到上限的 60%、国家倾向愿意改善、[[politics]]足够，且当前契约还有改善空间");
+        if (ctx.engine.requestVassalUpgrade()) ctx.toast("契约改善请求已送出，下一回合答复");
+        else proposalFail("upgrade", state.nations[0]?.overlord ?? -1, "无法请求改善契约：需独立性达到上限的 60%、国家倾向愿意改善、[[politics]]足够，且当前契约还有改善空间");
     } else if (action === "create-alliance") {
         ctx.confirm({
             title: "创建联盟阵营",
@@ -222,17 +229,17 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
         });
     } else if (action === "invite-alliance") {
         if (!Number.isInteger(nationId)) fail("联盟邀请目标无效");
-        else if (ctx.engine.inviteToAlliance(nationId)) ctx.toast(`已向${nationName}发出结盟邀请`);
-        else fail("无法邀请：需由联盟领袖发出，且双方有共同敌人或相近战略倾向");
+        else if (ctx.engine.inviteToAlliance(nationId)) ctx.toast("结盟邀请已送出，下一回合答复");
+        else proposalFail("alliance", nationId, "无法邀请：需由联盟领袖发出，且双方有共同敌人或相近战略倾向");
     } else if (action === "join-alliance") {
         const leaderId = Number(target.dataset.leader);
         if (!Number.isInteger(leaderId)) fail("联盟领袖无效");
-        else if (ctx.engine.requestJoinAlliance(leaderId)) ctx.toast("入盟申请已获接受");
-        else fail("入盟申请被拒绝：需有共同敌人或相近战略倾向，拒绝后 [[turn:15]]内不能再次申请");
+        else if (ctx.engine.requestJoinAlliance(leaderId)) ctx.toast("入盟申请已送出，下一回合答复");
+        else proposalFail("alliance", leaderId, `入盟申请无法送出：需有共同敌人或相近战略倾向，拒绝后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内不能再次申请`);
     } else if (action === "leave-alliance") {
         ctx.confirm({
             title: "退出联盟",
-            body: "退出后共享通行权与共同敌人即刻失效，[[turn:15]]内无法重新加入同一联盟。",
+            body: `退出后共享通行权与共同敌人即刻失效，${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内无法重新加入同一联盟。`,
             confirmLabel: "退出联盟",
             danger: true,
             onConfirm: () => {

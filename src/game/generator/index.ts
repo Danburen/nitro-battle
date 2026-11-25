@@ -1,7 +1,9 @@
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import type { GameState } from "../types/state.ts";
 import type { GameSettings } from "../../types/settings.ts";
+import { createRequestCooldown } from "../requests.ts";
 import { createProvinces, seedCities } from "./cities.ts";
+import { generateProvinceDeposits } from "./deposits.ts";
 import { initializeWorld } from "./initialization.ts";
 import { generateMap } from "./map.ts";
 import { NameGenerator } from "./names.ts";
@@ -26,6 +28,7 @@ export function* buildWorld(settings: GameSettings): Generator<WorldBuildStage, 
     const mainland = components.reduce((largest, sites) => sites.length > largest.length ? sites : largest, [] as number[]);
     yield { label: "划分省界与州郡", progress: 0.32 };
     const provinces = createProvinces(graph, terrain);
+    generateProvinceDeposits(provinces, terrain, settings.seed);
     seedCities(provinces, mainland, rand);
     yield { label: "建立城市与交通", progress: 0.52 };
     const names = new NameGenerator(new LCGRandom(settings.seed ^ 0x5eed));
@@ -62,8 +65,11 @@ export function* buildWorld(settings: GameSettings): Generator<WorldBuildStage, 
         wars: [],
         alliances: [],
         diplomaticRequests: [],
+        tradeAgreements: [],
+        nextTradeId: 1,
         allianceCooldown: nations.map(() => nations.map(() => -1)),
         vassalCooldown: nations.map(() => nations.map(() => -1)),
+        requestCooldown: createRequestCooldown(nations.length),
         nextDiplomaticActionId: 1,
         nextAllianceId: 1,
         nextRequestId: 1,

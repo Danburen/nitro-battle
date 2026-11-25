@@ -36,10 +36,21 @@ export const ECONOMY_POLICIES: Readonly<Record<EconomyPolicy, { name: string; de
     planned: { name: "国家计划", desc: "[[industry:+20%]]，[[funds:-10%]]", fundsMult: 0.9, industryMult: 1.2, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
 };
 
-export const CONSCRIPTION_POLICIES: Readonly<Record<ConscriptionPolicy, { name: string; desc: string } & PolicyModifiers>> = {
-    volunteer: { name: "志愿兵", desc: "[[manpower:-20%]]，[[funds:+10%]]", fundsMult: 1.1, industryMult: 1, manpowerMult: 0.8, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    service: { name: "义务兵", desc: "[[manpower:+10%]]，[[funds:-5%]]", fundsMult: 0.95, industryMult: 1, manpowerMult: 1.1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    total: { name: "全面动员", desc: "[[manpower:+30%]]，[[funds:-15%]]，[[occupation]]增长 -20%", fundsMult: 0.85, industryMult: 1, manpowerMult: 1.3, growthMult: 0.8, occupiedIncomeMult: 1, ppModifier: 0 },
+export const CONSCRIPTION_POLICIES: Readonly<Record<ConscriptionPolicy, {
+    name: string; desc: string; recruitableShare: number; stabilityTarget: number;
+} & PolicyModifiers>> = {
+    volunteer: {
+        name: "志愿兵", desc: "可招募 1%，[[funds:+10%]]", recruitableShare: 0.01, stabilityTarget: 0,
+        fundsMult: 1.1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
+    service: {
+        name: "义务兵", desc: "可招募 3%，[[stability:-5]]，[[funds:-5%]]", recruitableShare: 0.03, stabilityTarget: -5,
+        fundsMult: 0.95, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
+    total: {
+        name: "全面动员", desc: "可招募 5%，[[stability:-10]]，[[funds:-15%]]，[[occupation]]增长 -20%", recruitableShare: 0.05, stabilityTarget: -10,
+        fundsMult: 0.85, industryMult: 1, manpowerMult: 1, growthMult: 0.8, occupiedIncomeMult: 1, ppModifier: 0,
+    },
 };
 
 export const OCCUPATION_POLICIES: Readonly<Record<OccupationPolicy, { name: string; desc: string } & PolicyModifiers>> = {
@@ -48,7 +59,7 @@ export const OCCUPATION_POLICIES: Readonly<Record<OccupationPolicy, { name: stri
     harsh: { name: "严苛", desc: "占领省税收 [[funds:+30%]]，[[occupation]]增长 -50%，[[politics:-1]]/[[turn]]", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 0.5, occupiedIncomeMult: 1.3, ppModifier: -1 },
 };
 
-export const DEFAULT_POLICIES: Policies = { economy: "balanced", conscription: "volunteer", occupation: "balanced" };
+export const DEFAULT_POLICIES: Policies = { economy: "balanced", conscription: "service", occupation: "balanced" };
 
 /** Upfront political points paid when a policy switch begins. */
 export const POLICY_SWITCH_COST = 8;

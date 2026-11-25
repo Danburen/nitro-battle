@@ -31,7 +31,13 @@ export interface Nation {
     funds: number;
     manpower: number;
     industry: number;
+    /** Management-chain stocks; deposit output feeds these from step 2 onward. */
+    raw: number;
+    food: number;
+    strategic: number;
     politicalPower: number;
+    /** 0–100 national stability; omitted by fixtures, which then skip stability effects. */
+    stability?: number;
     policies: Policies;
     /** In-progress switches per category; the committed value lives in `policies`. */
     policyTransitions?: Partial<Record<PolicyCategory, PolicyTransition>>;
@@ -45,6 +51,12 @@ export interface Nation {
     tributeRate?: number;
     /** Day of the last foreign-aid request; gates `VASSAL_AID_COOLDOWN`. */
     lastAidDay?: number;
+}
+
+/** 0 = no deposit; 1–3 = mine richness used by the production chain. */
+export interface ProvinceDeposits {
+    raw: number;
+    strategic: number;
 }
 
 export interface Province {
@@ -67,6 +79,8 @@ export interface Province {
     occupation: number;
     /** Local buildings remain with this province on capture. */
     buildings: ProvinceBuildingKind[];
+    /** Terrain-weighted mineral deposits; both levels start at 0 on water. */
+    deposits: ProvinceDeposits;
     /** Owning state (州), or -1 for water. */
     stateId: number;
 }

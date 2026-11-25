@@ -43,8 +43,8 @@ test("every willingness decision keeps verdict, factors and outcome consistent",
     for (const seed of [7, 42, 2026]) {
         const state = GameEngine.create(seed, "small", 5).state;
         for (const tendency of TENDENCIES) {
-            state.nations[2]!.tendency = tendency;
-            state.nations[3]!.tendency = tendency;
+            Object.assign(state.nations[2]!, { tendency });
+            Object.assign(state.nations[3]!, { tendency });
             const tag = `${seed}/${tendency}`;
             check(decideVassalOffer(state, 2, 1, "cooperative"), `offer-co/${tag}`);
             check(decideVassalOffer(state, 2, 1, "autonomous"), `offer-au/${tag}`);
@@ -59,7 +59,7 @@ test("every willingness decision keeps verdict, factors and outcome consistent",
 
 test("a hard veto is a single negative reason", () => {
     const state = GameEngine.create(42, "small", 5).state;
-    state.nations[2]!.tendency = "isolated";
+    Object.assign(state.nations[2]!, { tendency: "isolated" });
     const isolated = decideVassalOffer(state, 2, 1, "cooperative");
     assert.equal(isolated.accepts, false);
     assert.equal(isolated.factors.length, 1);
@@ -87,7 +87,7 @@ test("alliance invite and join decisions are the booleans their paths consume", 
     const state = engine.state;
     state.day = 10;
     state.nations[0]!.politicalPower = 100;
-    for (const nation of state.nations) nation.tendency = "pacifist";
+    for (const nation of state.nations) Object.assign(nation, { tendency: "pacifist" });
     assert.ok(createAlliance(engine, 0));
 
     const target = [1, 2, 3, 4].find((id) => canInviteToAlliance(state, 0, id));
@@ -99,7 +99,7 @@ test("alliance invite and join decisions are the booleans their paths consume", 
     const joinEngine = GameEngine.create(42, "small", 5);
     const joinState = joinEngine.state;
     joinState.day = 10;
-    for (const nation of joinState.nations) nation.tendency = "pacifist";
+    for (const nation of joinState.nations) Object.assign(nation, { tendency: "pacifist" });
     for (const id of [1, 2, 3, 4]) joinState.nations[id]!.politicalPower = 100;
     const leader = allianceLeader(joinState);
     assert.notEqual(leader, null);

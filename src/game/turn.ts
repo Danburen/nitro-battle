@@ -10,13 +10,18 @@ import { runAIAlliances, tickAlliances } from "./alliance.ts";
 import {
     expireDiplomaticRequests, runAIVassalPolitics, tickVassalIndependence, tickVassalTribute,
 } from "./vassal.ts";
+import { runAITrade, tickTradeAgreements } from "./trade.ts";
 import { resolveWarOutcomes } from "./settlement.ts";
-import { clampResources, occupationGrowth, resourceRates } from "./economy.ts";
+import { resolvePlayerProposals } from "./proposals.ts";
+import { clampResources, occupationGrowth, resourceChain } from "./economy.ts";
+import type { ResourceChain } from "./economy.ts";
 import { advancePolicySwitches, tickPolicyUpkeep } from "./policy.ts";
 import { enqueueBuild, enqueueProvinceBuild, enqueueTrain, processConstruction, processDeployments, reinforceArmy, setFactoryProduction } from "./production.ts";
 import { computeSupply, supplyLevel, supplyOrgFactor } from "./supply.ts";
 import { DAYS_PER_SEASON, NEUTRAL, SEASONS } from "./types/world.ts";
 import { ORG_MAX, ORG_REGEN, REINFORCE_MIN_SUPPLY, UNPAID_UPKEEP_ORG_PENALTY } from "./types/organization.ts";
+import { POPULATION_MAX, POPULATION_MIN, STABILITY_DRIFT, STRATEGIC_SHORTAGE_ORG_PENALTY } from "./types/economy.ts";
+import { shiftStability } from "./stability.ts";
 
 export function endTurn(core: GameCore): void {
     if (core.state.winner !== null) return;
@@ -26,6 +31,7 @@ export function endTurn(core: GameCore): void {
         if (!nation.alive) continue;
         runAIAlliances(core, controller.nationId);
         runAIVassalPolitics(core, controller.nationId);
+        runAITrade(core, controller.nationId);
         runAIDiplomacy(core, controller.nationId);
         if (core.state.winner !== null) return;
         for (const action of controller.takeTurn(core.state)) {
@@ -97,6 +103,7 @@ function applyAIAction(core: GameCore, action: AIAction, nationId: number): void
 function advanceDay(core: GameCore): void {
     const state = core.state;
     state.day++;
+    resolvePlayerProposals(core);
     advanceDiplomacy(core);
     advancePolicySwitches(core);
     const seasonIndex = Math.floor((state.day - 1) / DAYS_PER_SEASON) % SEASONS.length;
@@ -119,11 +126,19 @@ function advanceDay(core: GameCore): void {
         province.occupation = Math.min(100, province.occupation + occupationGrowth(state, province, province.owner));
     }
 
-    // Income, upkeep and resource caps.
+    // Phase 1: snapshot every nation's plan from the start-of-day state before
+    // any stock, population or organisation value is mutated.
+    const plans = new Map<number, ResourceChain>();
+    for (const nation of state.nations) {
+        if (nation.alive) plans.set(nation.id, resourceChain(state, nation.id));
+    }
+
+    // Phase 2: apply income, upkeep, resource flows and population once per nation.
     const unpaid = new Set<number>();
     for (const nation of state.nations) {
         if (!nation.alive) continue;
-        const rates = resourceRates(state, nation.id);
+        const chain = plans.get(nation.id)!;
+        const rates = chain.rates;
         nation.funds += rates.fundsGross;
         if (nation.funds >= rates.upkeep) {
             nation.funds -= rates.upkeep;
@@ -136,11 +151,36 @@ function advanceDay(core: GameCore): void {
             core.log(`${core.nationChip(nation.id)} 欠饷 全军组织度下降`, "econ", nation.id);
         }
         nation.manpower += rates.manpower;
-        nation.industry += rates.industry;
+        nation.industry += rates.industryNet;
         nation.politicalPower += rates.politicalPower;
+        nation.raw += rates.raw;
+        nation.food += rates.food;
+        nation.strategic += rates.strategic;
         clampResources(nation, rates);
+
+        if (nation.stability !== undefined) {
+            const target = chain.stability.target;
+            const delta = Math.max(-STABILITY_DRIFT, Math.min(STABILITY_DRIFT, target - nation.stability));
+            shiftStability(nation, delta);
+        }
+
+        for (const [site, growth] of chain.populationGrowth) {
+            const province = state.provinces[site];
+            province.population = Math.min(POPULATION_MAX, Math.max(POPULATION_MIN, province.population + growth));
+        }
+        if (chain.strategic.shortage) {
+            for (const army of state.armies.values()) {
+                if (army.nation === nation.id) army.org = Math.max(0, army.org - STRATEGIC_SHORTAGE_ORG_PENALTY);
+            }
+            core.log(`${core.nationChip(nation.id)} [[strategic]]短缺 全军[[organization]]下降`, "econ", nation.id);
+        } else if (chain.food.shortage) {
+            core.log(`${core.nationChip(nation.id)} [[food]]短缺 人口减少`, "econ", nation.id);
+        } else if (chain.raw.shortage) {
+            core.log(`${core.nationChip(nation.id)} [[raw]]短缺 [[industry]]产出下降`, "econ", nation.id);
+        }
     }
     tickVassalTribute(core);
+    tickTradeAgreements(core);
     tickVassalIndependence(core);
     tickAlliances(core);
     expireDiplomaticRequests(core);

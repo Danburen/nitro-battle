@@ -8,6 +8,8 @@ import type { GameCore } from "./core.ts";
 import { settlePeace, warGoalProgress, enforceWarGoal } from "./settlement.ts";
 import { minus, plus } from "./decision.ts";
 import { MAX_HP, UNIT_PROFILES } from "./types/unit.ts";
+import { STABILITY_DECLARATION_SHIFT, STABILITY_PEACE_SHIFT, STABILITY_WAR_SHIFT } from "./types/economy.ts";
+import { shiftStability } from "./stability.ts";
 import { NEUTRAL } from "./types/world.ts";
 import type { DiplomaticAction, DiplomaticActionKind } from "./types/diplomacy.ts";
 import type { DiplomaticDecision } from "./types/decision.ts";
@@ -179,6 +181,10 @@ export function setWar(state: GameState, a: number, b: number, atWar: boolean): 
     const truce = atWar ? -1 : state.day + TRUCE_DAYS;
     state.truce[a][b] = truce;
     state.truce[b][a] = truce;
+    // Every war pair shakes both nations; peace lets them recover.
+    const shift = atWar ? -STABILITY_WAR_SHIFT : STABILITY_PEACE_SHIFT;
+    shiftStability(state.nations[a], shift);
+    shiftStability(state.nations[b], shift);
     if (atWar) dropOffers(state, a, b);
 }
 
@@ -425,6 +431,8 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
     state.diplomaticActions.splice(state.diplomaticActions.indexOf(action), 1);
     state.wars.push({ aggressor, defender, goal: action.kind, stateId: action.stateId, targetSites, startedDay: state.day });
     setWar(state, aggressor, defender, true);
+    // Declaring adds a further hit on top of the shared war-pair penalty.
+    shiftStability(state.nations[aggressor], -STABILITY_DECLARATION_SHIFT);
     const protector = overlordOf(state, defender);
     // Attacking a vassal forces its overlord into the defensive war; allies and
     // called vassals join on both sides. Collect them all for one log headline.

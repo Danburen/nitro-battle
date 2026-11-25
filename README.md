@@ -34,6 +34,12 @@ npm run lint
 npm test            # node --test，226 个回归用例
 ```
 
+## 图标来源
+
+`public/assets/icons/` 下的单色 SVG 均取自 [Lucide](https://lucide.dev/)（`lucide-static` v1.79.0），采用 **ISC 许可证**，可免费商用、无需署名；每个文件顶部保留了原始 `@license` 注释。界面通过 CSS mask（`ui/text.ts` 的 `iconMaskStyle`）渲染，颜色统一继承 `currentColor`；地图上的资源图标另经 canvas（`render/icons.ts` 的 `drawIcon`）渲染。建筑与定位图标（`building-*.svg`、`location.svg`）同样来自 Lucide。若需署名，可标注「Icons by Lucide (ISC)」。
+
+地图容量标签上的「工 / 农 / 基 / 政 / 补 / 防」为纯文本单字，不是 emoji，不涉及图标授权。
+
 ## 其他
 
 ```bash

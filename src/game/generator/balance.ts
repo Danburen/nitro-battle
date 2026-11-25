@@ -51,6 +51,22 @@ function applyCompensation(regions: readonly StateRegion[], farms: number, infra
     }
 }
 
+/**
+ * Every starting nation needs at least one raw mine so the first production
+ * chain cannot deadlock on a seed that scattered no deposits into its territory.
+ * This is unconditional (unlike `balanceNations`) and never consumes RNG.
+ */
+export function ensureStartingResourceDeposits(state: GameState): void {
+    for (const nation of state.nations) {
+        if (!nation.alive) continue;
+        const owned = state.provinces.filter((province) => province.owner === nation.id);
+        if (owned.some((province) => province.deposits.raw > 0)) continue;
+        const capital = state.provinces[nation.capital];
+        const target = capital && capital.owner === nation.id ? capital : owned[0];
+        if (target) target.deposits.raw = 1;
+    }
+}
+
 export function compensateStartingNations(state: GameState): NationCompensation[] {
     const { nations, provinces, states } = state;
     if (nations.length < 2) return [];

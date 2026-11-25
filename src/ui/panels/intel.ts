@@ -1,8 +1,9 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { isAtWar } from "../../game/diplomacy.ts";
 import { battleForecast } from "../../game/battle.ts";
-import { infrastructureBuildMultiplier, infrastructureLevel, infrastructureMoveMultiplier, infrastructureOutputMultiplier, infrastructureSupplyMultiplier, occupationGrowth, provinceBuildingCapacity, provinceDefense, stateBuildingCapacity } from "../../game/economy.ts";
+import { infrastructureBuildMultiplier, infrastructureLevel, infrastructureMoveMultiplier, infrastructureOutputMultiplier, infrastructureSupplyMultiplier, occupationGrowth, provinceBuildingCapacity, provinceDefense, provinceFundsIncome, provinceResourceOutput, resourceYieldMultiplier, stateBuildingCapacity } from "../../game/economy.ts";
 import { supplyLevel } from "../../game/supply.ts";
+import { provincePopulationView } from "../../game/stability.ts";
 import { armyAt, entryCost, regimentHp } from "../../game/rules.ts";
 import { BUILDING_PROFILES, INFRASTRUCTURE_MAX, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types/building.ts";
 import { NEUTRAL } from "../../game/types/world.ts";
@@ -12,7 +13,7 @@ import type { BuildingKind } from "../../game/types/building.ts";
 import type { Province } from "../../game/types/entities.ts";
 import { BIOME_ZH, ownerColor, ownerName } from "../common.ts";
 import { BIOME_PROFILES } from "../../terrain/biome.ts";
-import { escapeGameText, escapeHtml as escapeText, renderGameText, signClass, textToken } from "../text.ts";
+import { escapeGameText, escapeHtml as escapeText, iconMaskStyle, peopleCount, renderGameText, signClass, textToken } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, PanelShell } from "../panel.ts";
 import { tendencyBadge } from "../tendency.ts";
@@ -71,6 +72,7 @@ export class IntelPanel {
         const supplyText = supply >= 0.8 ? "充足" : supply >= 0.5 ? "受限" : "匮乏";
         const supplyClass = supply >= 0.8 ? "good" : supply >= 0.5 ? "mid" : "bad";
         const isCore = province.owner !== NEUTRAL && province.coreNation === province.owner;
+        const population = provincePopulationView(state, province);
         const occGrowth = occupationGrowth(state, province, province.owner);
         const occHtml = province.owner !== NEUTRAL && !isCore ? `
             <div class="kv-row"><dt>${renderGameText("[[occupation]]")}</dt><dd>
@@ -95,7 +97,7 @@ export class IntelPanel {
                 <div class="tag-row">
                     <span class="tag">${escapeText(BIOME_ZH[biome] ?? profile.name)}</span>
                     <span class="tag">${renderGameText(`地形/城市[[defense]] ×${provinceDefense(state, province).toFixed(2)}`)}</span>
-                    <span class="tag">产值 ${renderGameText(textToken("funds", `+${province.income}`))}</span><span class="tag">人口 ${province.population}</span>
+                    <span class="tag">产值 ${renderGameText(textToken("funds", `+${Math.round(provinceFundsIncome(province) * 10) / 10}`))}</span><span class="tag">人口 ${peopleCount(population.people)}（可招募 ${peopleCount(population.eligible)}）</span>
                     <span class="tag supply-${supplyClass}" ${tooltipAttrs("[[supply]]水平", "[[supply]]可超过 100%；战斗与[[organization]]恢复的[[supply]]系数最多按 100% 计算。")}>${renderGameText(`[[supply]] ${Math.round(supply * 100)}% · ${supplyText}`)}</span>
                     ${province.owner !== NEUTRAL && province.owner !== 0 ? `<span class="tag">${isAtWar(state, 0, province.owner) ? "交战中" : "和平"}</span>` : ""}
                     ${this.modifiersHtml(province)}
@@ -121,7 +123,9 @@ export class IntelPanel {
             : province.owner === NEUTRAL ? "与州中心异主：否；中立省份的州[[infrastructure]]不生效，按 0 级。"
             : "与州中心异主：否，州[[infrastructure]]生效。";
         const title = `地区修正 · ${escapeGameText(province.name)}`;
-        const body = `有效州[[infrastructure]]：${infrastructure}/${INFRASTRUCTURE_MAX} 级\n${infrastructureEffects(infrastructure)}\n${applicability}`;
+        const output = provinceResourceOutput(state, province);
+        const deposits = `矿点：[[raw]] ${province.deposits.raw} 级 · 产出 ${output.raw.toFixed(2)}/[[turn]]；[[strategic]] ${province.deposits.strategic} 级 · 产出 ${output.strategic.toFixed(2)}/[[turn]]；[[food]] 产出 ${(output.food + output.farmFood).toFixed(2)}/[[turn]]。\n有效[[infrastructure]] ${output.infrastructure} 级 → 矿产系数 ×${resourceYieldMultiplier(output.infrastructure).toFixed(2)}；[[occupation]]系数 ×${output.occupation.toFixed(2)}（0 为无矿）。`;
+        const body = `有效州[[infrastructure]]：${infrastructure}/${INFRASTRUCTURE_MAX} 级\n${infrastructureEffects(infrastructure)}\n${applicability}\n${deposits}`;
         return `<button type="button" class="intel-help intel-modifiers" aria-label="${escapeText(renderGameText(title, "plain"))}" data-focus-key="${escapeText(`province-${province.site}-modifiers`)}" ${tooltipAttrs(title, body)}>地区修正</button>`;
     }
 
@@ -134,7 +138,7 @@ export class IntelPanel {
         const title = `${textToken(kind)}${kind === "supply" ? "中心" : ""}`;
         const body = `已建/上限：${count}\n待建：${pending}\n${profile.desc}\n建造需求：${textToken("construction", profile.constructionPoints)}。${detail ? `\n${detail}` : ""}`;
         return `<span class="intel-building-card${pending > 0 ? " pending" : ""}" tabindex="0" role="img" aria-label="${escapeText(renderGameText(`${title}：${body}`, "plain"))}" data-focus-key="${escapeText(focusKey)}" ${tooltipAttrs(title, body)}>
-            <span class="building-emoji" aria-hidden="true">${escapeText(profile.glyph)}</span>
+            <span class="building-icon" aria-hidden="true" ${iconMaskStyle(profile.icon)}></span>
             <span class="intel-building-count">${countHtml}</span>
         </span>`;
     }

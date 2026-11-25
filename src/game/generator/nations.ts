@@ -3,7 +3,7 @@ import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { DEFAULT_POLICIES } from "../types/policy.ts";
 import { NEUTRAL } from "../types/world.ts";
-import { START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP } from "../types/economy.ts";
+import { START_FUNDS, START_INDUSTRY, START_MANPOWER, START_PP, START_RESOURCES, START_STABILITY } from "../types/economy.ts";
 import { NATION_COUNT_MAX } from "../../types/settings.ts";
 import type { Nation, Province, StateRegion } from "../types/entities.ts";
 import type { VassalType } from "../types/diplomacy.ts";
@@ -416,7 +416,11 @@ function seedWorldVassals(
             funds: START_FUNDS,
             manpower: START_MANPOWER,
             industry: START_INDUSTRY,
+            raw: START_RESOURCES.raw,
+            food: START_RESOURCES.food,
+            strategic: START_RESOURCES.strategic,
             politicalPower: START_PP,
+            stability: START_STABILITY,
             policies: { ...DEFAULT_POLICIES },
             policyTransitions: {},
             alive: true,
@@ -499,7 +503,11 @@ export function generateNations(
             funds: START_FUNDS,
             manpower: START_MANPOWER,
             industry: START_INDUSTRY,
+            raw: START_RESOURCES.raw,
+            food: START_RESOURCES.food,
+            strategic: START_RESOURCES.strategic,
             politicalPower: START_PP,
+            stability: START_STABILITY,
             policies: { ...DEFAULT_POLICIES },
             policyTransitions: {},
             alive: true,

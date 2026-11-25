@@ -50,6 +50,7 @@ export function createProvinces(graph: VoronoiGraph, terrain: BiomeMap): Provinc
             coreNation: NEUTRAL,
             occupation: 0,
             buildings: [],
+            deposits: { raw: 0, strategic: 0 },
             stateId: -1,
         };
     });

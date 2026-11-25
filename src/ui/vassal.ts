@@ -1,13 +1,11 @@
-import { nationDisplayColor, overlordOf, vassalsOf, vassalTypeOf } from "../game/access.ts";
+import { nationDisplayColor, overlordOf, vassalTypeOf } from "../game/access.ts";
 import {
-    VASSAL_HELP_BODY, VASSAL_PROFILES, HIGH_INDEPENDENCE_RATIO, independenceCapOf, independenceOf,
+    VASSAL_PROFILES, HIGH_INDEPENDENCE_RATIO, independenceCapOf, independenceOf,
     independenceRatioOf, tributeRateOf,
 } from "../game/vassal.ts";
 import type { GameState } from "../game/types/state.ts";
 import type { VassalType } from "../game/types/diplomacy.ts";
-import { chipToken, escapeHtml, iconMaskStyle, textToken } from "./text.ts";
-import { helpButton } from "./panel.ts";
-import { nationFlagHtmlFor } from "./flags.ts";
+import { chipToken, iconMaskStyle, textToken } from "./text.ts";
 import { tooltipAttrs } from "./tooltip.ts";
 
 /**
@@ -34,7 +32,7 @@ function independenceText(state: GameState, nationId: number): string {
 }
 
 /** Tribute as colour-coded, negative resource tokens (plus PP where applicable). */
-export function vassalTributeTokens(state: GameState, nationId: number): string {
+function vassalTributeTokens(state: GameState, nationId: number): string {
     const type = vassalTypeOf(state, nationId);
     if (!type) return "";
     const profile = VASSAL_PROFILES[type];
@@ -70,16 +68,6 @@ export function vassalTypeIcon(state: GameState, nationId: number): string {
     </span>`;
 }
 
-/** Named variant used where the label still fits (e.g. the vassal-action note). */
-export function vassalTypeBadge(state: GameState, nationId: number): string {
-    const type = vassalTypeOf(state, nationId);
-    if (!type) return "";
-    return `<span class="vassal-type vassal-type--${type}" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
-        <span class="vassal-type-icon icon-glyph" aria-hidden="true" ${iconMaskStyle(VASSAL_TYPE_ICON[type])}></span>
-        <span>${VASSAL_PROFILES[type].name}</span>
-    </span>`;
-}
-
 /** Orange independence marker with its value; red once past the 80% threshold. */
 export function vassalIndependenceIcon(state: GameState, nationId: number): string {
     const value = Math.round(independenceOf(state, nationId));
@@ -91,18 +79,3 @@ export function vassalIndependenceIcon(state: GameState, nationId: number): stri
     </span>`;
 }
 
-/** `<div class="kv-row">` block inserted after the tendency row in a nation card. */
-export function vassalStatusHtml(state: GameState, nationId: number): string {
-    const nation = state.nations[nationId];
-    if (!nation) return "";
-    const overlord = overlordOf(state, nationId);
-    if (overlord < 0) {
-        const vassals = vassalsOf(state, nationId);
-        if (vassals.length === 0) return "";
-        return `<div class="kv-row"><dt>附庸</dt><dd>宗主国 · ${vassals.length} 个附庸 ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</dd></div>`;
-    }
-    if (!vassalTypeOf(state, nationId)) return "";
-    return `<div class="kv-row vassal-row"><dt>附庸于</dt><dd>
-        <span class="vassal-head">${nationFlagHtmlFor(state, overlord, 20)}${escapeHtml(state.nations[overlord].name)}${vassalTypeIcon(state, nationId)}${vassalIndependenceIcon(state, nationId)}${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</span>
-    </dd></div>`;
-}

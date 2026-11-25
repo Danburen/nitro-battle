@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { createRequestCooldown } from "../game/requests.ts";
 import { overlordOf, vassalTypeOf } from "../game/access.ts";
 import {
     ANNEX_FLIP_WILL_MAX, VASSAL_PROFILES, canAnnexVassal, setVassal, vassalTuningOf,
@@ -25,7 +26,8 @@ function fixture(
             provinces.push({
                 site, stateId: owner, name: `P${site}`, owner, legalOwner: owner, coreNation: owner,
                 occupation: 100, isCity: site === center, isCapital: site === center,
-                income: 4, population: 2, defense: 1, buildings: [], garrison: 20, garrisonMax: 20,
+                income: 4, population: 2, defense: 1, buildings: [], deposits: { raw: 0, strategic: 0 },
+                garrison: 20, garrisonMax: 20,
             });
         }
         states.push({
@@ -36,7 +38,7 @@ function fixture(
     const nations: Nation[] = Array.from({ length: 4 }, (_, id) => ({
         id, name: `N${id}`, color: ["#1f6feb", "#da3633", "#3fb950", "#d29922"][id],
         isPlayer: id === 0, capital: id * 3, alive: true,
-        funds: 1000, manpower: 1000, industry: 1000, politicalPower: 100,
+        funds: 1000, manpower: 1000, industry: 1000, raw: 0, food: 0, strategic: 0, politicalPower: 100,
         policies: { ...DEFAULT_POLICIES }, tendency: tendencies[id],
     }));
     const count = provinces.length;
@@ -63,7 +65,9 @@ function fixture(
         alliances: [], diplomaticRequests: [],
         allianceCooldown: [[-1, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1]],
         vassalCooldown: [[-1, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1], [-1, -1, -1, -1]],
+        requestCooldown: createRequestCooldown(4),
         nextDiplomaticActionId: 1, nextAllianceId: 1, nextRequestId: 1,
+        tradeAgreements: [], nextTradeId: 1,
         log: [], winner: null, nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };

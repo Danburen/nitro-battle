@@ -55,6 +55,10 @@ export function setPlayerNation(state: GameState, chosen: number): boolean {
         const request = state.diplomaticRequests[i];
         state.diplomaticRequests[i] = { ...request, from: mapId(request.from), to: mapId(request.to) };
     }
+    for (let i = 0; i < state.tradeAgreements.length; i++) {
+        const agreement = state.tradeAgreements[i];
+        state.tradeAgreements[i] = { ...agreement, from: mapId(agreement.from), to: mapId(agreement.to) };
+    }
 
     const nations = [...state.nations];
     nations[0] = rebuildNation(state.nations[chosen], 0);

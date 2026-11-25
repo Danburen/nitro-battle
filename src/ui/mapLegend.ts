@@ -1,9 +1,18 @@
-import { escapeHtml, renderGameText } from "./text.ts";
+import { escapeHtml, iconMaskStyle, renderGameText } from "./text.ts";
+
+export interface LegendIcon {
+    /** External SVG name in `public/assets/icons/`. */
+    readonly name: string;
+    /** Glyph ink; matches the colour the map paints for this resource. */
+    readonly color: string;
+}
 
 export interface LegendItem {
     readonly label: string;
     /** Swatch fill; omit for pattern-only items. */
     readonly color?: string;
+    /** Resource icons replace the colour swatch, carrying the map colour as their ink. */
+    readonly icons?: readonly LegendIcon[];
     /** Animated gold pulse, used for claimable states. */
     readonly pulse?: boolean;
     /** Dashed focus ring. */
@@ -16,6 +25,19 @@ export interface LegendSpec {
     readonly title: string;
     readonly items: readonly LegendItem[];
     readonly note?: string;
+}
+
+function markerHtml(item: LegendItem): string {
+    if (item.icons?.length) {
+        const glyphs = item.icons
+            .map((icon) => `<span class="resource-icon" ${iconMaskStyle(icon.name, escapeHtml(icon.color))}></span>`)
+            .join("");
+        return `<span class="map-legend-icons" aria-hidden="true">${glyphs}</span>`;
+    }
+    const style = item.overlay
+        ? ` style="--legend-fill:${escapeHtml(item.overlay)}"`
+        : item.color && !item.ring ? ` style="background:${escapeHtml(item.color)}"` : "";
+    return `<i class="${item.pulse ? "pulse" : ""}${item.ring ? "ring" : ""}${item.overlay ? " overlay" : ""}"${style}></i>`;
 }
 
 /** Simple map legend on the left edge; showed only while a panel-driven map render mode is active. */
@@ -36,12 +58,9 @@ export class MapLegend {
             this.el.innerHTML = "";
             return;
         }
-        const items = spec.items.map((item) => {
-            const style = item.overlay
-                ? ` style="--legend-fill:${escapeHtml(item.overlay)}"`
-                : item.color && !item.ring ? ` style="background:${escapeHtml(item.color)}"` : "";
-            return `<span class="map-legend-item"><i class="${item.pulse ? "pulse" : ""}${item.ring ? "ring" : ""}${item.overlay ? " overlay" : ""}"${style}></i>${escapeHtml(item.label)}</span>`;
-        }).join("");
+        const items = spec.items
+            .map((item) => `<span class="map-legend-item">${markerHtml(item)}${escapeHtml(item.label)}</span>`)
+            .join("");
         this.el.innerHTML = `<div class="map-legend-head">${escapeHtml(spec.title)}</div>
             <div class="map-legend-items">${items}</div>
             ${spec.note ? `<p class="map-legend-note">${renderGameText(spec.note)}</p>` : ""}`;

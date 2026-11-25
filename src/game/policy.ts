@@ -57,6 +57,19 @@ export function categoryModifiers(nation: Nation, category: PolicyCategory, day:
     return blend(current, target, policyTransitionProgress(transition, day));
 }
 
+/** Recruitable share and stability target, ramping with a conscription switch. */
+export function conscriptionProfile(nation: Nation, day: number): { share: number; stabilityTarget: number } {
+    const current = CONSCRIPTION_POLICIES[nation.policies.conscription];
+    const transition = nation.policyTransitions?.conscription;
+    const target = transition ? CONSCRIPTION_POLICIES[transition.to as ConscriptionPolicy] : undefined;
+    if (!transition || !target) return { share: current.recruitableShare, stabilityTarget: current.stabilityTarget };
+    const t = policyTransitionProgress(transition, day);
+    return {
+        share: current.recruitableShare + (target.recruitableShare - current.recruitableShare) * t,
+        stabilityTarget: current.stabilityTarget + (target.stabilityTarget - current.stabilityTarget) * t,
+    };
+}
+
 export function policyModifiers(nation: Nation, day: number): PolicyModifiers {
     const economy = categoryModifiers(nation, "economy", day);
     const conscription = categoryModifiers(nation, "conscription", day);

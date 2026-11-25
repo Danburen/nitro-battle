@@ -33,6 +33,7 @@ import {
     requestJoinAlliance as requestJoinAllianceOf,
 } from "./alliance.ts";
 import { cancelPolicySwitch, startPolicySwitch } from "./policy.ts";
+import { proposeTrade as proposeTradeOf } from "./trade.ts";
 import {
     cancelBuild,
     cancelTrain,
@@ -49,6 +50,7 @@ import type { StateBuildingKind, ProvinceBuildingKind } from "./types/building.t
 import type { DiplomaticActionKind, VassalType } from "./types/diplomacy.ts";
 import type { GameState } from "./types/state.ts";
 import type { PolicyCategory } from "./types/policy.ts";
+import type { TradeKind, TradeTransfer } from "./types/trade.ts";
 import type { UnitKind } from "./types/unit.ts";
 import { generateWorld } from "./generator/index.ts";
 
@@ -265,6 +267,16 @@ export class GameEngine extends GameCore {
 
     leaveAlliance(): boolean {
         return leaveAllianceOf(this, 0);
+    }
+
+    // ---- trade (game/trade.ts) ----
+
+    /** Player offer: the target's willingness is resolved immediately and logged on refusal. */
+    proposeTrade(
+        targetId: number, kind: TradeKind, give: readonly TradeTransfer[], receive: readonly TradeTransfer[],
+        days?: number,
+    ): boolean {
+        return proposeTradeOf(this, 0, targetId, { kind, give, receive }, days);
     }
 
     // ---- turn resolution (game/turn.ts) ----

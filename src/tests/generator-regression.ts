@@ -109,7 +109,7 @@ function checkOpening(state: GameState): void {
         assert.equal(states[capital.stateId].center, nation.capital);
         assert.ok(capital.isCapital && capital.isCity && mainland.has(nation.capital));
         assert.deepEqual([nation.funds, nation.manpower, nation.industry, nation.politicalPower], [300, 500, 30, 20]);
-        assert.deepEqual(nation.policies, { economy: "balanced", conscription: "volunteer", occupation: "balanced" });
+        assert.deepEqual(nation.policies, { economy: "balanced", conscription: "service", occupation: "balanced" });
         const totals = factoryTotals(state, nation.id);
         assert.equal(totals.idle, Math.max(1, Math.ceil(totals.total / 3)));
         const armies = [...state.armies.values()].filter((army) => army.nation === nation.id);

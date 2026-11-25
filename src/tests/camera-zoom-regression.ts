@@ -19,14 +19,32 @@ test("zoom-in ceiling keeps the visible strip at least as wide as the map's shor
     assert.ok(1600 / camera.zoom >= 900 - 1e-9, "visible world strip is narrower than the map short side");
 });
 
-test("the ceiling follows the window size and never drops below deep-map zoom", () => {
+test("the zoom-out floor keeps the viewport smaller than the toroidal map", () => {
+    const camera = new Camera(2000, 1500);
+    camera.fit(1800, 1500);
+    near(camera.minZoom, 1500 / (1500 * 0.9));
+    near(camera.zoom, camera.minZoom, 1e-9);
+    assert.ok(1800 / camera.zoom <= 1800 + 1e-9, "viewport exceeds the map width");
+    assert.ok(1500 / camera.zoom <= 1350 + 1e-9, "viewport exceeds 90% of the map height");
+    // Zooming out can never reveal a periodic copy of the map.
+    camera.zoomAt(900, 750, 0.01, 1800, 1500);
+    near(camera.zoom, camera.minZoom);
+    assert.ok(1800 / camera.zoom <= 1800 + 1e-9);
+    assert.ok(1500 / camera.zoom <= 1350 + 1e-9);
+});
+
+test("the floor follows the window size while the ceiling keeps deep-map zoom", () => {
     const camera = new Camera(1800, 1100);
     camera.fit(1200, 800);
-    // 1200 / 1100 < 1.6, so the usability floor wins instead of blocking province counters.
+    // 800 / (1100 * 0.9) wins over the width constraint and the fit overview.
+    near(camera.minZoom, 800 / 990);
+    near(camera.zoom, camera.minZoom);
     near(camera.maxZoom, 1.6);
     camera.setViewport(2400, 1600);
+    near(camera.minZoom, 1600 / 990);
+    near(camera.zoom, camera.minZoom);
     near(camera.maxZoom, 2400 / 1100);
-    // Growing the window does not silently keep an out-of-range zoom.
+    // Growing or shrinking the window always pulls a stray zoom back into range.
     camera.zoom = 4;
     camera.setViewport(1400, 900);
     near(camera.zoom, 1.6);
@@ -35,20 +53,23 @@ test("the ceiling follows the window size and never drops below deep-map zoom", 
     near(camera.zoom, 1.6);
 });
 
-test("fit still shows the whole map and never exceeds its own ceiling", () => {
+test("fit prefers the torus floor over a full overview on large windows", () => {
     const camera = new Camera(1400, 900);
     camera.fit(1000, 700);
-    near(camera.zoom, Math.min(1000 / 1400, 700 / 900) * 0.98);
-    near(camera.minZoom, camera.zoom * 0.6);
+    near(camera.minZoom, 700 / 810);
+    near(camera.zoom, camera.minZoom);
+    assert.ok(1000 / camera.zoom <= 1260 + 1e-9);
+    assert.ok(700 / camera.zoom <= 810 + 1e-9);
     const square = new Camera(1000, 1000);
     square.fit(500, 500);
-    near(square.zoom, 0.49);
-    assert.ok(square.maxZoom >= square.zoom);
+    near(square.zoom, 500 / 900);
+    assert.ok(square.minZoom <= square.maxZoom);
 });
 
 test("a degenerate world size falls back to a finite ceiling", () => {
     const camera = new Camera(0, 0);
     assert.equal(camera.maxZoom, 1.6);
     camera.zoomAt(0, 0, 2, 0, 0);
+    assert.equal(camera.zoom, 1.6);
     assert.ok(Number.isFinite(camera.zoom));
 });

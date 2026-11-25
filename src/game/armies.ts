@@ -211,7 +211,7 @@ export function splitArmy(
     if (nationArmyCount(state, 0) >= armyCap(state, 0)) return null;
 
     const openSite = (site: number): boolean =>
-        state.terrain.passable[site] && state.provinces[site].owner === 0 &&
+        state.terrain.passable[site] === 1 && state.provinces[site].owner === 0 &&
         !armyAt(state, site) && !core.battleAt(site);
     let site: number | null = null;
     if (targetSite !== undefined && targetSite !== null) {

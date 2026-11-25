@@ -183,7 +183,7 @@
 .intel-info { display: inline-flex; justify-content: center; align-items: center; width: 17px; height: 17px; padding: 0; border-radius: 50%; font-family: var(--mono); }
 .intel-building-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 60px)); gap: 6px; margin: 7px 0; }
 .intel-building-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 59px; box-sizing: border-box; border: 1px solid var(--site-border); border-radius: var(--site-radius); background: var(--site-bg); color: var(--site-fg); cursor: help; }
-.intel-building-card .building-emoji { font-size: 24px; }
+.intel-building-card .building-icon { width: 24px; height: 24px; }
 .intel-building-count { font: calc(11px * var(--site-type, 1)) var(--mono); }
 .intel-building-card.pending { border-color: #3fb950; background: color-mix(in srgb, #3fb950 12%, var(--site-bg)); }
 .building-pending { color: #3fb950; font-weight: 700; }

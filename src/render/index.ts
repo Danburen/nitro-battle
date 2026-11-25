@@ -30,5 +30,6 @@ export {
     drawProvinceCapacityMarkers,
     drawProvinceMarkers,
     drawRegionMarkers,
+    REGION_COUNTER_MIN_ZOOM,
 } from "./markers.ts";
 export type { MarkerOptions } from "./markers.ts";

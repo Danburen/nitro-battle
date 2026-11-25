@@ -1,6 +1,6 @@
 import { MAP_SIZES, NATION_COUNT_MAX } from "../types/settings.ts";
 import { DEFAULT_TERRAIN_PARAMS } from "../terrain/biome.ts";
-import { renderGameText } from "./text.ts";
+import { iconMaskStyle, renderGameText } from "./text.ts";
 import { tooltipAttrs } from "./tooltip.ts";
 
 /** Preset line-ups; anything else goes through the custom slider. */
@@ -66,20 +66,15 @@ export function mountLayout(app: HTMLElement): void {
                     </div>
                 </div>
                 <span class="pill" id="day-pill">${renderGameText("第 [[turn:1]]")}</span>
-                <span class="pill" id="season-pill">春季</span>
                 <div class="top-resources">
+                    <span class="res-pill" id="res-stability">稳定 65</span>
                     <span class="res-pill" id="res-funds">§300</span>
                     <span class="res-pill" id="res-manpower">人力 500</span>
                     <span class="res-pill" id="res-industry">工业 30</span>
+                    <span class="res-pill" id="res-raw">原料 20</span>
+                    <span class="res-pill" id="res-food">粮食 60</span>
+                    <span class="res-pill" id="res-strategic">战略 10</span>
                     <span class="res-pill" id="res-pp">政治 20</span>
-                </div>
-                <div class="factory-allocation" id="factory-allocation" role="group" aria-label="全国工厂调配">
-                    <button class="factory-step" data-factory-step="-1" aria-label="增加闲置工厂">−</button>
-                    <div class="factory-dial">
-                        <div class="factory-totals"><span>${renderGameText("[[production]]")} <b id="factory-prod">0</b></span><span>${renderGameText("[[idle]]")} <b id="factory-idle">0</b></span></div>
-                        <input id="factory-production" type="range" min="0" max="0" value="0" step="1" aria-label="生产工厂数量" />
-                    </div>
-                    <button class="factory-step" data-factory-step="1" aria-label="增加生产工厂">+</button>
                 </div>
                 <div class="top-actions">
                     <button id="btn-home" class="btn btn-icon" title="回到首都" aria-label="回到首都">
@@ -105,6 +100,7 @@ export function mountLayout(app: HTMLElement): void {
                     <span class="settings-control settings-seg-group" role="group" aria-label="染色模式">
                         <button class="settings-seg" data-action="color-mode" data-color="uniform" aria-pressed="false">均匀</button>
                         <button class="settings-seg" data-action="color-mode" data-color="gradient" aria-pressed="true">渐变</button>
+                        <button class="settings-seg" data-action="color-mode" data-color="resource" aria-pressed="false">资源</button>
                     </span>
                 </div>
                 <div class="settings-row">
@@ -118,7 +114,7 @@ export function mountLayout(app: HTMLElement): void {
                     <span class="settings-label">恢复默认</span>
                     <span class="settings-control"><button class="btn btn-sm" data-action="color-reset">重置染色</button></span>
                 </div>
-                <p class="settings-note">渐变：拉高镜头越过阈值整体加深；放大时全国浅染、国界内侧加描国家色边线。均匀：全国同深度。</p>
+                <p class="settings-note">${renderGameText("渐变：拉高镜头越过阈值整体加深；放大时全国浅染、国界内侧加描国家色边线。均匀：全国同深度。资源：按省份资源染色——金色[[raw]]、绿色[[food]]、粉色[[strategic]]、紫色为两种矿产共存；颜色越深矿点等级越高，悬停省份查看实际产量。")}</p>
             </div>
 
             <div class="hud-corner hud-tl">
@@ -129,12 +125,14 @@ export function mountLayout(app: HTMLElement): void {
                         <button class="tab" data-tab="construction">建造</button>
                         <button class="tab" data-tab="policy">政策</button>
                         <button class="tab active" data-tab="diplomacy">外交</button>
+                        <button class="tab" data-tab="trade">贸易</button>
                         <button class="tab" data-tab="expansion">扩张</button>
                     </nav>
                     <section class="panel dock-panel hidden" id="deploy-panel"></section>
                     <section class="panel dock-panel hidden" id="construction-panel"></section>
                     <section class="panel dock-panel hidden" id="policy-panel"></section>
                     <section class="panel dock-panel hidden" id="diplomacy-panel"></section>
+                    <section class="panel dock-panel hidden" id="trade-panel"></section>
                     <section class="panel dock-panel hidden" id="expansion-panel"></section>
                 </div>
                 <section class="panel map-legend hidden" id="map-legend" aria-label="地图图例"></section>
@@ -145,7 +143,7 @@ export function mountLayout(app: HTMLElement): void {
 
             <div class="hud-feed">
                 <div class="feed-bar">
-                    <span class="feed-title">⚑ 战报直播</span>
+                    <span class="feed-title"><span class="resource-icon" aria-hidden="true" ${iconMaskStyle("war")}></span>战报直播</span>
                     <button class="feed-toggle" id="feed-toggle" data-action="feed-toggle" title="展开/收起战场直播明细" aria-label="展开战场直播明细">▾</button>
                 </div>
                 <div class="feed-live" id="feed-live"></div>
@@ -165,6 +163,7 @@ export function mountLayout(app: HTMLElement): void {
                 <div class="map-layer-options" id="map-layer-options" role="group" aria-label="地图模式">
                     <button class="map-layer active" data-action="map-mode" data-mode="province" aria-pressed="true">省份<span>地形与战术</span></button>
                     <button class="map-layer" data-action="map-mode" data-mode="state" aria-pressed="false">州<span>行政与建设</span></button>
+                    <button class="map-layer" data-action="color-mode" data-color="resource" aria-pressed="false">资源<span>矿点/粮食</span></button>
                 </div>
             </div>
 
@@ -204,7 +203,7 @@ export function mountLayout(app: HTMLElement): void {
                 </div>
                 <ul class="start-summary">
                     <li><b>军团作战</b>每省最多一个军团，混编步兵/坦克/火炮；会战逐日结算，组织度决定胜负。</li>
-                    <li><b>四资源经济</b>${renderGameText("[[funds]]、[[manpower]]、[[industry]]、[[politics]]；建筑与政策塑造你的战争机器，补给线决定前线战力。")}</li>
+                    <li><b>七资源经济</b>${renderGameText("[[funds]]、[[manpower]]、[[industry]]、[[politics]]，加上[[raw]]、[[food]]、[[strategic]]；矿点支撑工业与军备，粮食决定人口增长，短缺会拖累产出。")}</li>
                     <li><b>便捷指挥</b>顶部资源栏 + 可收起页签；选中军团自动进入指挥模式，列表多选合并、详情窗拆分编组。</li>
                 </ul>
                 <p class="start-note">完整规则与操作见「玩法说明」。</p>

@@ -15,7 +15,14 @@ export interface UnitProfile {
     readonly manpowerCost: number;
     readonly industryCost: number;
     readonly trainDays: number;
+    /** Daily funds upkeep (existing). */
     readonly upkeep: number;
+    /** Daily strategic-resource upkeep of one regiment. */
+    readonly strategicUpkeep: number;
+    /** Daily food upkeep of one regiment. */
+    readonly foodUpkeep: number;
+    /** Daily industrial upkeep of one regiment. */
+    readonly industryUpkeep: number;
     readonly mp: number;
     readonly atk: number;
     readonly def: number;
@@ -31,6 +38,9 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         industryCost: 0,
         trainDays: 1,
         upkeep: 1,
+        strategicUpkeep: 0,
+        foodUpkeep: 0.2,
+        industryUpkeep: 0,
         mp: 3,
         atk: 4,
         def: 3,
@@ -44,6 +54,9 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         industryCost: 30,
         trainDays: 2,
         upkeep: 3,
+        strategicUpkeep: 0.3,
+        foodUpkeep: 0.3,
+        industryUpkeep: 0.2,
         mp: 5,
         atk: 7,
         def: 5,
@@ -57,6 +70,9 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         industryCost: 20,
         trainDays: 2,
         upkeep: 2,
+        strategicUpkeep: 0.1,
+        foodUpkeep: 0.3,
+        industryUpkeep: 0.1,
         mp: 2,
         atk: 9,
         def: 2,

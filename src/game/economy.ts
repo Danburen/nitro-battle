@@ -1,12 +1,26 @@
 import { BUILDING_PROFILES, INFRASTRUCTURE_MAX, STATE_BUILDING_KINDS, PROVINCE_BUILDING_KINDS } from "./types/building.ts";
-import { FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, INDUSTRY_BASE_CAP, INDUSTRY_CAP_PER_CITY, MANPOWER_BASE_CAP, MANPOWER_CAP_PER_POP, OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN, PP_CAP, SUPPLY_RANGE_CAPITAL, SUPPLY_RANGE_CITY, SUPPLY_RANGE_CENTER } from "./types/economy.ts";
+import {
+    DEPOSIT_YIELD_PER_LEVEL, ELIGIBLE_PER_POP, FACTORY_PROD_FUNDS, FACTORY_PROD_INDUSTRY, FOOD_PER_FARM,
+    FOOD_PER_POPULATION, FOOD_PER_PROVINCE,
+    FOOD_SURPLUS_GROWTH_BONUS, FOOD_SURPLUS_RATIO, INDUSTRY_BASE_CAP,
+    INDUSTRY_CAP_PER_CITY, MANPOWER_INTAKE_RATE, OCCUPATION_BASE_GROWTH, OCCUPATION_FACTOR_MIN,
+    POPULATION_DECLINE_BASE, POPULATION_GROWTH_BASE, POPULATION_GROWTH_FOOD_RATIO, POPULATION_MAX, POPULATION_MIN, PP_CAP,
+    RAW_PER_PROD_FACTORY, RESOURCE_CAPS,
+    RESOURCE_INFRASTRUCTURE_BASE, RESOURCE_INFRASTRUCTURE_PER_LEVEL, SHORTAGE_FACTOR_MIN,
+    STRATEGIC_PER_PROD_FACTORY, SUPPLY_RANGE_CAPITAL, SUPPLY_RANGE_CITY, SUPPLY_RANGE_CENTER,
+} from "./types/economy.ts";
 import { NEUTRAL } from "./types/world.ts";
 import { UNIT_PROFILES, UnitKind } from "./types/unit.ts";
 import type { BuildingKind, ConstructionOrder, ProvinceBuildingKind, StateBuildingKind } from "./types/building.ts";
 import type { GameState } from "./types/state.ts";
 import type { Nation, Province, StateRegion } from "./types/entities.ts";
 import type { PolicyModifiers } from "./types/policy.ts";
-import { policyModifiers } from "./policy.ts";
+import { conscriptionProfile, policyModifiers } from "./policy.ts";
+import {
+    populationIdentity, stabilityManpower, stabilityPolitics, stabilityOf, stabilityProduction,
+    targetStability, warCount,
+} from "./stability.ts";
+import type { StabilityInputs, StabilitySnapshot } from "./stability.ts";
 
 export function occupationFactor(province: Province, nationId: number): number {
     if (province.owner !== nationId) return 0;
@@ -28,6 +42,61 @@ export function infrastructureLevel(state: GameState, site: number): number {
 
 export function infrastructureOutputMultiplier(level: number): number {
     return 0.8 + 0.05 * clampInfrastructure(level);
+}
+
+/** Resource-chain curve: 60% baseline, +10% per infrastructure level. */
+export function resourceYieldMultiplier(level: number): number {
+    return RESOURCE_INFRASTRUCTURE_BASE + RESOURCE_INFRASTRUCTURE_PER_LEVEL * clampInfrastructure(level);
+}
+
+/** One province's daily resource contribution, before any global policy multiplier. */
+export interface ProvinceResourceOutput {
+    /** Mine output from this province's raw deposit. */
+    raw: number;
+    /** Mine output from this province's strategic deposit. */
+    strategic: number;
+    /** Baseline food from owning this province. */
+    food: number;
+    /** Farm food when this province is an occupied/owned state center with farms. */
+    farmFood: number;
+    /** Effective state infrastructure used by the mines. */
+    infrastructure: number;
+    /** Occupation multiplier used for every source above. */
+    occupation: number;
+}
+
+/**
+ * Pure per-province view of the resource chain. Defaults to the current owner so
+ * map/tooltip previews also work for neutral land; pass an explicit nation id to
+ * mirror another nation's actual settlement output.
+ */
+export function provinceResourceOutput(state: GameState, province: Province, nationId = province.owner): ProvinceResourceOutput {
+    const infrastructure = infrastructureLevel(state, province.site);
+    const occupation = occupationFactor(province, nationId);
+    const yieldMult = resourceYieldMultiplier(infrastructure);
+    const raw = province.deposits.raw * DEPOSIT_YIELD_PER_LEVEL * yieldMult * occupation;
+    const strategic = province.deposits.strategic * DEPOSIT_YIELD_PER_LEVEL * yieldMult * occupation;
+    const food = FOOD_PER_PROVINCE * occupation;
+    let farmFood = 0;
+    const region = state.states[province.stateId];
+    if (province.owner !== NEUTRAL && region && region.center === province.site) {
+        const farms = buildingCount(region, "farm");
+        if (farms > 0) {
+            const nation = state.nations[nationId];
+            const occupiedMult = province.coreNation === nationId || !nation
+                ? 1 : policyModifiers(nation, state.day).occupiedIncomeMult;
+            farmFood = farms * FOOD_PER_FARM * yieldMult * occupation * occupiedMult;
+        }
+    }
+    return { raw, strategic, food, farmFood, infrastructure, occupation };
+}
+
+/** Rural land pays a fifth of an equivalent city province's taxes. */
+const RURAL_INCOME_FACTOR = 0.2;
+
+/** Daily funds a province contributes, before occupation and policy multipliers. */
+export function provinceFundsIncome(province: Province): number {
+    return province.income * (province.isCity ? 1 : RURAL_INCOME_FACTOR);
 }
 
 export function infrastructureBuildMultiplier(level: number): number {
@@ -180,27 +249,47 @@ export interface ResourceRates {
     fundsNet: number;
     manpower: number;
     industry: number;
+    /** Daily industry gain after the raw-shortage modifier (phase-2 value). */
+    industryNet: number;
+    industryFactor: number;
+    /** Daily net changes of the management-chain resources. */
+    raw: number;
+    food: number;
+    strategic: number;
     politicalPower: number;
     manpowerCap: number;
     industryCap: number;
 }
 
 /** Per-source totals before policy multipliers, shared by rates and hover breakdowns. */
-interface EconomyTotals {
+export interface EconomyTotals {
     mods: PolicyModifiers;
     provinceIncome: number;
     farmFunds: number;
     factoryFunds: number;
     infrastructureFunds: number;
-    manpowerPopulation: number;
-    manpowerFarm: number;
     industryCities: number;
     industryFactory: number;
     industryInfrastructure: number;
     upkeep: number;
     adminActive: number;
-    effectivePopulation: number;
+    /** Identity-weighted population points: cores count fully, occupied land a tenth. */
+    eligiblePopulation: number;
+    /** Owned provinces that are not historical cores. */
+    occupiedProvinces: number;
     effectiveCities: number;
+    /** Step-2 resource chain: gross production, consumption and army upkeep. */
+    rawGross: number;
+    strategicGross: number;
+    foodGross: number;
+    foodProvinces: number;
+    foodFarms: number;
+    totalPopulation: number;
+    rawFactoryUse: number;
+    strategicFactoryUse: number;
+    strategicArmyUse: number;
+    foodArmyUse: number;
+    industryArmyUse: number;
 }
 
 function economyTotals(state: GameState, nationId: number): EconomyTotals {
@@ -210,24 +299,35 @@ function economyTotals(state: GameState, nationId: number): EconomyTotals {
     let farmFunds = 0;
     let factoryFunds = 0;
     let infrastructureFunds = 0;
-    let manpowerPopulation = 0;
-    let manpowerFarm = 0;
     let industryCities = 0;
     let industryFactory = 0;
     let industryInfrastructure = 0;
-    let effectivePopulation = 0;
     let effectiveCities = 0;
     let adminActive = 0;
+    let eligiblePopulation = 0;
+    let occupiedProvinces = 0;
+    let rawGross = 0;
+    let strategicGross = 0;
+    let foodProvinces = 0;
+    let foodFarms = 0;
+    let totalPopulation = 0;
+    let rawFactoryUse = 0;
+    let strategicFactoryUse = 0;
 
     for (const province of state.provinces) {
         if (province.owner !== nationId) continue;
         const factor = occupationFactor(province, nationId);
         const occupiedMult = province.coreNation === nationId ? 1 : mods.occupiedIncomeMult;
-        provinceIncome += province.income * factor * occupiedMult;
-        manpowerPopulation += province.population * 0.5 * factor;
+        provinceIncome += provinceFundsIncome(province) * factor * occupiedMult;
         industryCities += ((province.isCity ? 3 : 0) + (province.isCapital ? 2 : 0)) * factor;
-        effectivePopulation += province.population * factor;
         effectiveCities += (province.isCity ? 1 : 0) * factor;
+        totalPopulation += province.population;
+        eligiblePopulation += province.population * populationIdentity(province, nationId);
+        if (province.coreNation !== nationId) occupiedProvinces++;
+        const resource = provinceResourceOutput(state, province, nationId);
+        foodProvinces += resource.food;
+        rawGross += resource.raw;
+        strategicGross += resource.strategic;
     }
 
     for (const region of state.states) {
@@ -236,44 +336,188 @@ function economyTotals(state: GameState, nationId: number): EconomyTotals {
         const factor = occupationFactor(center, nationId);
         const occupiedMult = center.coreNation === nationId ? 1 : mods.occupiedIncomeMult;
         const farms = buildingCount(region, "farm");
-        const output = infrastructureOutputMultiplier(infrastructureLevel(state, region.center));
+        const infra = infrastructureLevel(state, region.center);
+        const output = infrastructureOutputMultiplier(infra);
         const production = region.prodFactories * output;
         const baseline = region.prodFactories;
         farmFunds += farms * 2 * factor * occupiedMult;
         factoryFunds += baseline * FACTORY_PROD_FUNDS * factor * occupiedMult;
         infrastructureFunds += (production - baseline) * FACTORY_PROD_FUNDS * factor * occupiedMult;
-        manpowerFarm += farms * 0.5 * factor;
         industryFactory += baseline * FACTORY_PROD_INDUSTRY * factor;
         industryInfrastructure += (production - baseline) * FACTORY_PROD_INDUSTRY * factor;
+        foodFarms += provinceResourceOutput(state, center, nationId).farmFood;
+        rawFactoryUse += baseline * RAW_PER_PROD_FACTORY * factor;
+        strategicFactoryUse += baseline * STRATEGIC_PER_PROD_FACTORY * factor;
         if (region.buildings.includes("admin") && (center.coreNation === nationId || center.occupation >= 50)) adminActive++;
     }
 
     let upkeep = 0;
+    let strategicArmyUse = 0;
+    let foodArmyUse = 0;
+    let industryArmyUse = 0;
     for (const army of state.armies.values()) {
         if (army.nation !== nationId) continue;
-        for (const regiment of army.regiments) upkeep += UNIT_PROFILES[regiment.kind].upkeep;
+        for (const regiment of army.regiments) {
+            const profile = UNIT_PROFILES[regiment.kind];
+            upkeep += profile.upkeep;
+            strategicArmyUse += profile.strategicUpkeep;
+            foodArmyUse += profile.foodUpkeep;
+            industryArmyUse += profile.industryUpkeep;
+        }
     }
 
     return {
         mods, provinceIncome, farmFunds, factoryFunds, infrastructureFunds,
-        manpowerPopulation, manpowerFarm, industryCities, industryFactory, industryInfrastructure,
-        upkeep, adminActive, effectivePopulation, effectiveCities,
+        industryCities, industryFactory, industryInfrastructure,
+        upkeep, adminActive, eligiblePopulation, occupiedProvinces, effectiveCities,
+        rawGross, strategicGross, foodGross: foodProvinces + foodFarms,
+        foodProvinces, foodFarms, totalPopulation,
+        rawFactoryUse, strategicFactoryUse, strategicArmyUse, foodArmyUse, industryArmyUse,
     };
 }
 
-export function resourceRates(state: GameState, nationId: number): ResourceRates {
+/** One resource's daily flow; `factor` is the production modifier applied when an input is short. */
+export interface ResourceFlow {
+    gross: number;
+    consumption: number;
+    net: number;
+    cap: number;
+    shortage: boolean;
+    factor: number;
+}
+
+export interface FoodFlow extends ResourceFlow {
+    surplus: boolean;
+    surplusBonus: number;
+}
+
+/**
+ * Phase-1 output of the daily two-phase settlement. Everything here is derived
+ * from the state at the start of the day; callers apply the numbers in phase 2.
+ */
+export interface ResourceChain {
+    totals: EconomyTotals;
+    rates: ResourceRates;
+    raw: ResourceFlow;
+    strategic: ResourceFlow;
+    food: FoodFlow;
+    /** Stability snapshot the rates were derived from (drift happens in phase 2). */
+    stability: StabilitySnapshot;
+    /** Raw shortage multiplier applied to the daily industry gain. */
+    industryFactor: number;
+    /** Site -> daily population change (negative during famine) for core provinces of this nation. */
+    populationGrowth: Map<number, number>;
+}
+
+function shortageFactor(available: number, demand: number): { shortage: boolean; factor: number } {
+    if (demand <= 0 || available >= demand) return { shortage: false, factor: 1 };
+    return { shortage: true, factor: Math.max(SHORTAGE_FACTOR_MIN, available / demand) };
+}
+
+export function resourceChain(state: GameState, nationId: number): ResourceChain {
     const totals = economyTotals(state, nationId);
+    const nation = state.nations[nationId];
+
+    const rawConsumption = totals.rawFactoryUse;
+    const strategicConsumption = totals.strategicFactoryUse + totals.strategicArmyUse;
+    const foodConsumption = FOOD_PER_POPULATION * totals.totalPopulation + totals.foodArmyUse;
+
+    // Subsistence fallback: an economy with no access to a chain resource at all
+    // uses local substitutes instead of collapsing. Hand-built fixtures and
+    // resource-less starts rely on this; real nations begin with stocks/mines.
+    const rawAvailable = nation.raw + totals.rawGross;
+    const strategicAvailable = nation.strategic + totals.strategicGross;
+    const rawShort = rawAvailable > 0 ? shortageFactor(rawAvailable, rawConsumption) : { shortage: false, factor: 1 };
+    const strategicShort = strategicAvailable > 0
+        ? shortageFactor(strategicAvailable, strategicConsumption) : { shortage: false, factor: 1 };
+    const foodShort = shortageFactor(nation.food + totals.foodGross, foodConsumption);
+
+    // Starvation depresses raw extraction and strategic mining (but not food itself).
+    const foodPenalty = foodShort.factor;
+    const conscription = conscriptionProfile(nation, state.day);
+    // Stability scales the whole productive economy, not the army's upkeep.
+    const economyFactor = stabilityProduction(nation);
+    const ppFactor = stabilityPolitics(nation);
+    const recruitFactor = stabilityManpower(nation);
+    const rawGross = totals.rawGross * foodPenalty * economyFactor;
+    const strategicGross = totals.strategicGross * foodPenalty * economyFactor;
+    const foodGross = totals.foodGross * economyFactor;
+    const rawNet = rawGross - rawConsumption;
+    const strategicNet = strategicGross - strategicConsumption;
+    const foodNet = foodGross - foodConsumption;
+    const surplus = !foodShort.shortage && foodNet > totals.foodGross * FOOD_SURPLUS_RATIO;
+    const surplusBonus = surplus ? FOOD_SURPLUS_GROWTH_BONUS : 0;
+
+    const stabilityInputs: StabilityInputs = {
+        admin: totals.adminActive,
+        wars: warCount(state, nationId),
+        conscription: conscription.stabilityTarget,
+        occupiedProvinces: totals.occupiedProvinces,
+        food: foodShort.shortage ? -1 : surplus ? 1 : 0,
+    };
+    const stability: StabilitySnapshot = {
+        ...stabilityInputs, value: stabilityOf(nation), target: targetStability(stabilityInputs),
+    };
+
+    const raw: ResourceFlow = {
+        gross: rawGross, consumption: rawConsumption, net: rawNet,
+        cap: RESOURCE_CAPS.raw, ...rawShort,
+    };
+    const strategic: ResourceFlow = {
+        gross: strategicGross, consumption: strategicConsumption, net: strategicNet,
+        cap: RESOURCE_CAPS.strategic, ...strategicShort,
+    };
+    const food: FoodFlow = {
+        gross: foodGross, consumption: foodConsumption, net: foodNet,
+        cap: RESOURCE_CAPS.food, ...foodShort, surplus, surplusBonus,
+    };
+
+    const industryFactor = rawShort.shortage ? rawShort.factor : 1;
+    const populationGrowth = new Map<number, number>();
+    if (foodShort.shortage) {
+        // Famine shrinks the population slowly and proportionally to the deficit,
+        // so demand falls back toward what the land can feed. It never grows here.
+        const decline = -POPULATION_DECLINE_BASE * (1 - foodShort.factor);
+        for (const province of state.provinces) {
+            if (province.owner === nationId && province.coreNation === nationId && province.population > POPULATION_MIN) {
+                populationGrowth.set(province.site, decline);
+            }
+        }
+    } else {
+        // Growth tracks the food margin: a nation living hand to mouth stops
+        // growing long before it starves, and a food-rich one grows steadily.
+        const foodRatio = totals.foodGross > 0 ? foodNet / totals.foodGross : 0;
+        const foodFactor = Math.max(0, Math.min(1, foodRatio / POPULATION_GROWTH_FOOD_RATIO));
+        const growth = POPULATION_GROWTH_BASE * (1 + surplusBonus) * totals.mods.growthMult * foodFactor;
+        for (const province of state.provinces) {
+            if (province.owner === nationId && province.coreNation === nationId && province.population < POPULATION_MAX) {
+                populationGrowth.set(province.site, growth);
+            }
+        }
+    }
+
     const fundsGross = (totals.provinceIncome + totals.farmFunds + totals.factoryFunds
-        + totals.infrastructureFunds) * totals.mods.fundsMult;
-    const manpower = (totals.manpowerPopulation + totals.manpowerFarm) * totals.mods.manpowerMult;
+        + totals.infrastructureFunds) * totals.mods.fundsMult * economyFactor;
+    const manpowerCap = totals.eligiblePopulation * conscription.share * ELIGIBLE_PER_POP;
+    // Fixtures omit stability and keep their hand-set manpower untouched.
+    const manpower = nation.stability === undefined
+        ? 0 : manpowerCap * MANPOWER_INTAKE_RATE * recruitFactor * totals.mods.manpowerMult;
     const industry = (totals.industryCities + totals.industryFactory
-        + totals.industryInfrastructure) * totals.mods.industryMult;
-    return {
+        + totals.industryInfrastructure) * totals.mods.industryMult * economyFactor;
+    const rates: ResourceRates = {
         fundsGross, upkeep: totals.upkeep, fundsNet: fundsGross - totals.upkeep, manpower, industry,
-        politicalPower: 2 + totals.adminActive + totals.mods.ppModifier,
-        manpowerCap: MANPOWER_BASE_CAP + MANPOWER_CAP_PER_POP * totals.effectivePopulation,
+        industryFactor, industryNet: industry * industryFactor - totals.industryArmyUse,
+        raw: rawNet, food: foodNet, strategic: strategicNet,
+        politicalPower: (2 + totals.adminActive + totals.mods.ppModifier) * ppFactor,
+        manpowerCap,
         industryCap: INDUSTRY_BASE_CAP + INDUSTRY_CAP_PER_CITY * totals.effectiveCities,
     };
+
+    return { totals, rates, raw, strategic, food, stability, industryFactor, populationGrowth };
+}
+
+export function resourceRates(state: GameState, nationId: number): ResourceRates {
+    return resourceChain(state, nationId).rates;
 }
 
 /** Hover-detail breakdown: each source before policy multipliers, then the multiplier and net values. */
@@ -282,13 +526,31 @@ export interface ResourceBreakdown {
         provinces: number; farms: number; factories: number; infrastructure: number;
         policyMult: number; upkeep: number; net: number;
     };
-    manpower: { population: number; farms: number; policyMult: number; total: number; cap: number };
-    industry: { cities: number; factories: number; infrastructure: number; policyMult: number; total: number; cap: number };
-    political: { base: number; admin: number; policy: number; total: number };
+    manpower: {
+        /** Recruitable share set by the conscription policy. */
+        share: number;
+        /** Identity-weighted population points behind the ceiling. */
+        population: number;
+        eligible: number;
+        total: number;
+        cap: number;
+        stability: number;
+    };
+    industry: { cities: number; factories: number; infrastructure: number; policyMult: number; total: number; cap: number; net: number };
+    political: { base: number; admin: number; policy: number; stability: number; total: number };
+    stability: StabilitySnapshot;
+    chain: {
+        raw: ResourceFlow & { mines: number; factoryUse: number };
+        strategic: ResourceFlow & { mines: number; factoryUse: number; armyUse: number };
+        food: FoodFlow & { provinces: number; farms: number; armyUse: number };
+        industryFactor: number;
+        industryArmyUse: number;
+    };
 }
 
 export function resourceBreakdown(state: GameState, nationId: number): ResourceBreakdown {
-    const totals = economyTotals(state, nationId);
+    const chain = resourceChain(state, nationId);
+    const totals = chain.totals;
     return {
         funds: {
             provinces: totals.provinceIncome,
@@ -297,30 +559,45 @@ export function resourceBreakdown(state: GameState, nationId: number): ResourceB
             infrastructure: totals.infrastructureFunds,
             policyMult: totals.mods.fundsMult,
             upkeep: totals.upkeep,
-            net: (totals.provinceIncome + totals.farmFunds + totals.factoryFunds
-                + totals.infrastructureFunds) * totals.mods.fundsMult - totals.upkeep,
+            net: chain.rates.fundsNet,
         },
         manpower: {
-            population: totals.manpowerPopulation,
-            farms: totals.manpowerFarm,
-            policyMult: totals.mods.manpowerMult,
-            total: (totals.manpowerPopulation + totals.manpowerFarm) * totals.mods.manpowerMult,
-            cap: MANPOWER_BASE_CAP + MANPOWER_CAP_PER_POP * totals.effectivePopulation,
+            share: totals.eligiblePopulation > 0 ? chain.rates.manpowerCap / (totals.eligiblePopulation * ELIGIBLE_PER_POP) : 0,
+            population: totals.eligiblePopulation,
+            eligible: chain.rates.manpowerCap,
+            total: chain.rates.manpower,
+            cap: chain.rates.manpowerCap,
+            stability: chain.stability.value,
         },
         industry: {
             cities: totals.industryCities,
             factories: totals.industryFactory,
             infrastructure: totals.industryInfrastructure,
             policyMult: totals.mods.industryMult,
-            total: (totals.industryCities + totals.industryFactory + totals.industryInfrastructure)
-                * totals.mods.industryMult,
-            cap: INDUSTRY_BASE_CAP + INDUSTRY_CAP_PER_CITY * totals.effectiveCities,
+            total: chain.rates.industry,
+            cap: chain.rates.industryCap,
+            net: chain.rates.industryNet,
         },
         political: {
             base: 2,
             admin: totals.adminActive,
             policy: totals.mods.ppModifier,
-            total: 2 + totals.adminActive + totals.mods.ppModifier,
+            stability: stabilityPolitics(state.nations[nationId]),
+            total: chain.rates.politicalPower,
+        },
+        stability: chain.stability,
+        chain: {
+            raw: { ...chain.raw, mines: chain.raw.gross, factoryUse: totals.rawFactoryUse },
+            strategic: {
+                ...chain.strategic, mines: chain.strategic.gross,
+                factoryUse: totals.strategicFactoryUse, armyUse: totals.strategicArmyUse,
+            },
+            food: {
+                ...chain.food, provinces: totals.foodProvinces,
+                farms: totals.foodFarms, armyUse: totals.foodArmyUse,
+            },
+            industryFactor: chain.industryFactor,
+            industryArmyUse: totals.industryArmyUse,
         },
     };
 }
@@ -331,9 +608,13 @@ export function occupationGrowth(state: GameState, province: Province, nationId:
 }
 
 export function clampResources(nation: Nation, rates: ResourceRates): void {
-    nation.manpower = Math.min(nation.manpower, rates.manpowerCap);
+    // A fixture without stability has no recruit pool; do not clamp its hand-set manpower.
+    if (nation.stability !== undefined) nation.manpower = Math.min(nation.manpower, rates.manpowerCap);
     nation.industry = Math.min(nation.industry, rates.industryCap);
     nation.politicalPower = Math.min(nation.politicalPower, PP_CAP);
+    nation.raw = Math.max(0, Math.min(nation.raw, RESOURCE_CAPS.raw));
+    nation.food = Math.max(0, Math.min(nation.food, RESOURCE_CAPS.food));
+    nation.strategic = Math.max(0, Math.min(nation.strategic, RESOURCE_CAPS.strategic));
 }
 
 export function economicValue(state: GameState, province: Province): number {

@@ -6,7 +6,19 @@ import { NEUTRAL_COLOR } from "../game/types/world.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { PROVINCE_CAPACITY_MIN_ZOOM } from "./constructionOverlay.ts";
 import type { ConstructionOverlay } from "./constructionOverlay.ts";
+import { provinceResourceOutput } from "../game/economy.ts";
+import { RESOURCE_MAP_COLORS, resourceTint } from "./resources.ts";
+import { drawIcon } from "./icons.ts";
 import type { MapMode } from "./types.ts";
+
+export const RESOURCE_MARKER_MIN_ZOOM = 0.95;
+
+/** Dense state building counters are dropped once the viewport grows this wide. */
+export const REGION_COUNTER_MIN_ZOOM = 1;
+
+const COUNTER_ICON_SIZE = 11;
+const COUNTER_ROW_HEIGHT = 14;
+const COUNTER_NAME_HEIGHT = 13;
 
 /** Read-only rendering inputs shared by the map's label/marker helpers. */
 export interface MarkerOptions {
@@ -15,6 +27,7 @@ export interface MarkerOptions {
     readonly constructionKind: BuildingKind | null;
     readonly constructionOverlay: ConstructionOverlay | null;
     readonly zoom: number;
+    readonly resourceMode: boolean;
 }
 
 export function drawProvinceMarkers(
@@ -60,6 +73,69 @@ export function drawProvinceMarkers(
     ctx.restore();
 }
 
+/** Icon-and-count rows for the resource colour mode, stacked in one panel above the marker row. */
+export function drawResourceMarkers(
+    ctx: CanvasRenderingContext2D,
+    state: GameState,
+    site: number,
+    options: MarkerOptions,
+): void {
+    if (!options.resourceMode || options.mapMode !== "province" || options.constructionActive
+        || options.zoom < RESOURCE_MARKER_MIN_ZOOM) return;
+    const { graph, terrain, provinces } = state;
+    if (!terrain.passable[site]) return;
+    const province = provinces[site];
+    const { raw, strategic } = province.deposits;
+    const { farmFood } = provinceResourceOutput(state, province);
+    if (raw === 0 && strategic === 0 && farmFood <= 0) return;
+    const rows: { icon: string; color: string; text: string }[] = [];
+    if (raw > 0) rows.push({ icon: "raw", color: RESOURCE_MAP_COLORS.raw, text: `×${raw}` });
+    if (strategic > 0) rows.push({ icon: "strategic", color: RESOURCE_MAP_COLORS.strategic, text: `×${strategic}` });
+    if (farmFood > 0) {
+        rows.push({ icon: "food", color: RESOURCE_MAP_COLORS.food, text: `×${Math.round(farmFood * 10) / 10}` });
+    }
+    const cell = graph.cells[site];
+    const center = cell.bounded ? cell.centroid : graph.sites[site];
+    const { width, height } = graph.domain;
+    ctx.save();
+    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    let textWidth = 0;
+    for (const row of rows) textWidth = Math.max(textWidth, ctx.measureText(row.text).width);
+    const iconSize = 11;
+    const rowHeight = 14;
+    const gap = 3;
+    const pad = 4;
+    const panelWidth = pad * 2 + iconSize + gap + textWidth;
+    const panelHeight = pad * 2 + rows.length * rowHeight;
+    const tintColor = resourceTint(state, province).color;
+    for (let ox = -1; ox <= 1; ox++) {
+        for (let oy = -1; oy <= 1; oy++) {
+            const x = center.x + ox * width;
+            // Grow upward from the building-marker row so stacked rows never cover it.
+            const bottom = center.y + oy * height - 34;
+            const top = bottom - panelHeight;
+            if (x < -panelWidth || x > width + panelWidth || bottom < -20 || top > height + 20) continue;
+            const left = x - panelWidth / 2;
+            ctx.fillStyle = "rgba(13, 17, 23, 0.82)";
+            ctx.strokeStyle = tintColor;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(left, top, panelWidth, panelHeight, 3);
+            ctx.fill();
+            ctx.stroke();
+            for (let i = 0; i < rows.length; i++) {
+                const rowCenter = top + pad + i * rowHeight + rowHeight / 2;
+                drawIcon(ctx, rows[i].icon, rows[i].color, left + pad, rowCenter - iconSize / 2, iconSize);
+                ctx.fillStyle = rows[i].color;
+                ctx.fillText(rows[i].text, left + pad + iconSize + gap, rowCenter);
+            }
+        }
+    }
+    ctx.restore();
+}
+
 /** Screen-readable labels, one per visible periodic copy of a state center. */
 export function drawRegionMarkers(
     ctx: CanvasRenderingContext2D,
@@ -77,43 +153,57 @@ export function drawRegionMarkers(
     const overlayAreas = new Map(options.constructionOverlay?.areas.map((area) => [area.id, area]));
     // Counter scaling stays in world space; state names stay readable when zoomed out.
     const scale = Math.max(0.9, Math.min(1.15, options.zoom)) / options.zoom;
+    // A wide viewport shows many states at once; skip the stacked counters then.
+    const showCounters = construction || options.zoom >= REGION_COUNTER_MIN_ZOOM;
+    const nameFont = "600 11px system-ui, sans-serif";
+    const counterFont = "600 11px system-ui, sans-serif";
+    const stripe = 3;
+    const padX = 5;
+    const padY = 4;
+    const rowGap = 3;
     ctx.save();
-    ctx.textAlign = "center";
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     for (const region of states) {
         if (!terrain.passable[region.center]) continue;
         const capacity = construction ? overlayAreas.get(region.id) : undefined;
         if (construction && !capacity) continue;
-        let buildingLabel: string;
-        const pendingText = capacity && capacity.pending > 0 ? `+${capacity.pending}` : "";
+        const rows: { icon: string; color: string; text: string }[] = [];
+        let pendingText = "";
         if (capacity) {
             // built+pending keeps the queued part visible: `1+2/8`, pending drawn in green.
+            pendingText = capacity.pending > 0 ? `+${capacity.pending}` : "";
             const count = pendingText
                 ? `${capacity.built}${pendingText}/${capacity.limit}`
                 : `${capacity.built}/${capacity.limit}`;
-            buildingLabel = `${BUILDING_PROFILES[options.constructionKind!].glyph} ${count}`;
-            if (capacity.used >= capacity.limit) buildingLabel += " 已满";
-        } else {
+            rows.push({
+                icon: BUILDING_PROFILES[options.constructionKind!].icon,
+                color: "#e6edf3",
+                text: capacity.used >= capacity.limit ? `${count} 已满` : count,
+            });
+        } else if (showCounters) {
             const farms = region.buildings.filter((kind) => kind === "farm").length;
-            const markers = [
-                `${BUILDING_PROFILES.factory.glyph}${region.factories}`,
-                `${BUILDING_PROFILES.farm.glyph}${farms}`,
-                `${BUILDING_PROFILES.infrastructure.glyph}L${region.infrastructure}`,
+            const counts: readonly [BuildingKind, string][] = [
+                ["factory", `${region.factories}`],
+                ["farm", `${farms}`],
+                ["infrastructure", `L${region.infrastructure}`],
             ];
-            if (region.buildings.includes("admin")) markers.push(BUILDING_PROFILES.admin.glyph);
-            buildingLabel = markers.join(" · ");
+            for (const [kind, text] of counts) {
+                rows.push({ icon: BUILDING_PROFILES[kind].icon, color: "#e6edf3", text });
+            }
+            if (region.buildings.includes("admin")) {
+                rows.push({ icon: BUILDING_PROFILES.admin.icon, color: "#e6edf3", text: "1" });
+            }
         }
         const province = provinces[region.center];
         const point = graph.sites[region.center];
-        const buildingFont = capacity
-            ? '700 17px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif'
-            : '11px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-        const nameFont = capacity ? "600 11px system-ui, sans-serif" : "600 12px system-ui, sans-serif";
-        ctx.font = buildingFont;
-        const buildingWidth = ctx.measureText(buildingLabel).width + 16;
         ctx.font = nameFont;
-        const labelWidth = Math.max(ctx.measureText(region.name).width + 28, buildingWidth);
-        const labelHeight = capacity ? 42 : 34;
+        const nameWidth = ctx.measureText(region.name).width;
+        ctx.font = counterFont;
+        let textWidth = 0;
+        for (const row of rows) textWidth = Math.max(textWidth, ctx.measureText(row.text).width);
+        const labelWidth = Math.max(nameWidth, COUNTER_ICON_SIZE + rowGap + textWidth) + padX * 2 + stripe + 2;
+        const labelHeight = padY * 2 + COUNTER_NAME_HEIGHT + rows.length * COUNTER_ROW_HEIGHT;
         const bottom = -Math.max(26, 34 / scale);
         const top = bottom - labelHeight;
         const marginX = (labelWidth / 2 + 4) * scale;
@@ -145,32 +235,34 @@ export function drawRegionMarkers(
                 ctx.lineWidth = 1.5;
                 ctx.fill();
                 ctx.stroke();
+                const left = -labelWidth / 2;
                 ctx.fillStyle = "rgba(13, 17, 23, 0.9)";
                 ctx.strokeStyle = capacity && capacity.pending > 0
                     ? "rgba(63, 185, 80, 0.9)" : "rgba(230, 237, 243, 0.55)";
                 ctx.lineWidth = capacity && capacity.pending > 0 ? 1.5 : 1;
                 ctx.beginPath();
-                ctx.roundRect(-labelWidth / 2, top, labelWidth, labelHeight, 4);
+                ctx.roundRect(left, top, labelWidth, labelHeight, 4);
                 ctx.fill();
                 ctx.stroke();
                 ctx.fillStyle = capacity?.color ?? nationDisplayColor(state, province.owner) ?? NEUTRAL_COLOR;
-                ctx.fillRect(-labelWidth / 2 + 4, top + 5, 3, 12);
+                ctx.fillRect(left + 3, top + 5, stripe, 12);
                 ctx.font = nameFont;
                 ctx.fillStyle = "#f0f6fc";
-                ctx.fillText(region.name, 3, top + 11);
-                ctx.font = buildingFont;
-                const buildingY = bottom - (capacity ? 13 : 8);
-                ctx.fillStyle = "#f0f6fc";
-                ctx.fillText(buildingLabel, 0, buildingY);
+                ctx.fillText(region.name, left + padX + stripe, top + padY + COUNTER_NAME_HEIGHT / 2);
+                ctx.font = counterFont;
+                const textX = left + padX + stripe + COUNTER_ICON_SIZE + rowGap;
+                for (let i = 0; i < rows.length; i++) {
+                    const rowY = top + padY + COUNTER_NAME_HEIGHT
+                        + i * COUNTER_ROW_HEIGHT + COUNTER_ROW_HEIGHT / 2;
+                    drawIcon(ctx, rows[i].icon, rows[i].color, textX - COUNTER_ICON_SIZE - rowGap, rowY - COUNTER_ICON_SIZE / 2, COUNTER_ICON_SIZE);
+                    ctx.fillStyle = "#f0f6fc";
+                    ctx.fillText(rows[i].text, textX, rowY);
+                }
                 if (capacity && pendingText) {
                     // Overdraw only the pending count so the green part stays compact.
-                    const prefix = `${BUILDING_PROFILES[options.constructionKind!].glyph} ${capacity.built}`;
-                    const start = -ctx.measureText(buildingLabel).width / 2;
-                    ctx.save();
-                    ctx.textAlign = "left";
+                    const rowY = top + padY + COUNTER_NAME_HEIGHT + COUNTER_ROW_HEIGHT / 2;
                     ctx.fillStyle = "#3fb950";
-                    ctx.fillText(pendingText, start + ctx.measureText(prefix).width, buildingY);
-                    ctx.restore();
+                    ctx.fillText(pendingText, textX + ctx.measureText(`${capacity.built}`).width, rowY);
                 }
                 ctx.restore();
             }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { createRequestCooldown } from "../game/requests.ts";
 import {
     advancePolicySwitches,
     cancelPolicySwitch,
@@ -11,7 +12,9 @@ import {
     startPolicySwitch,
     tickPolicyUpkeep,
 } from "../game/policy.ts";
-import { DEFAULT_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../game/types/policy.ts";
+import {
+    CONSCRIPTION_POLICIES, DEFAULT_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP,
+} from "../game/types/policy.ts";
 import type { GameState } from "../game/types/state.ts";
 import type { Nation, Province, StateRegion } from "../game/types/entities.ts";
 
@@ -31,7 +34,7 @@ function fixture(politicalPower = 20): GameState {
             provinces.push({
                 site, name: `P${site}`, owner, legalOwner: owner, isCity: false, isCapital: false,
                 garrison: 10, garrisonMax: 10, income: 4, defense: 1, population: 2,
-                coreNation: owner, occupation: 100, buildings: [], stateId: owner,
+                coreNation: owner, occupation: 100, buildings: [], deposits: { raw: 0, strategic: 0 }, stateId: owner,
             });
         }
         states.push({ id: owner, name: `S${owner}`, center: members[0], provinces: members, culture: 0,
@@ -39,7 +42,8 @@ function fixture(politicalPower = 20): GameState {
     }
     const nations: Nation[] = [0, 1].map((id) => ({
         id, name: `N${id}`, color: "#000000", isPlayer: id === 0, capital: states[id].center,
-        alive: true, funds: 1000, industry: 100, manpower: 1000, politicalPower,
+        alive: true, funds: 1000, industry: 100, manpower: 1000,
+        raw: 0, food: 0, strategic: 0, politicalPower,
         policies: { ...DEFAULT_POLICIES }, policyTransitions: {},
     }));
     const count = provinces.length;
@@ -61,7 +65,9 @@ function fixture(politicalPower = 20): GameState {
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
         alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
-        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
+        vassalCooldown: [[-1, -1], [-1, -1]], requestCooldown: createRequestCooldown(2),
+        nextAllianceId: 1, nextRequestId: 1,
+        tradeAgreements: [], nextTradeId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };
@@ -117,7 +123,8 @@ test("live modifiers ramp each turn and the policy commits when the ramp ends", 
     near(fundsAt(1), 1);
     near(fundsAt(2), 1 + (1.2 - 1) / POLICY_SWITCH_DAYS);
     near(fundsAt(3), 1 + 2 * (1.2 - 1) / POLICY_SWITCH_DAYS);
-    near(policyModifiers(nation, 2).fundsMult, 1.1 * (1 + (1.2 - 1) / POLICY_SWITCH_DAYS));
+    const conscriptionFunds = CONSCRIPTION_POLICIES[DEFAULT_POLICIES.conscription].fundsMult;
+    near(policyModifiers(nation, 2).fundsMult, conscriptionFunds * (1 + (1.2 - 1) / POLICY_SWITCH_DAYS));
 
     state.day = 3;
     advancePolicySwitches(core);

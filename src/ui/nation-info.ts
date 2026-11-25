@@ -2,10 +2,10 @@ import { INFRASTRUCTURE_MAX } from "../game/types/building.ts";
 import { NEUTRAL } from "../game/types/world.ts";
 import type { GameState } from "../game/types/state.ts";
 import { ALLIANCE_HELP_BODY, allianceOf } from "../game/alliance.ts";
+import { stabilityOf } from "../game/stability.ts";
 import { escapeHtml } from "./text.ts";
 import { helpButton } from "./panel.ts";
 import { tendencyBadge } from "./tendency.ts";
-import { vassalStatusHtml } from "./vassal.ts";
 
 /**
  * One nation-overview implementation shared by every surface: the nation
@@ -114,6 +114,7 @@ export function nationFigures(stats: NationStats): NationFigures {
 export function nationInfoRows(state: GameState, stats: NationStats): string {
     const nation = state.nations[stats.nationId];
     const capital = nation ? state.provinces[nation.capital]?.name ?? "未知" : "未知";
+    const stability = nation ? Math.round(stabilityOf(nation)) : 0;
     const figures = nationFigures(stats);
     const industryWidth = Math.round(Math.max(0.04, figures.industryRatio) * 100);
     return `<div class="kv-row"><dt>控制省份</dt><dd><span class="game-text game-text--construction">${stats.provinces} 省 · ${stats.states} 州</span></dd></div>
@@ -128,6 +129,7 @@ export function nationInfoRows(state: GameState, stats: NationStats): string {
         <div class="kv-row"><dt>农场</dt><dd><span class="game-text game-text--funds">${stats.farms} 座</span></dd></div>
         <div class="kv-row"><dt>基础设施</dt><dd><span class="game-text game-text--construction">${figures.coverage}%</span><span class="kv-note">平均 ${figures.infrastructureAverage.toFixed(1)} / ${INFRASTRUCTURE_MAX} 级</span></dd></div>
         <div class="kv-row"><dt>军团</dt><dd><span class="game-text game-text--manpower">${stats.armies} 支 · ${stats.regiments} 团</span></dd></div>
+        <div class="kv-row"><dt>稳定度</dt><dd><span class="game-text game-text--stability">${stability}</span><span class="kv-note">0–100</span></dd></div>
         <div class="kv-row"><dt>外交倾向</dt><dd>${nation ? tendencyBadge(nation, state) : "—"}</dd></div>`;
 }
 
@@ -144,7 +146,6 @@ export function nationOverviewBody(state: GameState, stats: NationStats, extraCl
         : "无";
     return `<dl class="kv${extraClass}">
         ${nationInfoRows(state, stats)}
-        ${vassalStatusHtml(state, nationId)}
         <div class="kv-row"><dt>联盟</dt><dd>${escapeHtml(allianceText)} ${helpButton({ title: "联盟制度", body: ALLIANCE_HELP_BODY })}</dd></div>
     </dl>`;
 }

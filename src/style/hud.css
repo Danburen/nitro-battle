@@ -151,8 +151,7 @@
 .hud.briefing-mode .map-layers,
 .hud.briefing-mode .hud-br,
 .hud.briefing-mode .army-detail,
-.hud.briefing-mode .mode-bar,
-.hud.briefing-mode .factory-allocation {
+.hud.briefing-mode .mode-bar {
     display: none;
 }
 

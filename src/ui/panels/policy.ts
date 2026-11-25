@@ -1,5 +1,5 @@
 import type { GameEngine } from "../../game/engine.ts";
-import { categoryModifiers, policyTransitionProgress } from "../../game/policy.ts";
+import { categoryModifiers, conscriptionProfile, policyTransitionProgress } from "../../game/policy.ts";
 import { CONSCRIPTION_POLICIES, ECONOMY_POLICIES, OCCUPATION_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../../game/types/policy.ts";
 import type { PolicyCategory, PolicyModifiers, PolicyTransition } from "../../game/types/policy.ts";
 import { escapeHtml, renderGameText, textToken } from "../text.ts";
@@ -28,7 +28,9 @@ interface LiveMetric {
     readonly tone: "" | "pos" | "neg";
 }
 
-function liveMetrics(category: PolicyCategory, mods: PolicyModifiers): LiveMetric[] {
+function liveMetrics(
+    category: PolicyCategory, mods: PolicyModifiers, conscription?: { share: number; stabilityTarget: number },
+): LiveMetric[] {
     const bonus = (label: string, value: number): LiveMetric => {
         const percent = Math.round((value - 1) * 100);
         return {
@@ -37,7 +39,16 @@ function liveMetrics(category: PolicyCategory, mods: PolicyModifiers): LiveMetri
         };
     };
     if (category === "economy") return [bonus("财政", mods.fundsMult), bonus("工业", mods.industryMult)];
-    if (category === "conscription") return [bonus("人力", mods.manpowerMult), bonus("财政", mods.fundsMult)];
+    if (category === "conscription" && conscription) {
+        return [
+            { label: "可招募", value: `${Math.round(conscription.share * 1000) / 10}%`, tone: "" },
+            {
+                label: "稳定", value: `${conscription.stabilityTarget > 0 ? "+" : ""}${Math.round(conscription.stabilityTarget)}`,
+                tone: conscription.stabilityTarget === 0 ? "" : conscription.stabilityTarget > 0 ? "pos" : "neg",
+            },
+            bonus("财政", mods.fundsMult),
+        ];
+    }
     return [
         bonus("占领收入", mods.occupiedIncomeMult),
         bonus("增长", mods.growthMult),
@@ -74,10 +85,11 @@ export class PolicyPanel {
             const current = player.policies[group.category];
             const transition = player.policyTransitions?.[group.category];
             const mods = categoryModifiers(player, group.category, state.day);
+            const cons = group.category === "conscription" ? conscriptionProfile(player, state.day) : undefined;
             const label = transition
                 ? `${optionName(group, transition.from)} → ${optionName(group, transition.to)}`
                 : optionName(group, current);
-            const live = liveMetrics(group.category, mods)
+            const live = liveMetrics(group.category, mods, cons)
                 .map((metric) => `<span class="${metric.tone}">${metric.label} ${metric.value}</span>`)
                 .join("");
             const chips = Object.entries(group.options).map(([value, profile]) => (

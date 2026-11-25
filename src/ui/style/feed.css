@@ -26,6 +26,8 @@
     color: var(--site-fg);
 }
 
+.feed-live:empty { display: none; }
+
 .feed-live {
     display: flex;
     flex-direction: column;

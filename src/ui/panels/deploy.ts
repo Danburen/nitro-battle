@@ -50,7 +50,10 @@ export class DeployPanel {
             const affordable = canTrain(state, 0, kind);
             const costParts = [textToken("funds", up.cost), textToken("manpower", up.manpowerCost)];
             if (up.industryCost > 0) costParts.push(textToken("industry", up.industryCost));
-            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n维护 ${textToken("funds", up.upkeep)}/${textToken("turn")}\n训练 ${textToken("turn", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
+            const upkeepParts = [textToken("funds", up.upkeep), textToken("food", up.foodUpkeep)];
+            if (up.strategicUpkeep > 0) upkeepParts.push(textToken("strategic", up.strategicUpkeep));
+            if (up.industryUpkeep > 0) upkeepParts.push(textToken("industry", up.industryUpkeep));
+            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n每日维护 ${upkeepParts.join(" · ")}/${textToken("turn")}\n训练 ${textToken("turn", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
             return `
                 <button class="deploy-kind" data-action="train" data-kind="${kind}" style="--nc:${escapeHtml(playerColor)}" ${tooltipAttrs(escapeGameText(up.name), detail)} ${affordable ? "" : "disabled"}>
                     <span class="unit-glyph small" style="--pc:${escapeHtml(playerColor)}">${escapeHtml(up.glyph)}</span>

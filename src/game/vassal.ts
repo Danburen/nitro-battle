@@ -7,11 +7,12 @@ import { clampResources, resourceRates } from "./economy.ts";
 import { isProtectedRelation, overlordOf, vassalTypeOf, vassalsOf } from "./access.ts";
 import { tendencyProfileOf, vassalTuning } from "./ai/tendencies.ts";
 import type { VassalTuning } from "./ai/types.ts";
-import { createDiplomaticRequest } from "./requests.ts";
+import { createDiplomaticRequest, queuePlayerProposal, requestCooldownDays } from "./requests.ts";
 import { deny, minus, plus } from "./decision.ts";
 import { PP_CAP } from "./types/economy.ts";
 import type { DecisionFactor, DiplomaticDecision } from "./types/decision.ts";
 import type { DiplomaticRequest, DiplomaticRequestKind, VassalType } from "./types/diplomacy.ts";
+import { acceptTradeRequest } from "./trade.ts";
 import type { GameState } from "./types/state.ts";
 import type { Nation } from "./types/entities.ts";
 
@@ -83,8 +84,8 @@ export const VASSAL_PROFILES = {
     },
 } as const satisfies Record<VassalType, VassalProfile>;
 
-export const VASSAL_OFFER_COOLDOWN = 20;
-export const VASSAL_AID_COOLDOWN = 20;
+export const VASSAL_OFFER_COOLDOWN = 5;
+export const VASSAL_AID_COOLDOWN = 5;
 export const VASSAL_UPGRADE_COST = 10;
 /** Independence at or above 80% of the contract cap: high, restless territory. */
 export const HIGH_INDEPENDENCE_RATIO = 0.8;
@@ -409,6 +410,14 @@ export function requestVassalUpgrade(core: GameCore, vassalId: number): boolean 
     const overlord = overlordOf(state, vassalId);
     const target = upgradeTargetOf(vassalTypeOf(state, vassalId));
     if (overlord < 0 || !target) return false;
+    if (vassalId === 0) {
+        if (requestCooldownDays(state, "upgrade", overlord) > 0) return false;
+        const request = queuePlayerProposal(state, "upgrade", 0, overlord, { vassalType: target });
+        if (!request) return false;
+        core.log(`我方请求 ${core.nationChip(overlord)} 改善附庸契约，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (overlord === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "upgrade", vassalId, overlord, { vassalType: target });
         if (!request) return false;
@@ -524,7 +533,7 @@ export function tickVassalTribute(core: GameCore): void {
         if (share > 0) {
             paidFunds = Math.max(0, rates.fundsNet) * share;
             paidManpower = Math.max(0, rates.manpower) * share;
-            paidIndustry = Math.max(0, rates.industry) * share;
+            paidIndustry = Math.max(0, rates.industryNet) * share;
             nation.funds -= paidFunds;
             nation.manpower -= paidManpower;
             nation.industry -= paidIndustry;
@@ -641,6 +650,14 @@ export function requestVassalization(
     const state = core.state;
     if (!validVassalType(type) || type === "oppressive") return false;
     if (!canRequestVassalization(state, vassalId, overlordId, type)) return false;
+    if (vassalId === 0) {
+        if (requestCooldownDays(state, "vassalize", overlordId) > 0) return false;
+        const request = queuePlayerProposal(state, "vassalize", 0, overlordId, { vassalType: type });
+        if (!request) return false;
+        core.log(`我方请求成为 ${core.nationChip(overlordId)} 的${VASSAL_PROFILES[type].name}附庸，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (overlordId === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "vassalize", vassalId, overlordId, { vassalType: type });
         if (!request) return false;
@@ -681,6 +698,16 @@ export function decideVassalDemand(state: GameState, overlord: number, vassal: n
 export function demandVassalization(core: GameCore, overlordId: number, vassalId: number): boolean {
     const state = core.state;
     if (state.winner !== null || !canBecomeVassal(state, vassalId, overlordId, "oppressive")) return false;
+    if (overlordId === 0) {
+        if (requestCooldownDays(state, "vassalize", vassalId) > 0) return false;
+        const request = queuePlayerProposal(state, "vassalize", 0, vassalId, {
+            vassalType: "oppressive", demand: true,
+        });
+        if (!request) return false;
+        core.log(`我方要求 ${core.nationChip(vassalId)} 成为压迫型附庸，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (vassalId === 0) {
         const request = createDiplomaticRequest(state, "vassalize", overlordId, vassalId, {
             vassalType: "oppressive", demand: true,
@@ -796,6 +823,14 @@ export function requestForeignAid(core: GameCore, vassalId: number, helperId?: n
     const candidates = aidCandidates(state, vassalId);
     const helper = helperId !== undefined && candidates.includes(helperId) ? helperId : candidates[0];
     if (helper === undefined) return false;
+    if (vassalId === 0) {
+        if (requestCooldownDays(state, "aid", helper) > 0) return false;
+        const request = queuePlayerProposal(state, "aid", 0, helper);
+        if (!request) return false;
+        core.log(`我方请求 ${core.nationChip(helper)} 提供外援，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (helper === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "aid", vassalId, 0);
         if (!request) return false;
@@ -931,7 +966,19 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             if (state.nations[request.from]) state.nations[request.from].lastAidDay = state.day;
         },
     },
+    trade: {
+        accept: (core, request) => acceptTradeRequest(core, request),
+        decline: (core, request) => {
+            core.log(`${core.nationChip(request.to)} 拒绝 ${core.nationChip(request.from)} 的贸易提议`, "diplo", request.to);
+            core.emit({ type: "state" });
+        },
+    },
 };
+
+/** Apply the accept half of a request; shared by player replies and queued proposals. */
+export function acceptDiplomaticRequest(core: GameCore, request: DiplomaticRequest): boolean {
+    return REQUEST_HANDLERS[request.kind]?.accept(core, request) ?? false;
+}
 
 /** Clear or answer offers; called once per day and after player responses. */
 export function expireDiplomaticRequests(core: GameCore): void {

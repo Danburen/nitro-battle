@@ -2,6 +2,7 @@ import type { GameEngine } from "../game/engine.ts";
 import type { BuildingKind } from "../game/types/building.ts";
 import type { SoundManager } from "../audio/index.ts";
 import type { ConfirmSpec } from "./confirm.ts";
+import type { ColorMode } from "../render/types.ts";
 
 /** Shared services every UI module and action handler relies on. */
 export interface UIContext {
@@ -21,9 +22,9 @@ export interface UICallbacks {
     onRestart: () => void;
     onHome: () => void;
     onMapMode: (mode: "province" | "state") => void;
-    onColorMode: (mode: "uniform" | "gradient") => void;
+    onColorMode: (mode: ColorMode) => void;
     onDeepZoom: (value: number) => void;
-    getColorMode: () => "uniform" | "gradient";
+    getColorMode: () => ColorMode;
     getDeepZoom: () => number;
     onConstructionView: (kind: BuildingKind | null) => void;
     onClaimFocus: (stateId: number | null) => void;

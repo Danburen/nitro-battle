@@ -26,7 +26,11 @@
     --resource-manpower: #79d7d0;
     --resource-industry: #f4b183;
     --resource-politics: #c6a7f5;
+    --resource-stability: #e3b341;
     --resource-construction: #90c5f7;
+    --resource-raw: #c9a227;
+    --resource-food: #8fd46a;
+    --resource-strategic: #e07a9c;
     --text-keyword: #c5d1df;
     --relation-friendly: #7ee787;
     --relation-neutral: #e3b341;
@@ -38,7 +42,11 @@
 .game-text--manpower { color: var(--resource-manpower); }
 .game-text--industry { color: var(--resource-industry); }
 .game-text--politics { color: var(--resource-politics); }
+.game-text--stability { color: var(--resource-stability); }
 .game-text--construction { color: var(--resource-construction); }
+.game-text--raw { color: var(--resource-raw); }
+.game-text--food { color: var(--resource-food); }
+.game-text--strategic { color: var(--resource-strategic); }
 .game-text--keyword { color: var(--text-keyword); }
 .game-text--friendly { color: var(--relation-friendly); }
 .game-text--neutral { color: var(--relation-neutral); }
@@ -72,7 +80,8 @@
 /* External monochrome icons: the URL comes from an inline --icon custom property so it
    resolves against the document (browser + Electron), and currentColor supplies the ink. */
 .icon-glyph,
-.resource-icon {
+.resource-icon,
+.building-icon {
     display: inline-block;
     flex: none;
     background: currentColor;
@@ -86,6 +95,7 @@
     mask-position: center;
 }
 .resource-icon { width: 1em; height: 1em; vertical-align: -0.12em; }
+.building-icon { width: 1.5em; height: 1.5em; vertical-align: -0.25em; }
 
 * {
     box-sizing: border-box;

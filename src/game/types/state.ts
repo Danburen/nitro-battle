@@ -4,12 +4,13 @@ import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
 import type { GameSettings } from "../../types/settings.ts";
 import type { ConstructionOrder } from "./building.ts";
 import type {
-    Alliance, DiplomaticAction, DiplomaticRequest, StateClaim, War,
+    Alliance, DiplomaticAction, DiplomaticRequest, DiplomaticRequestKind, StateClaim, War,
 } from "./diplomacy.ts";
 import type { SupplyMap } from "./economy.ts";
 import type { Nation, Province, StateRegion } from "./entities.ts";
 import type { GameStats, LogEntry } from "./log.ts";
 import type { Army, Battle, DeploymentOrder } from "./organization.ts";
+import type { TradeAgreement } from "./trade.ts";
 
 export interface GameState {
     readonly settings: GameSettings;
@@ -45,10 +46,15 @@ export interface GameState {
     readonly wars: War[];
     readonly alliances: Alliance[];
     readonly diplomaticRequests: DiplomaticRequest[];
+    /** Signed recurring trade treaties; fixed-only deals settle at signing and never appear here. */
+    readonly tradeAgreements: TradeAgreement[];
+    nextTradeId: number;
     /** Symmetric rejection cooldown matrix for alliance invitations; -1 when free. */
     readonly allianceCooldown: number[][];
     /** Symmetric cooldown matrix for vassalization offers; -1 when free. */
     readonly vassalCooldown: number[][];
+    /** Per request kind, symmetric player-to-nation rejection cooldowns; -1 when free. */
+    readonly requestCooldown: Record<DiplomaticRequestKind, number[][]>;
     nextDiplomaticActionId: number;
     nextAllianceId: number;
     nextRequestId: number;

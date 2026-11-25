@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { createRequestCooldown } from "../game/requests.ts";
 import { processConstruction } from "../game/production.ts";
 import { BUILDING_PROFILES, STATE_BUILDING_KINDS } from "../game/types/building.ts";
 import { DEFAULT_POLICIES } from "../game/types/policy.ts";
@@ -11,7 +12,7 @@ import type { Province, StateRegion } from "../game/types/entities.ts";
 import { Biome, BiomeMap } from "../terrain/biome.ts";
 import {
     buildConstructionOverlay, constructionColor, CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS,
-    CONSTRUCTION_PENDING_TINT, PROVINCE_CAPACITY_MIN_ZOOM,
+    CONSTRUCTION_PENDING_TINT, PROVINCE_CAPACITY_MIN_ZOOM, REGION_COUNTER_MIN_ZOOM,
 } from "../render/index.ts";
 import { MapRenderer } from "../render/renderer.ts";
 import { GameUI } from "../ui/index.ts";
@@ -33,7 +34,7 @@ function fixture(): GameState {
             provinces.push({
                 site, stateId: id, name: `P${site}`, owner, legalOwner: owner, isCity: i === 0, isCapital: i === 0,
                 garrison: 0, garrisonMax: 0, income: 4, defense: 1, population: 2,
-                coreNation: owner, occupation: 100, buildings: [],
+                coreNation: owner, occupation: 100, buildings: [], deposits: { raw: 0, strategic: 0 },
             });
         }
         states.push({ id, name: `S${id}`, center, provinces: members, culture: 0,
@@ -59,14 +60,17 @@ function fixture(): GameState {
         settings: { seed: 42, mapSize: "small", nationCount: 2 }, graph, terrain, provinces, states,
         nations: [0, 1].map((id) => ({ id, name: `N${id}`, color: id === 0 ? "#1f6feb" : "#da3633",
             isPlayer: id === 0, capital: id * 4, alive: true, funds: 10000, industry: 10000,
-            manpower: 10000, politicalPower: 20, policies: { ...DEFAULT_POLICIES } })),
+            manpower: 10000, raw: 0, food: 0, strategic: 0, politicalPower: 20,
+            policies: { ...DEFAULT_POLICIES } })),
         armies: new Map(), armyAt: Array(count).fill(null), battles: [], deployments: [], construction: [],
         supply: null, supplyDirty: true, day: 1, seasonIndex: 0, selected: null, selectedArmyId: null,
         redeployArmyId: null, war: [[false, false], [false, false]], warSince: [[-1, -1], [-1, -1]],
         peaceOffers: [], truce: [[-1, -1], [-1, -1]], peaceCooldown: [-1, -1], log: [], winner: null,
         claims: [], diplomaticActions: [], wars: [], nextDiplomaticActionId: 1,
         alliances: [], diplomaticRequests: [], allianceCooldown: [[-1, -1], [-1, -1]],
-        vassalCooldown: [[-1, -1], [-1, -1]], nextAllianceId: 1, nextRequestId: 1,
+        vassalCooldown: [[-1, -1], [-1, -1]], requestCooldown: createRequestCooldown(2),
+        nextAllianceId: 1, nextRequestId: 1,
+        tradeAgreements: [], nextTradeId: 1,
         nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };
@@ -360,6 +364,14 @@ function harness(t: TestContext, state = fixture()) {
     const globals: Record<string, unknown> = {
         matchMedia: () => ({ matches: true }),
         Element: TestElement, HTMLElement: TestElement, HTMLCanvasElement: TestCanvas, Node: TestElement,
+        // Marker icons load asynchronously; keep them pending so canvas stamping is a no-op.
+        Image: class {
+            complete = false;
+            naturalWidth = 0;
+            src = "";
+            addEventListener() {}
+            removeEventListener() {}
+        },
         window: { ...windowEvents, devicePixelRatio: 1, innerWidth: 800, innerHeight: 600 },
         document: { ...documentEvents,
             activeElement: null,
@@ -434,8 +446,8 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     assert.equal(h.clears, 1);
     assert.equal(h.fills.filter((color) => color === CONSTRUCTION_COLORS.empty).length, 6);
     assert.ok(h.fills.includes(CONSTRUCTION_BLOCKED_COLOR));
-    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 0/4` && label.font.includes("17px")));
-    assert.ok(!h.labels.some((label) => label.text === "S1" || label.text.includes(" · ") || label.text === BUILDING_PROFILES.fort.glyph));
+    assert.ok(h.labels.some((label) => label.text === "0/4" && label.font.includes("11px")));
+    assert.ok(!h.labels.some((label) => label.text === "S1" || label.text.includes("·") || label.text === BUILDING_PROFILES.fort.glyph));
     h.engine.select(2);
     h.engine.setFactoryProduction(2);
     h.tick();
@@ -446,7 +458,7 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     assert.equal(h.clears, 2);
     assert.ok(h.fills.includes(CONSTRUCTION_COLORS.high));
     assert.ok(h.fills.includes(CONSTRUCTION_PENDING_TINT));
-    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 0+2/4`));
+    assert.ok(h.labels.some((label) => label.text === "0+2/4"));
     assert.ok(h.labels.some((label) => label.text === "+2" && label.color === "#3fb950"));
     const firstId = h.state.construction[0].id;
     assert.ok(h.engine.reorderConstruction(firstId, null));
@@ -460,7 +472,7 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     processConstruction(h.engine);
     h.tick();
     assert.equal(h.clears, 4);
-    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 1/4`));
+    assert.ok(h.labels.some((label) => label.text === "1/4"));
     h.engine.emit({ type: "state" });
     h.state.provinces[0].owner = 1;
     h.tick();
@@ -472,7 +484,7 @@ test("renderer caches fills, refreshes queues/completions/capture, and keeps lab
     h.tick();
     assert.equal(h.clears, 6);
     assert.ok(h.fills.includes(CONSTRUCTION_COLORS.full));
-    assert.ok(h.labels.some((label) => label.text === `${BUILDING_PROFILES.farm.glyph} 4/4 已满`));
+    assert.ok(h.labels.some((label) => label.text === "4/4 已满"));
     h.tick();
     assert.equal(h.clears, 6);
     assert.ok(!h.fills.includes(CONSTRUCTION_COLORS.full));
@@ -499,7 +511,7 @@ test("toggles preserve camera/selection, province labels stay hidden, and counte
     assert.deepEqual(h.clicks, [0, -1]);
     h.renderer.setConstructionView(null);
     h.tick();
-    assert.ok(h.labels.some((label) => label.text.includes(" · ")));
+    assert.ok(h.labels.some((label) => label.text === "L0"));
     assert.equal(h.state.selected, 3);
     assert.deepEqual({ ...h.renderer.camera }, camera);
     h.click(400, 300);
@@ -509,10 +521,24 @@ test("toggles preserve camera/selection, province labels stay hidden, and counte
     h.renderer.setConstructionView("farm");
     h.engine.select(3);
     h.tick();
-    assert.ok(!h.labels.some((label) => /^S\d$/.test(label.text) || label.text.includes(" · ") || label.text.includes("/4")));
+    assert.ok(!h.labels.some((label) => /^S\d$/.test(label.text) || label.text.includes("·") || label.text.includes("/4") || label.text === "L0"));
     assert.ok(!h.fills.some((color) => Object.values(CONSTRUCTION_COLORS).includes(color as never)));
     h.click(400, 300);
     assert.equal(h.state.selectedArmyId, 1);
+});
+
+test("wide viewports drop dense state counters but keep readable region names", (t) => {
+    const h = harness(t);
+    h.renderer.setMapMode("state");
+    h.renderer.camera.zoom = REGION_COUNTER_MIN_ZOOM - 0.01;
+    h.tick();
+    assert.equal(REGION_COUNTER_MIN_ZOOM, 1);
+    assert.ok(h.labels.some((label) => label.text === "S0"));
+    assert.ok(!h.labels.some((label) => label.text === "L0"));
+    h.renderer.camera.zoom = REGION_COUNTER_MIN_ZOOM;
+    h.tick();
+    assert.ok(h.labels.some((label) => label.text === "S0"));
+    assert.ok(h.labels.some((label) => label.text === "L0"));
 });
 
 for (const kind of ["supply", "fort"] as const) {
@@ -539,8 +565,8 @@ for (const kind of ["supply", "fort"] as const) {
             assert.ok(h.fillDetails.some((fill) => JSON.stringify(fill.points) === JSON.stringify(h.state.graph.cells[site].polygon)
                 && !Object.values(CONSTRUCTION_COLORS).includes(fill.color as never)));
         }
-        const fullLabel = `${BUILDING_PROFILES[kind].glyph} 1/1`;
-        const queuedLabel = `${BUILDING_PROFILES[kind].glyph} 0+1/1`;
+        const fullLabel = "1/1";
+        const queuedLabel = "0+1/1";
         assert.equal(h.engine.queueProvinceBuild(0, kind), true);
         h.tick();
         assert.equal(h.clears, ++rebuilds);
@@ -610,12 +636,12 @@ for (const kind of ["supply", "fort"] as const) {
             h.renderer.camera.zoom = zoom;
             h.tick();
             assert.equal(h.clears, 1);
-            const label = h.labels.find((label) => label.text === `${BUILDING_PROFILES[kind].glyph} 0/1`
+            const label = h.labels.find((label) => label.text === "0/1"
                 && Math.abs(label.x - 403) < 1e-6 && Math.abs(label.y - 300) < 1e-6);
             assert.ok(label, "capacity badge anchors at the cell centroid");
             assert.ok(label.font.includes("13px"));
             assert.equal(label.scale, 1, "font remains 13 screen pixels at every zoom");
-            assert.ok(!h.labels.some((entry) => /^[SP]\d+$/.test(entry.text) || entry.text.includes(" · ") || entry.text.includes("已满")));
+            assert.ok(!h.labels.some((entry) => /^[SP]\d+$/.test(entry.text) || entry.text.includes("·") || entry.text.includes("已满")));
         }
         h.renderer.camera.zoom = 1;
         h.tick();
@@ -624,7 +650,7 @@ for (const kind of ["supply", "fort"] as const) {
         h.renderer.setMapMode("state");
         h.tick();
         assert.equal(h.clears, 2);
-        assert.ok(h.labels.some((label) => label.text.includes(" · ")));
+        assert.ok(h.labels.some((label) => label.text === "L0"));
         assert.ok(!h.fills.some((color) => Object.values(CONSTRUCTION_COLORS).includes(color as never)));
         h.renderer.setMapMode("province");
         h.renderer.camera.zoom = 2;
@@ -991,7 +1017,7 @@ test("province and nation names are escaped; intel keeps ownership, claims, defe
     assert.ok(!h.tooltipTitle.innerHTML.includes("<img"));
     assert.match(h.tooltipBody.innerHTML, /正式归属：\[\[hostile\]\] &lt;script&gt;/);
     assert.match(h.tooltipBody.innerHTML, /所属州：\[\[industry\]\] &lt;b&gt;State&lt;\/b&gt;/);
-    assert.equal((h.tooltipBody.innerHTML.match(/game-text--/g) ?? []).length, 1);
+    assert.ok(!h.tooltipBody.innerHTML.includes("999</span>"), "escaped names never render as tokens");
     assert.equal(renderGameText((h.mapRequests[0] as Extract<MapTooltipRequest, { action: "show" }>).source.title, "plain"), province.name);
     h.engine.select(0);
     const intel = new IntelPanel(h.engine);
@@ -1020,7 +1046,11 @@ test("UI switches army selection to province mode and state mode restores land i
         hud: { classList: { toggle(name: string, enabled: boolean) { if (enabled) classes.add(name); else classes.delete(name); } } },
         tooltip: { hide() {}, refresh() {} },
         construction: { selectedKind: null, scope: "state", render() {} },
-        callbacks: { onMapMode: (mode: "province" | "state") => h.renderer.setMapMode(mode) },
+        callbacks: {
+            onMapMode: (mode: "province" | "state") => h.renderer.setMapMode(mode),
+            getColorMode: () => "gradient" as const,
+            onColorMode: () => {},
+        },
         renderLayers() {}, syncConstructionView() {},
         claimBanner: { classList: { toggle() {} } },
         ...Object.fromEntries(["topbar", "intel", "armies", "detail", "nations", "deploy", "policy", "diplomacy", "feed"].map((key) => [key, pane()])),

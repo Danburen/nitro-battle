@@ -8,6 +8,8 @@ import { POLICY_LABELS, policyOption } from "../game/policy.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
 import { provinceBuildingCapacity, stateBuildingCapacity } from "../game/economy.ts";
 import { CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS } from "../render/index.ts";
+import { RESOURCE_MAP_COLORS } from "../render/resources.ts";
+import type { ColorMode } from "../render/types.ts";
 import type { SoundManager } from "../audio/index.ts";
 import type { UIContext, UICallbacks } from "./context.ts";
 import { TopBar } from "./topbar.ts";
@@ -21,6 +23,7 @@ import { DeployPanel } from "./panels/deploy.ts";
 import { ConstructionPanel } from "./panels/construction.ts";
 import { PolicyPanel } from "./panels/policy.ts";
 import { DiplomacyPanel } from "./panels/diplomacy.ts";
+import { TradePanel } from "./panels/trade.ts";
 import { ExpansionPanel } from "./panels/expansion.ts";
 import { renderModeBar } from "./modeBar.ts";
 import { showEndOverlay } from "./endOverlay.ts";
@@ -30,7 +33,7 @@ import type { ConfirmSpec } from "./confirm.ts";
 import { MapLegend } from "./mapLegend.ts";
 import { setGameText, textToken } from "./text.ts";
 
-type TabId = "deploy" | "construction" | "policy" | "diplomacy" | "expansion";
+type TabId = "deploy" | "construction" | "policy" | "diplomacy" | "trade" | "expansion";
 
 /** UI controller: event delegation, selection mode and refresh orchestration. */
 export class GameUI implements UIContext {
@@ -61,6 +64,7 @@ export class GameUI implements UIContext {
     private readonly construction: ConstructionPanel;
     private readonly policy: PolicyPanel;
     private readonly diplomacy: DiplomacyPanel;
+    private readonly trade: TradePanel;
     private readonly expansion: ExpansionPanel;
     private readonly confirmDialog: ConfirmDialog;
     private readonly legend: MapLegend;
@@ -99,6 +103,7 @@ export class GameUI implements UIContext {
         this.construction = new ConstructionPanel(engine);
         this.policy = new PolicyPanel(engine);
         this.diplomacy = new DiplomacyPanel(engine, { toast: (message) => this.toast(message), sound: this.sound });
+        this.trade = new TradePanel(engine, { toast: (message) => this.toast(message), sound: this.sound });
         this.expansion = new ExpansionPanel(engine, {
             focus: (stateId) => this.callbacks.onClaimFocus(stateId),
         });
@@ -155,6 +160,7 @@ export class GameUI implements UIContext {
         this.topbar.destroy();
         this.construction.destroy();
         this.diplomacy.destroy();
+        this.trade.destroy();
         this.expansion.cancelDraft();
         this.claimBanner.classList.add("hidden");
         this.hud.classList.remove("claim-managing");
@@ -267,6 +273,7 @@ export class GameUI implements UIContext {
             () => this.deploy.render(),
             () => this.policy.render(),
             () => this.diplomacy.render(),
+            () => this.trade.render(),
             () => {
                 this.expansion.render();
                 this.syncClaimBanner();
@@ -390,6 +397,25 @@ export class GameUI implements UIContext {
             });
             return;
         }
+        if (this.callbacks.getColorMode() === "resource") {
+            this.legend.set({
+                title: "资源分布图例",
+                items: [
+                    { label: "原料矿", icons: [{ name: "raw", color: RESOURCE_MAP_COLORS.raw }] },
+                    { label: "战略矿", icons: [{ name: "strategic", color: RESOURCE_MAP_COLORS.strategic }] },
+                    {
+                        label: "两种矿共存",
+                        icons: [
+                            { name: "raw", color: RESOURCE_MAP_COLORS.raw },
+                            { name: "strategic", color: RESOURCE_MAP_COLORS.strategic },
+                        ],
+                    },
+                    { label: "粮食 / 无矿", icons: [{ name: "food", color: RESOURCE_MAP_COLORS.food }] },
+                ],
+                note: "颜色越深矿点等级越高 · 悬停省份查看每省实际产量",
+            });
+            return;
+        }
         this.legend.set(null);
     }
 
@@ -445,6 +471,7 @@ export class GameUI implements UIContext {
         this.construction.setHidden(tab !== "construction");
         this.policy.setHidden(tab !== "policy");
         this.diplomacy.setHidden(tab !== "diplomacy");
+        this.trade.setHidden(tab !== "trade");
         this.expansion.setHidden(tab !== "expansion");
         if (tab === "construction") this.changeMapMode(this.construction.scope);
         if (tab === "expansion") this.changeMapMode("state");
@@ -460,6 +487,7 @@ export class GameUI implements UIContext {
     }
 
     private changeMapMode(mode: "province" | "state"): void {
+        if (mode === "state" && this.callbacks.getColorMode() === "resource") this.callbacks.onColorMode("gradient");
         this.tooltip.hide();
         this.mapMode = mode;
         if (this.construction.selectedKind && BUILDING_PROFILES[this.construction.selectedKind].scope !== mode) this.construction.selectedKind = null;
@@ -486,12 +514,18 @@ export class GameUI implements UIContext {
         document.querySelector("#map-layers")!.classList.toggle("collapsed", this.layersCollapsed);
         this.hud.classList.toggle("layers-collapsed", this.layersCollapsed);
         document.querySelector("[data-action='layers-toggle']")!.setAttribute("aria-expanded", String(!this.layersCollapsed));
-        document.querySelector("#map-layer-name")!.textContent = this.mapMode === "state" ? "州" : "省份";
+        const resourceMode = this.callbacks.getColorMode() === "resource";
+        document.querySelector("#map-layer-name")!.textContent = resourceMode ? "资源" : this.mapMode === "state" ? "州" : "省份";
         document.querySelector("#map-layer-chevron")!.textContent = this.layersCollapsed ? "▸" : "▾";
         for (const button of options.querySelectorAll<HTMLElement>("[data-mode]")) {
             const active = button.dataset.mode === this.mapMode;
             button.classList.toggle("active", active);
             button.setAttribute("aria-pressed", String(active));
+        }
+        const resourceButton = options.querySelector<HTMLElement>("[data-color='resource']");
+        if (resourceButton) {
+            resourceButton.classList.toggle("active", resourceMode);
+            resourceButton.setAttribute("aria-pressed", String(resourceMode));
         }
         this.syncSettings();
     }
@@ -619,6 +653,7 @@ export class GameUI implements UIContext {
             event.preventDefault();
             this.handleEndTurn();
         } else if (event.key === "Escape") {
+            if (this.trade.closeBuilder()) return;
             if (this.diplomacy.closeActionMenu()) return;
             if (this.closeSettings()) return;
             if (this.diplomacy.closeDeclare()) return;
@@ -791,9 +826,15 @@ export class GameUI implements UIContext {
             return;
         }
         if (action === "color-mode") {
-            this.callbacks.onColorMode(target.dataset.color === "uniform" ? "uniform" : "gradient");
+            const picked = target.dataset.color;
+            if (picked !== "uniform" && picked !== "gradient" && picked !== "resource") return;
+            let color: ColorMode = picked;
+            if (color === "resource" && this.callbacks.getColorMode() === "resource"
+                && target.closest("#map-layer-options")) color = "gradient";
+            this.callbacks.onColorMode(color);
             this.sound.play("select");
             this.renderLayers();
+            this.syncMapLegend();
             return;
         }
         if (action === "color-reset") {
@@ -801,6 +842,7 @@ export class GameUI implements UIContext {
             this.callbacks.onDeepZoom(0.8);
             this.sound.play("select");
             this.renderLayers();
+            this.syncMapLegend();
             this.toast("染色已恢复默认（渐变 · 阈值 0.8）");
             return;
         }
@@ -827,6 +869,15 @@ export class GameUI implements UIContext {
             return;
         }
 
+        if (action === "trade-goto") {
+            const nationId = Number(target.dataset.nation);
+            if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
+                this.setTab("trade");
+                this.trade.setTarget(nationId);
+                this.sound.play("select");
+            }
+            return;
+        }
         if (action === "vassal-goto") {
             const nationId = Number(target.dataset.nation);
             if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
@@ -895,6 +946,7 @@ export class GameUI implements UIContext {
         }
 
         if (handleEconomyAction(this, action, target)) return;
+        if (this.trade.handleAction(action, target)) return;
         if (handleDiplomacyAction(this, action, target)) return;
         handleArmyAction(this, action, target, event);
     }

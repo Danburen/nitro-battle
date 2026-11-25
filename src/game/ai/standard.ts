@@ -1,7 +1,7 @@
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import { battleForecast } from "../battle.ts";
 import { claimedDefenseSites } from "../defense.ts";
-import { canBuild, canBuildProvince, canTrain, economicValue, factoryTotals } from "../economy.ts";
+import { canBuild, canBuildProvince, canTrain, economicValue, factoryTotals, resourceRates } from "../economy.ts";
 import { supplyLevel } from "../supply.ts";
 import { armyAt, armyCap, attackTargets, isHostileProvince, nationArmyCount, reachable } from "../rules.ts";
 import { BUILDING_PROFILES } from "../types/building.ts";
@@ -269,7 +269,11 @@ export class StandardAI implements AIController {
         let funds = nation.funds - FUNDS_RESERVE;
         let industry = nation.industry;
         const actions: AIAction[] = [];
-        const maxBuilds = Math.min(maxPending - pending, nation.funds > 800 ? 2 : MAX_BUILDS_PER_TURN);
+        const rates = resourceRates(state, this.nationId);
+        const rawTight = rates.raw < 0;
+        const foodTight = rates.food < 0;
+        let maxBuilds = Math.min(maxPending - pending, nation.funds > 800 ? 2 : MAX_BUILDS_PER_TURN);
+        if (rawTight || foodTight) maxBuilds = 1;
         const spend = (kind: StateBuildingKind | ProvinceBuildingKind): boolean => {
             const cost = BUILDING_PROFILES[kind];
             if (actions.length >= maxBuilds || funds < cost.costFunds || industry < cost.costIndustry) return false;
@@ -282,11 +286,14 @@ export class StandardAI implements AIController {
         const regions = state.states.filter((region) => state.provinces[region.center].owner === this.nationId)
             .sort((a, b) => a.factories - b.factories || a.id - b.id);
         for (const region of regions) {
-            const priorities: StateBuildingKind[] = region.infrastructure < 2
+            let priorities: StateBuildingKind[] = region.infrastructure < 2
                 ? (defensive ? ["infrastructure", "factory", "farm", "admin"] : ["factory", "infrastructure", "admin", "farm"])
                 : defensive ? ["infrastructure", "farm", "factory", "admin"]
                 : economyFirst ? ["farm", "factory", "infrastructure", "admin"]
                 : ["factory", "admin", "farm", "infrastructure"];
+            // Factories need raw inputs; a starving nation prioritises food first.
+            if (rawTight) priorities = priorities.filter((kind) => kind !== "factory");
+            if (foodTight) priorities = ["farm", ...priorities.filter((kind) => kind !== "farm")];
             for (const kind of priorities) {
                 if (!canBuild(state, this.nationId, region.id, kind) || !spend(kind)) continue;
                 actions.push({ kind: "build", stateId: region.id, buildingKind: kind });
@@ -319,6 +326,11 @@ export class StandardAI implements AIController {
             );
         if (!hasRoom) return [];
 
+        const rates = resourceRates(state, this.nationId);
+        // Armies eat food every day; a food deficit means no new regiments.
+        if (rates.food < 0) return [];
+        const strategicTight = rates.strategic < 0;
+
         const claimedSites = claimedDefenseSites(state, this.nationId);
         const cities = state.provinces
             .filter((province) => province.owner === this.nationId && province.isCity)
@@ -340,6 +352,8 @@ export class StandardAI implements AIController {
             let kind: UnitKindType = UnitKind.INFANTRY;
             if (roll < artilleryBias) kind = UnitKind.ARTILLERY;
             else if (roll < artilleryBias + armourBias) kind = UnitKind.TANK;
+            // Armoured and artillery regiments burn strategic resources daily.
+            if (strategicTight) kind = UnitKind.INFANTRY;
             if (!canTrain(state, this.nationId, kind)) kind = UnitKind.INFANTRY;
             if (!canTrain(state, this.nationId, kind)) continue;
             const unitProfile = UNIT_PROFILES[kind];

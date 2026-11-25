@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GameEngine } from "../game/engine.ts";
+import { createRequestCooldown } from "../game/requests.ts";
 import { claimProvince } from "../game/conquest.ts";
 import { setWar, isAtWar, canClaimState, claimableStateIds } from "../game/diplomacy.ts";
 import { enforceWarGoal, resolveWarOutcomes, settlePeace, warGoalProgress } from "../game/settlement.ts";
@@ -21,7 +22,8 @@ function fixture(owners = [0, 1, 1, NEUTRAL]): GameEngine {
             const site = center + i;
             provinces.push({ site, stateId: id, name: `P${site}`, owner, legalOwner: owner, coreNation: owner,
                 occupation: owner === NEUTRAL ? 0 : 100, isCity: i === 0, isCapital: false,
-                income: 4, population: 2, defense: 1, buildings: [], garrison: 0, garrisonMax: 20 });
+                income: 4, population: 2, defense: 1, buildings: [], deposits: { raw: 0, strategic: 0 },
+                garrison: 0, garrisonMax: 20 });
         }
         return { id, name: `S${id}`, center, provinces: [center, center + 1, center + 2], culture: 0,
             buildings: [], factories: 1, prodFactories: 0, infrastructure: 0 };
@@ -30,7 +32,8 @@ function fixture(owners = [0, 1, 1, NEUTRAL]): GameEngine {
         const capital = provinces.find((province) => province.owner === id)!.site;
         provinces[capital].isCapital = true;
         return { id, name: `N${id}`, color: "#123456", isPlayer: id === 0, capital, alive: true,
-            funds: 1000, manpower: 0, industry: 100, politicalPower: 100, policies: { ...DEFAULT_POLICIES } };
+            funds: 1000, manpower: 0, industry: 100, raw: 0, food: 0, strategic: 0,
+            politicalPower: 100, policies: { ...DEFAULT_POLICIES } };
     });
     const graph = { sites: provinces.map((province) => ({ id: province.site, x: province.site, y: 0 })),
         adjacency: provinces.map((province) => [province.site - 1, province.site + 1]
@@ -48,7 +51,9 @@ function fixture(owners = [0, 1, 1, NEUTRAL]): GameEngine {
         alliances: [], diplomaticRequests: [],
         allianceCooldown: nations.map(() => nations.map(() => -1)),
         vassalCooldown: nations.map(() => nations.map(() => -1)),
+        requestCooldown: createRequestCooldown(nations.length),
         nextAllianceId: 1, nextRequestId: 1,
+        tradeAgreements: [], nextTradeId: 1,
         log: [], winner: null, nextArmyId: 1, nextRegimentId: 1, nextDeploymentId: 1, nextConstructionId: 1,
         stats: { battles: 0, captures: 0, recruited: 0, losses: 0 },
     };

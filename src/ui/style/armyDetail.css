@@ -49,6 +49,13 @@
     color: var(--site-muted);
 }
 
+.detail-loc-icon {
+    width: 13px;
+    height: 13px;
+    vertical-align: -0.15em;
+    margin-right: 4px;
+}
+
 .reg-list {
     display: flex;
     flex-direction: column;

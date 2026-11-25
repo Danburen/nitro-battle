@@ -33,6 +33,15 @@
     cursor: not-allowed;
 }
 
+/* aria-disabled keeps the hover tooltip alive while reading as unavailable. */
+.btn.cooldown,
+.btn.cooldown:hover {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: var(--site-surface);
+    border-color: var(--border-muted);
+}
+
 .btn:focus-visible {
     outline: 2px solid var(--site-accent);
     outline-offset: 1px;

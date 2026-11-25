@@ -8,7 +8,7 @@ import { NEUTRAL } from "../types/world.ts";
 import { START_ORG } from "../types/organization.ts";
 import { UnitKind } from "../types/unit.ts";
 import type { GameState } from "../types/state.ts";
-import { compensateStartingNations } from "./balance.ts";
+import { compensateStartingNations, ensureStartingResourceDeposits } from "./balance.ts";
 
 const POP_BIOMES = new Set<number>([Biome.PLAINS, Biome.FOREST, Biome.HILLS, Biome.BEACH]);
 
@@ -31,6 +31,7 @@ export function initializeWorld(state: GameState, rand: LCGRandom): void {
         }
     }
     if (state.settings.balanceNations) compensateStartingNations(state);
+    ensureStartingResourceDeposits(state);
     for (const province of provinces) {
         province.coreNation = province.owner;
         province.legalOwner = province.owner;

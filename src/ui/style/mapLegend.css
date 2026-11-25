@@ -35,6 +35,20 @@
     background: var(--site-surface);
 }
 
+.map-legend-icons {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 1px;
+    height: 12px;
+}
+
+/* Resource rows carry the map colours as glyph ink instead of a flat swatch. */
+.map-legend-icons .resource-icon {
+    width: 12px;
+    height: 12px;
+}
+
 .map-legend-item i.pulse {
     animation: legend-pulse 1.6s ease-in-out infinite;
 }

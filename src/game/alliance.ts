@@ -2,7 +2,7 @@ import type { GameCore } from "./core.ts";
 import { isAtWar, nationPower, setWar } from "./diplomacy.ts";
 import { tendencyProfileOf } from "./ai/tendencies.ts";
 import { isProtectedRelation, overlordOf } from "./access.ts";
-import { createDiplomaticRequest } from "./requests.ts";
+import { createDiplomaticRequest, queuePlayerProposal, requestCooldownDays } from "./requests.ts";
 import { deny, minus, plus } from "./decision.ts";
 import type { Alliance } from "./types/diplomacy.ts";
 import type { DecisionFactor, DiplomaticDecision } from "./types/decision.ts";
@@ -12,7 +12,7 @@ export { inSameAlliance } from "./access.ts";
 
 /** A camp costs a large one-off political investment. */
 export const ALLIANCE_CREATE_COST = 40;
-export const ALLIANCE_INVITE_COOLDOWN = 15;
+export const ALLIANCE_INVITE_COOLDOWN = 5;
 export const ALLIANCE_MIN_DAY = 8;
 export const ALLIANCE_MAX_MEMBERS = 4;
 
@@ -20,7 +20,7 @@ export const ALLIANCE_HELP_BODY = [
     "联盟由领袖花费 40 政治点创建阵营，再邀请志同道合的国家加入。",
     "成员共享通行权，并把彼此的敌人视为共同敌人：任一成员开战或被攻击时，其他成员会加入同一场战争。",
     "邀约前提是双方有共同敌人，或同属扩张主义/同属防御倾向且外交意愿足够。孤立主义国家不会主动创建联盟，也极少接受邀请。",
-    "玩家拒绝结盟邀请后，[[turn:15]]内不会再次收到邀请，也不能主动申请加入同一联盟。",
+    "玩家拒绝结盟邀请后，[[turn:5]]内不会再次收到邀请，也不能主动申请加入同一联盟。",
 ].join("\n");
 
 function living(state: GameState, nation: number): boolean {
@@ -184,6 +184,16 @@ export function decideAllianceInvite(state: GameState, leader: number, target: n
 export function inviteToAlliance(core: GameCore, leader: number, target: number): boolean {
     const state = core.state;
     if (!canInviteToAlliance(state, leader, target)) return false;
+    if (leader === 0) {
+        if (requestCooldownDays(state, "alliance", target) > 0) return false;
+        const alliance = allianceOf(state, leader);
+        if (!alliance) return false;
+        const request = queuePlayerProposal(state, "alliance", 0, target, { allianceId: alliance.id });
+        if (!request) return false;
+        core.log(`我方邀请 ${core.nationChip(target)} 加入联盟，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (target === 0) {
         const alliance = allianceOf(state, leader);
         if (!alliance) return false;
@@ -232,6 +242,14 @@ export function requestJoinAlliance(core: GameCore, applicant: number, leader: n
     if (allianceOf(state, applicant) || overlordOf(state, applicant) >= 0) return false;
     if (allianceCooldownDays(state, applicant, leader) > 0) return false;
     if (!alliance.members.includes(applicant) && !canInviteToAlliance(state, leader, applicant)) return false;
+    if (applicant === 0) {
+        if (requestCooldownDays(state, "alliance", leader) > 0) return false;
+        const request = queuePlayerProposal(state, "alliance", leader, 0, { allianceId: alliance.id });
+        if (!request) return false;
+        core.log(`我方申请加入 ${core.nationChip(leader)} 的联盟，等待答复`, "diplo", 0);
+        core.emit({ type: "state" });
+        return true;
+    }
     if (leader === 0) {
         return inviteToAlliance(core, 0, applicant);
     }

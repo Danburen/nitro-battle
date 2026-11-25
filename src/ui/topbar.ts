@@ -1,17 +1,18 @@
 import type { GameEngine } from "../game/engine.ts";
 import type { SoundManager } from "../audio/index.ts";
 import type { GameState } from "../game/types/state.ts";
-import { factoryTotals, resourceBreakdown, resourceRates } from "../game/economy.ts";
+import { resourceBreakdown, resourceRates } from "../game/economy.ts";
 import { DIPLOMATIC_PROFILES } from "../game/diplomacy.ts";
 import { policySwitchUpkeep } from "../game/policy.ts";
+import { stabilityManpower, stabilityPolitics, stabilityProduction } from "../game/stability.ts";
 import { vassalsOf } from "../game/access.ts";
 import { VASSAL_HELP_BODY } from "../game/vassal.ts";
 import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS } from "../game/types/policy.ts";
-import { PP_CAP } from "../game/types/economy.ts";
-import { SEASONS } from "../game/types/world.ts";
+import { FOOD_SURPLUS_RATIO, MANPOWER_PER_POINT, PP_CAP } from "../game/types/economy.ts";
+import { DAYS_PER_SEASON, SEASONS } from "../game/types/world.ts";
 import { nationOverviewBody, nationStats } from "./nation-info.ts";
 import { vassalIndependenceIcon, vassalTypeIcon } from "./vassal.ts";
-import { escapeHtml, renderGameText, setGameText, textToken } from "./text.ts";
+import { compactNumber, escapeHtml, peopleCount, renderGameText, setGameText, signedCompact, textToken } from "./text.ts";
 import type { TextKey } from "./text.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 import { helpButton } from "./panel.ts";
@@ -47,11 +48,14 @@ export class TopBar {
     private readonly sound: SoundManager;
     private readonly toast: (text: string) => void;
     private readonly dayPill = document.querySelector<HTMLElement>("#day-pill") as HTMLElement;
-    private readonly seasonPill = document.querySelector<HTMLElement>("#season-pill") as HTMLElement;
     private readonly resFunds = document.querySelector<HTMLElement>("#res-funds") as HTMLElement;
     private readonly resManpower = document.querySelector<HTMLElement>("#res-manpower") as HTMLElement;
     private readonly resIndustry = document.querySelector<HTMLElement>("#res-industry") as HTMLElement;
+    private readonly resRaw = document.querySelector<HTMLElement>("#res-raw") as HTMLElement;
+    private readonly resFood = document.querySelector<HTMLElement>("#res-food") as HTMLElement;
+    private readonly resStrategic = document.querySelector<HTMLElement>("#res-strategic") as HTMLElement;
     private readonly resPp = document.querySelector<HTMLElement>("#res-pp") as HTMLElement;
+    private readonly resStability = document.querySelector<HTMLElement>("#res-stability") as HTMLElement;
     private readonly countryName = document.querySelector<HTMLElement>("#top-country-name") as HTMLElement;
     private readonly countryFlag = document.querySelector<HTMLElement>("#top-country-flag") as HTMLElement;
     private readonly countryLabel = document.querySelector<HTMLElement>("#top-country-label") as HTMLElement;
@@ -59,9 +63,6 @@ export class TopBar {
     private readonly vassalsTrigger = document.querySelector<HTMLButtonElement>("#top-vassals-trigger") as HTMLButtonElement;
     private readonly vassalsSummary = document.querySelector<HTMLElement>("#top-vassals-summary") as HTMLElement;
     private readonly vassalsMenu = document.querySelector<HTMLElement>("#top-vassals-menu") as HTMLElement;
-    private readonly allocation = document.querySelector<HTMLElement>("#factory-allocation")!;
-    private readonly production = document.querySelector<HTMLInputElement>("#factory-production")!;
-    private lastWheel = -Infinity;
     private vassalsOpen = false;
     private readonly resizeObserver: ResizeObserver;
 
@@ -69,17 +70,14 @@ export class TopBar {
         this.engine = engine;
         this.sound = sound;
         this.toast = toast;
-        for (const element of [this.resFunds, this.resManpower, this.resIndustry, this.resPp]) {
+        for (const element of [this.resStability, this.resFunds, this.resManpower, this.resIndustry, this.resRaw, this.resFood, this.resStrategic, this.resPp]) {
             element.innerHTML = "<span></span><i></i>";
             element.tabIndex = 0;
         }
         this.setSoundIcon();
         this.vassalsTrigger.addEventListener("click", this.onVassalsToggle);
         document.addEventListener("pointerdown", this.onVassalsOutside, true);
-        this.allocation.addEventListener("wheel", this.onWheel, { passive: false });
-        this.allocation.addEventListener("click", this.onFactoryClick);
-        this.production.addEventListener("input", this.onFactoryInput);
-        const bar = this.allocation.closest<HTMLElement>(".top-bar")!;
+        const bar = document.querySelector<HTMLElement>(".top-bar")!;
         this.resizeObserver = new ResizeObserver(() => {
             document.querySelector<HTMLElement>("#hud")!.style.setProperty("--hud-top", `${Math.ceil(bar.getBoundingClientRect().height) + 10}px`);
         });
@@ -90,9 +88,6 @@ export class TopBar {
         this.resizeObserver.disconnect();
         this.vassalsTrigger.removeEventListener("click", this.onVassalsToggle);
         document.removeEventListener("pointerdown", this.onVassalsOutside, true);
-        this.allocation.removeEventListener("wheel", this.onWheel);
-        this.allocation.removeEventListener("click", this.onFactoryClick);
-        this.production.removeEventListener("input", this.onFactoryInput);
     }
 
     private readonly onVassalsToggle = (): void => {
@@ -118,26 +113,6 @@ export class TopBar {
         if (!this.vassalsOpen) return;
         this.vassalsOpen = false;
         this.syncVassalsMenu();
-    }
-
-    private readonly onWheel = (event: WheelEvent): void => {
-        if (event.ctrlKey || event.deltaY === 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.timeStamp - this.lastWheel < 90) return;
-        this.lastWheel = event.timeStamp;
-        this.shiftProduction(event.deltaY < 0 ? 1 : -1);
-    };
-
-    private readonly onFactoryClick = (event: MouseEvent): void => {
-        const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-factory-step]");
-        if (button && !button.disabled) this.shiftProduction(Number(button.dataset.factoryStep));
-    };
-
-    private readonly onFactoryInput = (): void => { this.engine.setFactoryProduction(Number(this.production.value)); };
-
-    private shiftProduction(delta: number): void {
-        this.engine.setFactoryProduction(factoryTotals(this.engine.state, 0).prod + delta);
     }
 
     private renderResource(element: HTMLElement, key: TextKey, amount: number, change: string): void {
@@ -166,12 +141,13 @@ export class TopBar {
         if (this.vassalsOpen) this.vassalsMenu.innerHTML = vassalMenuHtml(state);
         const rates = resourceRates(state, 0);
         const detail = resourceBreakdown(state, 0);
+        const season = SEASONS[state.seasonIndex];
         setGameText(this.dayPill, `第 ${textToken("turn", state.day)}`);
         this.dayPill.dataset.tooltipTitle = "[[turn]]";
-        this.dayPill.dataset.tooltipBody = `当前为第 ${textToken("turn", state.day)}。\n点击「结束[[turn]]」或按 E 推进 ${textToken("turn", 1)}：结算收入、恢复、施工、行军与会战。`;
-        const season = SEASONS[state.seasonIndex];
-        this.seasonPill.textContent = state.seasonIndex === 3 ? `${season.name} · 积雪减速` : season.name;
-        this.seasonPill.classList.toggle("winter", state.seasonIndex === 3);
+        this.dayPill.dataset.tooltipBody = `当前为第 ${textToken("turn", state.day)}，${season.name}${state.seasonIndex === 3 ? "（积雪减速）" : ""}。
+每 ${DAYS_PER_SEASON} [[turn]]更替季节；冬季积雪提高[[movement]]成本。
+
+点击「结束[[turn]]」或按 E 推进 ${textToken("turn", 1)}：先结算[[raw]]/[[food]]/[[strategic]]产出与短缺，再更新库存、人口、恢复、施工、行军与会战。`;
 
         const fmt = (value: number): string => (Math.round(value * 10) / 10).toString();
         const signed = (value: number): string => `${value >= 0 ? "+" : ""}${fmt(value)}`;
@@ -180,37 +156,104 @@ export class TopBar {
             return `政策加成 ${percent > 0 ? "+" : ""}${percent}%`;
         };
         const net = Math.round(rates.fundsNet);
-        this.renderResource(this.resFunds, "funds", Math.floor(player.funds), `${net >= 0 ? "+" : ""}${net}/[[turn]]`);
+        const snap = detail.stability;
+        const economyFactor = stabilityProduction(player);
+        const adminBonus = Math.min(15, 1.5 * snap.admin);
+        const occupiedPenalty = Math.min(10, 0.3 * snap.occupiedProvinces);
+        const foodStance = snap.food > 0 ? `盈余 +5` : snap.food < 0 ? `短缺 -10` : "持平 0";
+        // Only occupied land drags stability; a nation ruling its own cores sees no line.
+        const occupiedLine = snap.occupiedProvinces > 0
+            ? `\n[[occupation]] -${occupiedPenalty.toFixed(1)}（${snap.occupiedProvinces} 个非核心省，上限 -10）`
+            : "";
+        this.renderResource(this.resStability, "stability", Math.round(snap.value), `→${Math.round(snap.target)}`);
+        this.resStability.dataset.tooltipTitle = "[[stability]]";
+        this.resStability.dataset.tooltipBody = `当前 [[stability:${Math.round(snap.value)}]] / 100，每日最多变动 1.2，向目标 [[stability:${Math.round(snap.target)}]] 靠拢。
+构成：
+基础 +55
+[[admin]] +${adminBonus.toFixed(1)}（上限 +15）
+战争 -${5 * snap.wars}
+兵役 ${snap.conscription >= 0 ? "+" : ""}${snap.conscription}${occupiedLine}
+[[food]] ${foodStance}
+
+效果：
+[[funds]]/[[industry]]/[[raw]]/[[strategic]]/[[food]] ×${economyFactor.toFixed(2)}
+[[politics]] ×${stabilityPolitics(player).toFixed(2)}
+[[manpower]]补充 ×${stabilityManpower(player).toFixed(2)}
+
+宣战双方下降，议和回升；长期战争、占领区过多与缺粮都会压低目标。`;
+        this.renderResource(this.resFunds, "funds", Math.floor(player.funds), signedCompact(net));
         this.resFunds.dataset.tooltipTitle = "[[funds]]";
         this.resFunds.dataset.tooltipBody = `省份产值 [[funds:${signed(detail.funds.provinces)}]]/[[turn]]
 [[farm]] [[funds:${signed(detail.funds.farms)}]]/[[turn]]
 [[production]][[factory]] [[funds:${signed(detail.funds.factories)}]]/[[turn]]
 [[infrastructure]]加成 [[funds:${signed(detail.funds.infrastructure)}]]/[[turn]]
 ${policyBonus(detail.funds.policyMult)}
+[[stability]]修正 ×${economyFactor.toFixed(2)}
 
 军团维护 [[funds:-${fmt(detail.funds.upkeep)}]]/[[turn]]
 净收入 [[funds:${signed(detail.funds.net)}]]/[[turn]]
 
-占领省按[[occupation]]效率折算；[[occupation]]政策影响占领省税收。`;
-        this.renderResource(this.resManpower, "manpower", Math.floor(player.manpower), `+${rates.manpower.toFixed(1)}`);
+城市省份税收全额计入，非城市省份只按两成计入；占领省再按[[occupation]]效率折算，[[occupation]]政策影响占领省税收。`;
+        const intake = rates.manpower;
+        const sharePercent = Math.round(detail.manpower.share * 1000) / 10;
+        this.renderResource(this.resManpower, "manpower", Math.floor(player.manpower), signedCompact(intake));
         this.resManpower.dataset.tooltipTitle = "[[manpower]]储备";
-        this.resManpower.dataset.tooltipBody = `每[[turn]]征募 [[manpower:${signed(detail.manpower.total)}]]
-省份人口 [[manpower:${signed(detail.manpower.population)}]]
-[[farm]] [[manpower:${signed(detail.manpower.farms)}]]
-${policyBonus(detail.manpower.policyMult)}
+        this.resManpower.dataset.tooltipBody = `可招募比例 ${sharePercent}%（由兵役政策决定）
+适役人口上限 [[manpower:${Math.round(detail.manpower.cap)}]]（约 ${peopleCount(detail.manpower.cap * MANPOWER_PER_POINT)} 人）
+当前储备 [[manpower:${Math.floor(player.manpower)}]]
+每日补充 [[manpower:${signed(intake)}]]
+[[stability]]修正 ×${stabilityManpower(player).toFixed(2)}
 
-上限 [[manpower:${Math.round(detail.manpower.cap)}]]（随人口与[[occupation]]变化）`;
-        this.renderResource(this.resIndustry, "industry", Math.floor(player.industry), `+${rates.industry.toFixed(1)}`);
+各省人口先按核心（全额）或占领（0.1 × [[occupation]]）折算，再乘可招募比例。
+补充不会超过适役上限；训练与补员消耗储备，稳定度越低补充越慢。`;
+        this.renderResource(this.resIndustry, "industry", Math.floor(player.industry), `+${compactNumber(rates.industryNet)}`);
         this.resIndustry.dataset.tooltipTitle = "[[industry]]储备";
         this.resIndustry.dataset.tooltipBody = `每[[turn]]产出 [[industry:${signed(detail.industry.total)}]]
 城市 [[industry:${signed(detail.industry.cities)}]]
 [[production]][[factory]] [[industry:${signed(detail.industry.factories)}]]
 [[infrastructure]]加成 [[industry:${signed(detail.industry.infrastructure)}]]
 ${policyBonus(detail.industry.policyMult)}
+[[stability]]修正 ×${economyFactor.toFixed(2)}
+军团维护 [[industry:-${fmt(detail.chain.industryArmyUse)}]]/[[turn]]
 
 上限 [[industry:${Math.round(detail.industry.cap)}]]（随城市数量变化）
-[[production]][[factory]]产量受来源州[[infrastructure]]影响。`;
-        this.renderResource(this.resPp, "politics", Math.floor(player.politicalPower), `+${rates.politicalPower.toFixed(0)}`);
+[[production]][[factory]]产量受来源州[[infrastructure]]影响。
+${detail.chain.industryFactor < 1 ? `\n[[raw]]短缺 本日[[industry]]产量 ${Math.round((detail.chain.industryFactor - 1) * 100)}%` : ""}`;
+
+        const chain = detail.chain;
+        const rawFlow = chain.raw;
+        this.renderResource(this.resRaw, "raw", Math.floor(player.raw), signedCompact(rates.raw));
+        this.resRaw.dataset.tooltipTitle = "[[raw]]储备";
+        this.resRaw.dataset.tooltipBody = `[[raw]]矿产出 [[raw:${signed(rawFlow.mines)}]]/[[turn]]
+[[production]][[factory]]消耗 [[raw:-${fmt(rawFlow.factoryUse)}]]/[[turn]]
+净变化 [[raw:${signed(rawFlow.net)}]]/[[turn]]
+矿产受来源省[[infrastructure]]（基础 60%，每级 +10%）与[[occupation]]影响；缺[[food]]时矿产最多 -99%。
+上限 [[raw:${rawFlow.cap}]]。`;
+
+        const foodFlow = chain.food;
+        this.renderResource(this.resFood, "food", Math.floor(player.food), signedCompact(rates.food));
+        this.resFood.dataset.tooltipTitle = "[[food]]储备";
+        this.resFood.dataset.tooltipBody = `每[[turn]]产出 [[food:${signed(foodFlow.gross)}]]
+省份 [[food:${signed(foodFlow.provinces)}]]
+[[farm]] [[food:${signed(foodFlow.farms)}]]
+[[stability]]修正 ×${economyFactor.toFixed(2)}
+人口消耗 [[food:-${fmt(foodFlow.consumption - foodFlow.armyUse)}]]
+军团口粮 [[food:-${fmt(foodFlow.armyUse)}]]
+净变化 [[food:${signed(foodFlow.net)}]]/[[turn]]
+${foodFlow.shortage ? "短缺：人口缓慢减少、[[stability]]下降，矿产降低。" : foodFlow.surplus ? `盈余：人口增长 +${Math.round(foodFlow.surplusBonus * 100)}%，[[stability]]目标 +5。` : `粮食充足；人口增长随余粮比例变化，净盈余超过产量的 ${Math.round(FOOD_SURPLUS_RATIO * 100)}% 时额外 +20%。`}
+上限 [[food:${foodFlow.cap}]]。`;
+
+        const strategicFlow = chain.strategic;
+        this.renderResource(this.resStrategic, "strategic", Math.floor(player.strategic), signedCompact(rates.strategic));
+        this.resStrategic.dataset.tooltipTitle = "[[strategic]]储备";
+        this.resStrategic.dataset.tooltipBody = `[[strategic]]矿产出 [[strategic:${signed(strategicFlow.mines)}]]/[[turn]]
+[[production]][[factory]]消耗 [[strategic:-${fmt(strategicFlow.factoryUse)}]]/[[turn]]
+军团维护消耗 [[strategic:-${fmt(strategicFlow.armyUse)}]]/[[turn]]
+净变化 [[strategic:${signed(strategicFlow.net)}]]/[[turn]]
+${strategicFlow.shortage ? "短缺：全军[[organization]]每日下降。" : "储备充足。"}
+上限 [[strategic:${strategicFlow.cap}]]。`;
+
+        this.renderResource(this.resPp, "politics", Math.floor(player.politicalPower), `+${compactNumber(Math.round(rates.politicalPower))}`);
         const diplomaticUpkeep = state.diplomaticActions
             .filter((action) => action.nation === 0)
             .reduce((sum, action) => sum + DIPLOMATIC_PROFILES[action.kind].upkeep, 0);
@@ -220,22 +263,10 @@ ${policyBonus(detail.industry.policyMult)}
 基础 [[politics:+${detail.political.base}]]
 [[admin]] [[politics:+${detail.political.admin}]]
 政策修正 [[politics:${detail.political.policy}]]
+[[stability]]修正 ×${detail.political.stability.toFixed(2)}
 ${diplomaticUpkeep > 0 ? `外交项目维护 [[politics:-${diplomaticUpkeep}]]/[[turn]]\n` : ""}${switchUpkeep > 0 ? `政策切换维护 [[politics:-${switchUpkeep}]]/[[turn]]\n` : ""}
 上限 [[politics:${PP_CAP}]]。切换政策先付 [[politics:${POLICY_SWITCH_COST}]]，进行中每[[turn]]维护，需 ${textToken("turn", POLICY_SWITCH_DAYS)}完成。`;
 
-        const factories = factoryTotals(state, 0);
-        this.production.max = String(factories.total);
-        this.production.value = String(factories.prod);
-        this.production.disabled = state.winner !== null || factories.total === 0;
-        this.production.setAttribute("aria-valuetext", `生产 ${factories.prod}，闲置 ${factories.idle}`);
-        this.production.style.setProperty("--production-share", `${factories.total ? factories.prod / factories.total * 100 : 0}%`);
-        document.querySelector("#factory-prod")!.textContent = String(factories.prod);
-        document.querySelector("#factory-idle")!.textContent = String(factories.idle);
-        this.allocation.dataset.tooltipTitle = "全国[[factory]]调配";
-        this.allocation.dataset.tooltipBody = `[[production]] ${factories.prod} · [[idle]] ${factories.idle} · 总计 ${factories.total}\n\n滚轮向上：转为[[production]]；向下：转为[[idle]]。\n也可拖动滑杆、按方向键或使用两侧 − / +。\n\n[[production]][[factory]]产出[[funds]]与[[industry]]；[[idle]][[factory]]按队列顺序投入施工，每项至多 5 座，每厂基础 [[construction:0.5]]/[[turn]]。\n产出同时受来源州[[infrastructure]]影响，施工再乘目标州速度；优先把高产能工厂分配给生产。\n无[[idle]][[factory]]时，施工暂停。`;
-        for (const button of this.allocation.querySelectorAll<HTMLButtonElement>("[data-factory-step]")) {
-            button.disabled = state.winner !== null || (Number(button.dataset.factoryStep) > 0 ? factories.idle === 0 : factories.prod === 0);
-        }
         this.endTurnBtn.disabled = state.winner !== null;
     }
 

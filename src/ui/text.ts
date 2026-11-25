@@ -19,7 +19,11 @@ export const TEXT_TERMS = {
     funds: { label: "财政", tone: "funds", icon: "funds" },
     manpower: { label: "人力", tone: "manpower", icon: "manpower" },
     industry: { label: "工业", tone: "industry", icon: "industry" },
+    raw: { label: "原料", tone: "raw", icon: "raw" },
+    food: { label: "粮食", tone: "food", icon: "food" },
+    strategic: { label: "战略资源", tone: "strategic", icon: "strategic" },
     politics: { label: "政治点", tone: "politics", icon: "politics" },
+    stability: { label: "稳定度", tone: "stability", icon: "stability" },
     construction: { label: "建造点", tone: "construction", icon: "construction" },
     factory: { label: "工厂", tone: "industry" },
     farm: { label: "农场", tone: "funds" },
@@ -39,10 +43,32 @@ export const TEXT_TERMS = {
     attack: { label: "攻击", tone: "keyword" },
     defense: { label: "防御", tone: "keyword" },
     movement: { label: "移动", tone: "keyword" },
+    surplus: { label: "有盈余", tone: "friendly" },
+    shortage: { label: "短缺", tone: "hostile" },
+    unknown: { label: "未知", tone: "neutral" },
 } as const satisfies Record<string, TextTerm>;
 
 export type TextKey = keyof typeof TEXT_TERMS;
 const numberFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 20 });
+
+/** Whole-person counts for hover/detail text, compacted past four digits: 25,000 → 25 K. */
+export function peopleCount(value: number): string {
+    return compactNumber(Math.max(0, Math.round(value)));
+}
+
+/** Resource amounts: 10,000 → 10 K, 1,200,000 → 1.2 M; smaller values keep grouping. */
+export function compactNumber(value: number): string {
+    const abs = Math.abs(value);
+    if (abs >= 999_950) return `${Math.round(value / 100_000) / 10} M`;
+    if (abs >= 10_000) return `${Math.round(value / 100) / 10} K`;
+    return numberFormat.format(Math.round(value * 10) / 10);
+}
+
+/** Signed compact delta for resource pills, e.g. +12.3 K / -5. Keeps one decimal. */
+export function signedCompact(value: number): string {
+    const rounded = Math.round(value * 10) / 10;
+    return `${rounded >= 0 ? "+" : ""}${compactNumber(rounded)}`;
+}
 const rendered = new WeakMap<HTMLElement, { source: string; format: TextFormat }>();
 
 export function escapeHtml(value: string): string {
@@ -58,14 +84,19 @@ export function escapeGameText(value: string): string {
  * against the document (browser + Electron) just like the flag emblems do.
  * SVG geometry lives in `public/assets/icons/`, never in UI source.
  */
-export function iconMaskStyle(name: string): string {
-    return `style="--icon:url('./assets/icons/${name}.svg')"`;
+export function iconMaskStyle(name: string, ink?: string): string {
+    // Masked glyphs ink themselves with currentColor, so `ink` tints one icon.
+    return ink
+        ? `style="--icon:url('./assets/icons/${name}.svg');color:${ink}"`
+        : `style="--icon:url('./assets/icons/${name}.svg')"`;
 }
 
 export function textToken(key: TextKey, value?: number | string): string {
-    if (value === undefined) return `[[${key}]]`;
-    const source = `[[${key}:${value}]]`;
-    return /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)%?$/.test(String(value)) ? source : escapeGameText(source);
+    // A broken economy total must never leak a literal `[[raw:NaN]]` into the UI.
+    const safe = typeof value === "number" && !Number.isFinite(value) ? undefined : value;
+    if (safe === undefined) return `[[${key}]]`;
+    const source = `[[${key}:${safe}]]`;
+    return /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)%?$/.test(String(safe)) ? source : escapeGameText(source);
 }
 
 const CHIP_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -106,7 +137,9 @@ function renderToken(body: string, format: TextFormat): string | null {
     if (match[2] !== undefined) {
         const value = Number(match[2].replace(/%$/, ""));
         if (!Number.isFinite(value)) return null;
-        amount = `${match[2].startsWith("+") ? "+" : ""}${numberFormat.format(value)}${match[3] ?? ""}`;
+        amount = match[3]
+            ? `${match[2].startsWith("+") ? "+" : ""}${numberFormat.format(value)}%`
+            : `${match[2].startsWith("+") ? "+" : ""}${compactNumber(value)}`;
     }
     const plain = amount === undefined ? term.label : `${amount} ${term.label}`;
     if (format === "plain") return plain;

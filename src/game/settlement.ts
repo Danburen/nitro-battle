@@ -247,10 +247,9 @@ export function annexVassal(core: GameCore, overlordId: number, vassalId: number
     const capitals = state.provinces.map((province) => province.isCapital);
 
     // Reassign armies before retiring the vassal so they survive as overlord armies.
-    for (const army of state.armies.values()) {
+    for (const [id, army] of state.armies) {
         if (army.nation !== vassalId) continue;
-        army.nation = overlordId;
-        army.march = null;
+        state.armies.set(id, { ...army, nation: overlordId, march: null });
     }
     for (const province of state.provinces) {
         if (province.legalOwner !== vassalId) continue;

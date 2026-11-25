@@ -35,13 +35,8 @@ export class BattleReport {
 
     render(): void {
         const { highlights } = buildReportDigest(this.engine.state);
-        const season = SEASONS[this.engine.state.seasonIndex]?.name ?? "";
-        const header = `
-            <div class="feed-global">
-                <span class="feed-season">D${this.engine.state.day} · ${escapeHtml(season)}</span>
-            </div>`;
         const items = highlights.map((entry) => this.highlightHtml(entry)).join("");
-        this.live.innerHTML = items ? header + `<div class="feed-highlights">${items}</div>` : header;
+        this.live.innerHTML = items ? `<div class="feed-highlights">${items}</div>` : "";
         if (this.expanded) this.renderDetail();
     }
 

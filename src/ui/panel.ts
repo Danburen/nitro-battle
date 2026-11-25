@@ -1,5 +1,5 @@
 import { escapeHtml, renderGameText } from "./text.ts";
-import { tooltipAttrs } from "./tooltip.ts";
+import { rawTooltipAttrs, tooltipAttrs } from "./tooltip.ts";
 
 /** Shared panel chrome: every panel head carries title, optional [i] help and a right-aligned status. */
 
@@ -29,6 +29,12 @@ export interface PanelHeadSpec {
 export function helpButton(help: HelpSpec, attrs = ""): string {
     const label = help.label ?? help.title;
     return `<button type="button" class="intel-help intel-info" aria-label="${escapeHtml(renderGameText(label, "plain"))}" ${attrs} ${tooltipAttrs(help.title, help.body)}>i</button>`;
+}
+
+/** Same chrome as `helpButton`, but the body is trusted, already-rendered HTML. */
+export function richHelpButton(title: string, bodyHtml: string, label = title, attrs = ""): string {
+    const markup = `<div class="tip-reason">${bodyHtml}</div>`;
+    return `<button type="button" class="intel-help intel-info" aria-label="${escapeHtml(renderGameText(label, "plain"))}" ${attrs} ${tooltipAttrs(title, "")} ${rawTooltipAttrs(markup)}>i</button>`;
 }
 
 export function panelHead(spec: PanelHeadSpec): string {

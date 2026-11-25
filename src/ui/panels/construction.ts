@@ -3,13 +3,13 @@ import { canBuild, canBuildProvince, constructionPlan, factoryTotals, provinceBu
 import { BUILDING_PROFILES, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types/building.ts";
 import type { BuildingKind, ConstructionOrder } from "../../game/types/building.ts";
 import { tooltipAttrs } from "../tooltip.ts";
-import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
+import { escapeGameText, escapeHtml, iconMaskStyle, renderGameText, textToken } from "../text.ts";
 import { panelHead } from "../panel.ts";
 
 const CONSTRUCTION_TIP = `2 · 选择建筑后，点击地图中的己方州；省份建筑点击己方省份。\n每次点击加入一项，可连续选址。\n地图显示「已建+在建 / 上限」：在建数字为绿色，正在施工的地块会覆盖绿色阴影；不可建造的地块统一为灰色。\n颜色图例：空闲 / 较少 / 较多 / 已满；省份建筑仅空闲 / 已满。\n右键或 Esc 取消当前建筑选择。\n\n州建筑仅作用于州中心及其同属省份；省份建筑每省每种限 1 座，放大地图显示容量数字。\n施工消耗[[idle]][[factory]]，每项最多 5 座，按队列顺序分配，多余工厂顺延；无[[idle]][[factory]]时施工暂停。\n取消未完成项目返还半数已付资源。`;
 
 function icon(kind: BuildingKind): string {
-    return `<span class="building-emoji" aria-hidden="true">${BUILDING_PROFILES[kind].glyph}</span>`;
+    return `<span class="building-icon" aria-hidden="true" ${iconMaskStyle(BUILDING_PROFILES[kind].icon)}></span>`;
 }
 
 export class ConstructionPanel {
@@ -19,6 +19,12 @@ export class ConstructionPanel {
     private readonly el = document.querySelector<HTMLElement>("#construction-panel")!;
     private draggedOrder: number | null = null;
     private dropBefore: number | null = null;
+    /** Persistent factory dial so a slider drag survives the panel's full re-render. */
+    private readonly allocation = document.createElement("div");
+    private readonly production = document.createElement("input");
+    private allocationBusy = false;
+    private allocationDirty = false;
+    private lastWheel = -Infinity;
 
     constructor(engine: GameEngine) {
         this.engine = engine;
@@ -27,6 +33,24 @@ export class ConstructionPanel {
         this.el.addEventListener("drop", this.onDrop);
         this.el.addEventListener("dragend", this.onDragEnd);
         this.el.addEventListener("click", this.onClick);
+        this.allocation.className = "factory-allocation";
+        this.allocation.id = "factory-allocation";
+        this.allocation.setAttribute("role", "group");
+        this.allocation.setAttribute("aria-label", "全国工厂调配");
+        this.allocation.innerHTML = `<button type="button" class="factory-step" data-factory-step="-1" aria-label="增加闲置工厂">−</button>
+            <div class="factory-dial">
+                <div class="factory-totals"><span>${renderGameText("[[production]]")} <b data-factory-prod>0</b></span><span>${renderGameText("[[idle]]")} <b data-factory-idle>0</b></span></div>
+                <input id="factory-production" type="range" min="0" max="0" value="0" step="1" data-focus-key="factory-production" aria-label="生产工厂数量" />
+            </div>
+            <button type="button" class="factory-step" data-factory-step="1" aria-label="增加生产工厂">+</button>`;
+        this.production = this.allocation.querySelector<HTMLInputElement>("input")!;
+        this.allocation.addEventListener("wheel", this.onAllocationWheel, { passive: false });
+        this.allocation.addEventListener("click", this.onAllocationClick);
+        this.allocation.addEventListener("pointerdown", this.onAllocationPointerDown);
+        this.allocation.addEventListener("keydown", this.onAllocationKeyDown);
+        this.production.addEventListener("input", this.onProductionInput);
+        document.addEventListener("pointerup", this.onAllocationPointerUp);
+        document.addEventListener("keyup", this.onAllocationKeyUp);
     }
 
     destroy(): void {
@@ -35,11 +59,22 @@ export class ConstructionPanel {
         this.el.removeEventListener("drop", this.onDrop);
         this.el.removeEventListener("dragend", this.onDragEnd);
         this.el.removeEventListener("click", this.onClick);
+        this.allocation.removeEventListener("wheel", this.onAllocationWheel);
+        this.allocation.removeEventListener("click", this.onAllocationClick);
+        this.allocation.removeEventListener("pointerdown", this.onAllocationPointerDown);
+        this.allocation.removeEventListener("keydown", this.onAllocationKeyDown);
+        this.production.removeEventListener("input", this.onProductionInput);
+        document.removeEventListener("pointerup", this.onAllocationPointerUp);
+        document.removeEventListener("keyup", this.onAllocationKeyUp);
     }
 
     setHidden(hidden: boolean): void { this.el.classList.toggle("hidden", hidden); }
 
     render(): void {
+        if (this.allocationBusy) {
+            this.syncAllocation();
+            return;
+        }
         const scrollTop = this.el.querySelector(".panel-body")?.scrollTop ?? 0;
         const focused = this.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.focusKey : undefined;
         const state = this.engine.state;
@@ -63,16 +98,88 @@ export class ConstructionPanel {
                 <button role="tab" id="construction-province-tab" aria-controls="construction-buildings" aria-selected="${this.scope === "province"}" data-action="construction-scope" data-mode="province" data-focus-key="scope-province" class="${this.scope === "province" ? "active" : ""}">省份建筑 <span>补给与防御</span></button>
             </div>
             <div class="panel-body construction-body">
+                <section class="construction-section construction-factories">
+                    <div class="deploy-head"><span>工厂调配</span><span data-factory-summary></span></div>
+                    <div data-factory-host></div>
+                    <p class="micro-hint">滚轮或拖动滑杆调整生产/闲置；闲置工厂按队列顺序投入施工。</p>
+                </section>
                 <div id="construction-buildings" role="tabpanel" aria-labelledby="construction-${this.scope}-tab">${buildings}</div>
                 <section class="construction-section construction-queue">
                     <div class="deploy-head"><span>施工优先级</span><span>${assigned} / ${totals.idle} ${renderGameText("[[idle]]厂")}</span></div>
                     <p class="micro-hint">拖动排序 · 每项最多 5 厂 · 多余工厂顺延</p>
-                    ${finished ? '<div class="empty-hint">战役已结束。</div>' : totals.idle === 0 ? '<p class="construction-warning">无闲置工厂，施工暂停。滚动顶部工厂控件进行调配。</p>' : ""}
+                    ${finished ? '<div class="empty-hint">战役已结束。</div>' : totals.idle === 0 ? '<p class="construction-warning">无闲置工厂，施工暂停。在上方「工厂调配」中把生产转为闲置。</p>' : ""}
                     <div class="construction-orders" role="list" aria-label="施工队列">${queue.map((order, index) => this.orderHtml(order, index, queue.length, allocations.find((entry) => entry.orderId === order.id)!)).join("") || '<div class="empty-hint">暂无施工项目</div>'}<div class="queue-end" data-drop-end>拖到这里移至队尾</div></div>
                 </section>
             </div>`;
+        this.el.querySelector("[data-factory-host]")!.appendChild(this.allocation);
+        this.syncAllocation();
         this.el.querySelector(".panel-body")!.scrollTop = scrollTop;
         if (focused) this.el.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    }
+
+    private syncAllocation(): void {
+        const state = this.engine.state;
+        const totals = factoryTotals(state, 0);
+        this.allocation.dataset.tooltipTitle = "全国[[factory]]调配";
+        this.allocation.dataset.tooltipBody = `[[production]] ${totals.prod} · [[idle]] ${totals.idle} · 总计 ${totals.total}\n\n滚轮向上：转为[[production]]；向下：转为[[idle]]。\n也可拖动滑杆、按方向键或使用两侧 − / +。\n\n[[production]][[factory]]产出[[funds]]与[[industry]]；[[idle]][[factory]]按队列顺序投入施工，每项至多 5 座，每厂基础 [[construction:0.5]]/[[turn]]。\n产出同时受来源州[[infrastructure]]影响，施工再乘目标州速度；优先把高产能工厂分配给生产。\n无[[idle]][[factory]]时，施工暂停。`;
+        this.production.max = String(totals.total);
+        this.production.value = String(totals.prod);
+        this.production.disabled = state.winner !== null || totals.total === 0;
+        this.production.setAttribute("aria-valuetext", `生产 ${totals.prod}，闲置 ${totals.idle}`);
+        this.production.style.setProperty("--production-share", `${totals.total ? totals.prod / totals.total * 100 : 0}%`);
+        this.allocation.querySelector<HTMLElement>("[data-factory-prod]")!.textContent = String(totals.prod);
+        this.allocation.querySelector<HTMLElement>("[data-factory-idle]")!.textContent = String(totals.idle);
+        const summary = this.el.querySelector<HTMLElement>("[data-factory-summary]");
+        if (summary) summary.textContent = `生产 ${totals.prod} · 闲置 ${totals.idle} / 总计 ${totals.total}`;
+        for (const button of this.allocation.querySelectorAll<HTMLButtonElement>("[data-factory-step]")) {
+            button.disabled = state.winner !== null
+                || (Number(button.dataset.factoryStep) > 0 ? totals.idle === 0 : totals.prod === 0);
+        }
+    }
+
+    private readonly onProductionInput = (): void => {
+        this.allocationDirty = true;
+        this.engine.setFactoryProduction(Number(this.production.value));
+        this.syncAllocation();
+    };
+
+    private readonly onAllocationWheel = (event: WheelEvent): void => {
+        if (event.ctrlKey || event.deltaY === 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.timeStamp - this.lastWheel < 90) return;
+        this.lastWheel = event.timeStamp;
+        const totals = factoryTotals(this.engine.state, 0);
+        this.engine.setFactoryProduction(totals.prod + (event.deltaY < 0 ? 1 : -1));
+    };
+
+    private readonly onAllocationClick = (event: MouseEvent): void => {
+        const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-factory-step]");
+        if (!button || button.disabled) return;
+        const totals = factoryTotals(this.engine.state, 0);
+        this.engine.setFactoryProduction(totals.prod + Number(button.dataset.factoryStep));
+        this.syncAllocation();
+    };
+
+    private readonly onAllocationPointerDown = (): void => { this.allocationBusy = true; };
+
+    private readonly onAllocationPointerUp = (): void => this.endAllocationInput();
+
+    private readonly onAllocationKeyDown = (event: KeyboardEvent): void => {
+        const target = event.target as HTMLElement;
+        if (target === this.production || target.closest("[data-factory-step]")) this.allocationBusy = true;
+    };
+
+    private readonly onAllocationKeyUp = (): void => this.endAllocationInput();
+
+    private endAllocationInput(): void {
+        if (!this.allocationBusy) return;
+        this.allocationBusy = false;
+        // Rebuild once the gesture ends so deferred renders see the final factory split.
+        if (this.allocationDirty) {
+            this.allocationDirty = false;
+            this.render();
+        }
     }
 
     private buildButton(kind: BuildingKind, selected: number | null): string {

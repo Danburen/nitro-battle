@@ -43,7 +43,7 @@ test("a reluctant tendency is a negative reason and refuses", () => {
     const reluctant: AITendencyId[] = ["isolated", "pacifist", "defensive"];
     for (const tendency of reluctant) {
         const engine = vassalFixture();
-        engine.state.nations[2]!.tendency = tendency;
+        Object.assign(engine.state.nations[2]!, { tendency });
         const support = decideAid(engine.state, 1, 2);
         assert.equal(support.accepts, false);
         assert.equal(support.verdict, "refuse");
