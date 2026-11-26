@@ -17,7 +17,7 @@ import type {
     VoronoiStats,
     VoronoiVertex,
 } from "./types.ts";
-import { pMod } from "../../utils/math.ts";
+import { pMod } from "../../../utils/math.ts";
 import { buildTorusMesh } from "./delaunay.ts";
 
 const TILE_SPAN = 3;

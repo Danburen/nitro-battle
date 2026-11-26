@@ -9,7 +9,7 @@ import { DEFAULT_POLICIES } from "../game/types/policy.ts";
 import type { BuildingKind } from "../game/types/building.ts";
 import type { GameState } from "../game/types/state.ts";
 import type { Province, StateRegion } from "../game/types/entities.ts";
-import { Biome, BiomeMap } from "../terrain/biome.ts";
+import { Biome, BiomeMap } from "../game/terrain/biome.ts";
 import {
     buildConstructionOverlay, constructionColor, CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS,
     CONSTRUCTION_PENDING_TINT, PROVINCE_CAPACITY_MIN_ZOOM, REGION_COUNTER_MIN_ZOOM,
@@ -965,7 +965,7 @@ test("map tooltip never replaces HUD, shared hides reset hover, and occluded can
     h.tick(0);
     h.tick(800);
     h.documentEvent("pointerover");
-    assert.equal(h.tooltipTitle.innerHTML, 'HUD <span class="game-text game-text--manpower">补给</span>');
+    assert.equal(h.tooltipTitle.innerHTML, 'HUD <span class="game-text game-text--plain">补给</span>');
     assert.equal(h.canvas.getAttribute("aria-describedby"), null);
     const show = h.mapRequests.find((request) => request.action === "show")!;
     document.dispatchEvent(new CustomEvent(MAP_TOOLTIP_EVENT, { detail: show }));
@@ -1025,7 +1025,7 @@ test("province and nation names are escaped; intel keeps ownership, claims, defe
     assert.match(h.intelEl.innerHTML, /<dt>控制国<\/dt><dd>N0<\/dd>/);
     assert.match(h.intelEl.innerHTML, /<dt>正式归属<\/dt><dd>\[\[hostile\]\] &lt;script&gt;/);
     assert.match(h.intelEl.innerHTML, /地形\/城市/);
-    assert.match(h.intelEl.innerHTML, /game-text--keyword">占领效率/);
+    assert.match(h.intelEl.innerHTML, /game-text--plain">占领效率/);
     assert.match(h.intelEl.innerHTML, /宣称国：\\\[\\\[hostile\]\] &lt;script&gt;/);
     assert.ok(!h.intelEl.innerHTML.includes("13/79"));
     assert.ok(!h.intelEl.innerHTML.includes('class="garrison-bar"'));

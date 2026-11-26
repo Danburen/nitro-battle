@@ -1,10 +1,13 @@
-import { Biome } from "../../terrain/biome.ts";
-import { periodicDistance } from "../../terrain/voronoi/index.ts";
+import { t } from "../../i18n/index.ts";
+import { chipToken } from "../../utils/spec.ts";
+import { Biome } from "../terrain/biome.ts";
+import { periodicDistance } from "../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { spawnArmy } from "../armies.ts";
 import { garrisonCapacity } from "../battle.ts";
 import { computeSupply } from "../supply.ts";
 import { NEUTRAL } from "../types/world.ts";
+import { VASSAL_PROFILES } from "../vassal.ts";
 import { START_ORG } from "../types/organization.ts";
 import { UnitKind } from "../types/unit.ts";
 import type { GameState } from "../types/state.ts";
@@ -53,24 +56,20 @@ export function initializeWorld(state: GameState, rand: LCGRandom): void {
     }
     state.supply = computeSupply(state);
     state.supplyDirty = false;
-    const chips = nations.map((nation) => {
-        const label = nation.name.replace(/[\\[\]]/g, "\\$&");
-        return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(nation.color) ? `[[chip:${nation.color}|${label}]]` : label;
-    });
+    const chips = nations.map((nation) => chipToken(nation.color, nation.name));
     state.log.push({
         day: 1,
-        text: `战役开始 ${chips.join(" ")}`,
+        text: t("game.generator.initial.battleStart", { nations: chips.join(" ") }),
         tone: "system",
         nationId: NEUTRAL,
     });
     const vassalLines = nations
         .filter((nation) => nation.alive && (nation.overlord ?? -1) >= 0)
-        .map((nation) => `${nation.name}（${nation.vassalType === "cooperative" ? "合作"
-            : nation.vassalType === "autonomous" ? "自治" : "压迫"}）→ ${nations[nation.overlord as number]?.name ?? "?"}`);
+        .map((nation) => `${nation.name}（${VASSAL_PROFILES[nation.vassalType ?? "cooperative"].short}）→ ${nations[nation.overlord as number]?.name ?? "?"}`);
     if (vassalLines.length > 0) {
         state.log.push({
             day: 1,
-            text: `附庸格局 ${vassalLines.join(" · ")}`,
+            text: t("game.generator.initial.vassalLayout", { lines: vassalLines.join(" · ") }),
             tone: "diplo",
             nationId: NEUTRAL,
         });

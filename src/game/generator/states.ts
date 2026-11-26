@@ -1,7 +1,7 @@
-import { periodicDistance } from "../../terrain/voronoi/index.ts";
-import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
-import type { BiomeMap } from "../../terrain/biome.ts";
-import { periodicNoise2D } from "../../terrain/noise.ts";
+import { periodicDistance } from "../terrain/voronoi/index.ts";
+import type { VoronoiGraph } from "../terrain/voronoi/index.ts";
+import type { BiomeMap } from "../terrain/biome.ts";
+import { periodicNoise2D } from "../terrain/noise.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import type { Province, StateRegion } from "../types/entities.ts";
 import type { GameSettings } from "../../types/settings.ts";

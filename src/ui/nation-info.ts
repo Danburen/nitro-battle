@@ -3,6 +3,7 @@ import { NEUTRAL } from "../game/types/world.ts";
 import type { GameState } from "../game/types/state.ts";
 import { ALLIANCE_HELP_BODY, allianceOf } from "../game/alliance.ts";
 import { stabilityOf } from "../game/stability.ts";
+import { t } from "../i18n/index.ts";
 import { escapeHtml } from "./text.ts";
 import { helpButton } from "./panel.ts";
 import { tendencyBadge } from "./tendency.ts";
@@ -113,24 +114,24 @@ export function nationFigures(stats: NationStats): NationFigures {
 /** Shared stat rows (everything before vassal/alliance/vendor extras). */
 export function nationInfoRows(state: GameState, stats: NationStats): string {
     const nation = state.nations[stats.nationId];
-    const capital = nation ? state.provinces[nation.capital]?.name ?? "未知" : "未知";
+    const capital = nation ? state.provinces[nation.capital]?.name ?? t("misc.common.unknown") : t("misc.common.unknown");
     const stability = nation ? Math.round(stabilityOf(nation)) : 0;
     const figures = nationFigures(stats);
     const industryWidth = Math.round(Math.max(0.04, figures.industryRatio) * 100);
-    return `<div class="kv-row"><dt>控制省份</dt><dd><span class="game-text game-text--construction">${stats.provinces} 省 · ${stats.states} 州</span></dd></div>
-        <div class="kv-row"><dt>首都</dt><dd><span class="game-text game-text--keyword">${escapeHtml(capital)}</span></dd></div>
-        <div class="kv-row"><dt>城市</dt><dd><span class="game-text game-text--construction">${stats.cities} 座</span></dd></div>
-        <div class="kv-row"><dt>工业水平</dt><dd>
+    return `<div class="kv-row"><dt>${t("misc.nationInfo.provinces")}</dt><dd><span class="game-text game-text--construction">${t("misc.nationInfo.provinceValue", { provinces: stats.provinces, states: stats.states })}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.capital")}</dt><dd><span class="game-text game-text--keyword">${escapeHtml(capital)}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.cities")}</dt><dd><span class="game-text game-text--construction">${t("misc.nationInfo.countSites", { count: stats.cities })}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.industryLevel")}</dt><dd>
             <span class="industry-line">
                 <span class="industry-meter"><i style="width:${industryWidth}%"></i></span>
-                <b class="game-text--industry">${stats.factories}</b> 座工厂<span class="kv-note">相对最强 ${Math.round(figures.industryRatio * 100)}%</span>
+                <b class="game-text--industry">${stats.factories}</b>${t("misc.nationInfo.factoriesUnit")}<span class="kv-note">${t("misc.nationInfo.relative", { percent: Math.round(figures.industryRatio * 100) })}</span>
             </span>
         </dd></div>
-        <div class="kv-row"><dt>农场</dt><dd><span class="game-text game-text--funds">${stats.farms} 座</span></dd></div>
-        <div class="kv-row"><dt>基础设施</dt><dd><span class="game-text game-text--construction">${figures.coverage}%</span><span class="kv-note">平均 ${figures.infrastructureAverage.toFixed(1)} / ${INFRASTRUCTURE_MAX} 级</span></dd></div>
-        <div class="kv-row"><dt>军团</dt><dd><span class="game-text game-text--manpower">${stats.armies} 支 · ${stats.regiments} 团</span></dd></div>
-        <div class="kv-row"><dt>稳定度</dt><dd><span class="game-text game-text--stability">${stability}</span><span class="kv-note">0–100</span></dd></div>
-        <div class="kv-row"><dt>外交倾向</dt><dd>${nation ? tendencyBadge(nation, state) : "—"}</dd></div>`;
+        <div class="kv-row"><dt>${t("misc.nationInfo.farms")}</dt><dd><span class="game-text game-text--funds">${t("misc.nationInfo.countSites", { count: stats.farms })}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.infrastructure")}</dt><dd><span class="game-text game-text--construction">${figures.coverage}%</span><span class="kv-note">${t("misc.nationInfo.infrastructureAverage", { value: figures.infrastructureAverage.toFixed(1), max: INFRASTRUCTURE_MAX })}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.armies")}</dt><dd><span class="game-text game-text--manpower">${t("misc.nationInfo.armyValue", { armies: stats.armies, regiments: stats.regiments })}</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.stability")}</dt><dd><span class="game-text game-text--stability">${stability}</span><span class="kv-note">0–100</span></dd></div>
+        <div class="kv-row"><dt>${t("misc.tendency.title")}</dt><dd>${nation ? tendencyBadge(nation, state) : "—"}</dd></div>`;
 }
 
 /**
@@ -142,10 +143,13 @@ export function nationOverviewBody(state: GameState, stats: NationStats, extraCl
     const nationId = stats.nationId;
     const targetAlliance = allianceOf(state, nationId);
     const allianceText = targetAlliance
-        ? `${state.nations[targetAlliance.leader]?.name ?? "?"} 的联盟 · ${targetAlliance.members.length} 国`
-        : "无";
+        ? t("misc.nationInfo.allianceText", {
+            name: state.nations[targetAlliance.leader]?.name ?? "?",
+            count: targetAlliance.members.length,
+        })
+        : t("misc.common.none");
     return `<dl class="kv${extraClass}">
         ${nationInfoRows(state, stats)}
-        <div class="kv-row"><dt>联盟</dt><dd>${escapeHtml(allianceText)} ${helpButton({ title: "联盟制度", body: ALLIANCE_HELP_BODY })}</dd></div>
+        <div class="kv-row"><dt>${t("misc.nationInfo.alliance")}</dt><dd>${escapeHtml(allianceText)} ${helpButton({ title: t("misc.nationInfo.allianceHelp"), body: ALLIANCE_HELP_BODY })}</dd></div>
     </dl>`;
 }

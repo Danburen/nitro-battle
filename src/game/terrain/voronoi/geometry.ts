@@ -1,5 +1,5 @@
 import type { Domain, Vec2 } from "./types.ts";
-import { pMod } from "../../utils/math.ts";
+import { pMod } from "../../../utils/math.ts";
 
 /** Wrap a lift-plane point back into the fundamental domain. */
 export function canonicalPoint(point: Vec2, domain: Domain): Vec2 {

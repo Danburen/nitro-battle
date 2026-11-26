@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { attack } from "./combat.ts";
 import {
@@ -17,18 +18,21 @@ import type { Army } from "./types/organization.ts";
 import type { GameState } from "./types/state.ts";
 import type { UnitKind } from "./types/unit.ts";
 
-const ARMY_NAMES = ["第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十"];
+const ARMY_NAME_KEYS = [
+    "game.armies.name.1", "game.armies.name.2", "game.armies.name.3", "game.armies.name.4", "game.armies.name.5",
+    "game.armies.name.6", "game.armies.name.7", "game.armies.name.8", "game.armies.name.9", "game.armies.name.10",
+] as const;
 
 export function nextArmyName(state: GameState, nation: number): string {
     const used = new Set<string>();
     for (const army of state.armies.values()) {
         if (army.nation === nation) used.add(army.name);
     }
-    for (const prefix of ARMY_NAMES) {
-        const name = `${prefix}军团`;
+    for (const key of ARMY_NAME_KEYS) {
+        const name = t(key);
         if (!used.has(name)) return name;
     }
-    return `第${state.nextArmyId}军团`;
+    return t("game.armies.name.fallback", { id: state.nextArmyId });
 }
 
 export function spawnArmy(state: GameState, nation: number, province: number, kinds: UnitKind[], org: number): Army {
@@ -102,7 +106,9 @@ export function orderMarch(core: GameCore, armyId: number, target: number, attac
 
     army.march = { target, attack };
     core.log(
-        `${core.nationChip(army.nation)} ${army.name}${attack ? " 远征" : " 开赴"} ${state.provinces[target].name}`,
+        t(attack ? "game.armies.march.attack" : "game.armies.march.normal", {
+            nation: core.nationChip(army.nation), army: army.name, province: state.provinces[target].name,
+        }),
         "info",
         army.nation,
     );
@@ -168,7 +174,9 @@ export function redeploy(core: GameCore, armyId: number, to: number): boolean {
     state.redeployArmyId = null;
 
     core.log(
-        `${core.nationChip(army.nation)} ${army.name} 战略转移 ${state.provinces[to].name}`,
+        t("game.armies.redeploy", {
+            nation: core.nationChip(army.nation), army: army.name, province: state.provinces[to].name,
+        }),
         "info",
         army.nation,
     );
@@ -183,7 +191,9 @@ export function disbandArmy(core: GameCore, armyId: number): boolean {
     const army = state.armies.get(armyId);
     if (!army || army.nation !== 0 || state.winner !== null) return false;
     if (core.inBattle(armyId)) return false;
-    core.log(`${core.nationChip(0)} 解散 ${army.name}（${army.regiments.length} 团复员）`, "econ", 0);
+    core.log(t("game.armies.disband", {
+        nation: core.nationChip(0), army: army.name, regiments: army.regiments.length,
+    }), "econ", 0);
     core.removeArmy(army, false);
     core.invalidateReach();
     core.emit({ type: "state" });
@@ -245,7 +255,9 @@ export function splitArmy(
     state.armies.set(fresh.id, fresh);
     state.armyAt[site] = fresh.id;
     core.log(
-        `${core.nationChip(0)} 拆分 ${fresh.name}（${moving.length} 团）驻 ${state.provinces[site].name}`,
+        t("game.armies.split", {
+            nation: core.nationChip(0), army: fresh.name, regiments: moving.length, province: state.provinces[site].name,
+        }),
         "info",
         0,
     );
@@ -283,7 +295,9 @@ export function orderMerge(core: GameCore, armyIds: readonly number[]): boolean 
         }
     }
     core.log(
-        `${core.nationChip(0)} 合并 ${movers.map((army) => army.name).join("、")} → ${anchor.name}`,
+        t("game.armies.merge", {
+            nation: core.nationChip(0), armies: movers.map((army) => army.name).join("、"), anchor: anchor.name,
+        }),
         "info",
         0,
     );
@@ -312,7 +326,9 @@ export function advanceMarches(core: GameCore): void {
         } else {
             if (targetProvince.owner !== army.nation) {
                 army.march = null;
-                core.log(`${core.nationChip(army.nation)} ${army.name} 行军取消（目标失守）`, "info", army.nation);
+                core.log(t("game.armies.marchCanceled", {
+                    nation: core.nationChip(army.nation), army: army.name,
+                }), "info", army.nation);
                 continue;
             }
         }

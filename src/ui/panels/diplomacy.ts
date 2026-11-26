@@ -22,7 +22,7 @@ import { REQUEST_COOLDOWN_DAYS, requestCooldownDays } from "../../game/requests.
 import { TRADE_AGREEMENT_DAYS, tradePartners, tradeResourceKinds } from "../../game/trade.ts";
 import type { DiplomaticAction, DiplomaticActionKind, DiplomaticRequest, DiplomaticRequestKind } from "../../game/types/diplomacy.ts";
 import type { GameState } from "../../game/types/state.ts";
-import { escapeGameText, escapeHtml, iconMaskStyle, renderGameText, textToken } from "../text.ts";
+import { escapeGameText, escapeHtml, iconMaskStyle, gameText, setGameHtml, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { decisionTooltipAttrs } from "../decision-tip.ts";
 import { helpButton, panelHead } from "../panel.ts";
@@ -30,46 +30,64 @@ import { nationOverviewBody, nationStats } from "../nation-info.ts";
 import { vassalIndependenceIcon, vassalTypeIcon } from "../vassal.ts";
 import { nationFlagHtmlFor } from "../flags.ts";
 import { TRADE_KIND_LABEL, cadenceToken, proposalCooldownTip, resourceNames, transferList } from "../trade.ts";
-
-const OBJECTIVE_TIP = "目标：通过战争与议和吞并所有对手。\n首都失守不立即灭国，失去全部正式领土才战败。\n\n实际控制不等于正式归属；战争逐省争夺，攻占州中心或首都不会令全境易主。\n目标议和只转移约定领土；白和平返还双方临时占领区，不转移第三国土地。\n宣战需先在「扩张」页提出州宣称，再制造夺取或吞并借口；借口就绪后点击【宣战】选择战争目标。";
+import { t } from "../../i18n/index.ts";
 
 /** Pending-request copy: one row per kind, so a new request never means a new branch. */
 const REQUEST_TITLE: Record<DiplomaticRequestKind, (from: string, request: DiplomaticRequest) => string> = {
-    vassalize: (from, request) => request.demand ? `${from} 要求你成为附庸` : `${from} 请求成为附庸`,
-    alliance: (from) => `${from} 邀请加入联盟`,
-    upgrade: (from) => `${from} 请求改善附庸契约`,
-    call: (from) => `${from} 召唤你履行附庸义务`,
-    aid: (from) => `${from} 请求外援`,
-    trade: (from, request) => `${from} 提议${TRADE_KIND_LABEL[request.tradeKind ?? "exchange"]}`,
+    vassalize: (from, request) => request.demand
+        ? t("panels.diplomacy.request.title.demand", { from })
+        : t("panels.diplomacy.request.title.offer", { from }),
+    alliance: (from) => t("panels.diplomacy.request.title.alliance", { from }),
+    upgrade: (from) => t("panels.diplomacy.request.title.upgrade", { from }),
+    call: (from) => t("panels.diplomacy.request.title.call", { from }),
+    aid: (from) => t("panels.diplomacy.request.title.aid", { from }),
+    trade: (from, request) => t("panels.diplomacy.request.title.trade", {
+        from, kind: TRADE_KIND_LABEL[request.tradeKind ?? "exchange"],
+    }),
 };
 
 const REQUEST_DETAIL: Record<DiplomaticRequestKind, (state: GameState, request: DiplomaticRequest) => string> = {
     vassalize: (_state, request) => {
         const profile = VASSAL_PROFILES[request.vassalType ?? "autonomous"];
-        return `${request.demand ? "强制要求" : "契约"}：${profile.name} · ${profile.blurb}`;
+        const demand = request.demand
+            ? t("panels.diplomacy.request.demand")
+            : t("panels.diplomacy.request.contract");
+        return t("panels.diplomacy.request.detail.vassal", {
+            demand, profile: profile.name, blurb: profile.blurb,
+        });
     },
     alliance: (state, request) => {
         const alliance = state.alliances.find((entry) => entry.id === request.allianceId);
         const leader = alliance
             ? state.nations[alliance.leader]?.name ?? "?"
             : state.nations[request.from]?.name ?? "?";
-        return `联盟领袖：${leader} · 成员 ${alliance?.members.length ?? 0} 国 · 共享通行权与共同敌人`;
+        return t("panels.diplomacy.request.detail.alliance", { leader, count: alliance?.members.length ?? 0 });
     },
     upgrade: (_state, request) => {
         const profile = VASSAL_PROFILES[request.vassalType ?? "cooperative"];
-        return `附庸请求将契约改善为${profile.name}，需 ${textToken("politics", VASSAL_UPGRADE_COST)}：${profile.blurb}`;
+        return t("panels.diplomacy.request.detail.upgrade", {
+            profile: profile.name, blurb: profile.blurb, cost: VASSAL_UPGRADE_COST,
+        });
     },
     call: (state, request) => {
-        const enemy = typeof request.enemy === "number" ? state.nations[request.enemy]?.name ?? "敌方" : "敌方";
-        return `宗主国正在与 ${enemy} 作战。接受后立即对 ${enemy} 宣战；拒绝会使独立性上升。`;
+        const fallback = t("panels.diplomacy.enemy.fallback");
+        const enemy = typeof request.enemy === "number" ? state.nations[request.enemy]?.name ?? fallback : fallback;
+        return t("panels.diplomacy.request.detail.call", { enemy });
     },
     aid: (state, request) => {
         const overlord = overlordOf(state, request.from);
         const type = vassalTypeOf(state, request.from);
-        const contract = type ? `${VASSAL_PROFILES[type].name}附庸` : "附庸";
-        return `求援国是${overlord >= 0 ? ` ${state.nations[overlord].name} 的` : ""}${contract}；接受后可提供[[funds]]与[[politics]]，并可能对宗主国宣战。`;
+        const contract = type
+            ? t("panels.diplomacy.vassal.contract", { name: VASSAL_PROFILES[type].name })
+            : t("panels.diplomacy.vassal.generic");
+        const overlordNote = overlord >= 0
+            ? t("panels.diplomacy.aid.overlord", { name: state.nations[overlord].name })
+            : "";
+        return t("panels.diplomacy.request.detail.aid", { overlordNote, contract });
     },
-    trade: (_state, request) => `${TRADE_KIND_LABEL[request.tradeKind ?? "exchange"]}：双方按下列资源与交割频率履约。`,
+    trade: (_state, request) => t("panels.diplomacy.request.detail.trade", {
+        kind: TRADE_KIND_LABEL[request.tradeKind ?? "exchange"],
+    }),
 };
 
 export interface DiplomacyHooks {
@@ -151,16 +169,16 @@ export class DiplomacyPanel {
         if (signature !== this.viewSignature) this.scrollTop = 0;
         this.viewSignature = signature;
 
-        this.el.innerHTML = `
+        setGameHtml(this.el, `
             ${panelHead({
-                title: "外交",
-                help: { title: "战役目标与规则", body: OBJECTIVE_TIP },
+                title: t("panels.diplomacy.title"),
+                help: { title: t("panels.diplomacy.help.title"), body: t("panels.diplomacy.help.body") },
                 helpAttrs: 'data-diplo-focus="objective"',
-                status: renderGameText(textToken("politics", Math.floor(player.politicalPower))),
+                status: gameText(`[[politics:${Math.floor(player.politicalPower)}]]`),
             })}
             <div class="panel-body diplo-body">
                 ${this.relationsHtml()}
-            </div>`;
+            </div>`);
 
         for (const tab of this.el.querySelectorAll<HTMLElement>("[data-action='diplo-target']")) {
             tab.onkeydown = (event) => {
@@ -190,7 +208,7 @@ export class DiplomacyPanel {
     }
 
     private requestTitle(request: DiplomaticRequest): string {
-        const from = this.engine.state.nations[request.from]?.name ?? "某国";
+        const from = this.engine.state.nations[request.from]?.name ?? t("panels.diplomacy.nation.fallback");
         return REQUEST_TITLE[request.kind](from, request);
     }
 
@@ -204,12 +222,14 @@ export class DiplomacyPanel {
         const receive = request.tradeReceive ?? [];
         const lines: string[] = [];
         if (request.tradeKind === "aid") {
-            lines.push(`<div class="trade-request-line"><span class="trade-side-label">请求物资（你提供）</span>${transferList(receive, "out")}</div>`);
+            lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.request.give")}</span>${transferList(receive, "out")}</div>`);
         } else {
-            if (give.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">对方提供</span>${transferList(give, "in")}</div>`);
-            if (receive.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">我方提供</span>${transferList(receive, "out")}</div>`);
+            if (give.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.provides")}</span>${transferList(give, "in")}</div>`);
+            if (receive.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.weProvide")}</span>${transferList(receive, "out")}</div>`);
         }
-        lines.push(`<p class="trade-request-note">每月部分${cadenceToken("monthly")}自动交割，持续 ${renderGameText(textToken("turn", TRADE_AGREEMENT_DAYS))}；固定部分在接受时交付。</p>`);
+        lines.push(game`<p class="trade-request-note">${t("panels.diplomacy.trade.request.note", {
+            cadence: cadenceToken("monthly"), days: TRADE_AGREEMENT_DAYS,
+        })}</p>`);
         return lines.join("");
     }
 
@@ -227,11 +247,14 @@ export class DiplomacyPanel {
         if (enemies.length) {
             const self = `<span class="diplo-status-flag" ${tooltipAttrs(
                 escapeGameText(nation.name),
-                escapeGameText(`${nation.name} 正在与 ${enemies.map((enemy) => enemy.name).join("、")} 交战`),
+                escapeGameText(t("panels.diplomacy.status.war.all", {
+                    name: nation.name,
+                    enemies: enemies.map((enemy) => enemy.name).join(t("common.listSeparator")),
+                })),
             )}>${nationFlagHtmlFor(state, nationId, 18)}</span>`;
             const flags = enemies.map((enemy) => `<span class="diplo-status-flag" ${tooltipAttrs(
                 escapeGameText(enemy.name),
-                escapeGameText(`${nation.name} 正在与 ${enemy.name} 交战`),
+                escapeGameText(t("panels.diplomacy.status.war.one", { name: nation.name, enemy: enemy.name })),
             )}>${nationFlagHtmlFor(state, enemy.id, 18)}</span>`).join("");
             rows.push(`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--war" aria-hidden="true" ${iconMaskStyle("war")}></span><span class="diplo-status-items">${self}${flags}</span></div>`);
         }
@@ -240,7 +263,9 @@ export class DiplomacyPanel {
                 const partner = state.nations[partnerId];
                 if (!partner) return "";
                 const kinds = tradeResourceKinds(state, nationId, partnerId);
-                const body = `${nation.name} 与 ${partner.name} 有贸易条约，涉及 ${kinds.length} 种资源：${resourceNames(kinds)}。`;
+                const body = t("panels.diplomacy.status.trade", {
+                    name: nation.name, partner: partner.name, count: kinds.length, kinds: resourceNames(kinds),
+                });
                 return `<span class="diplo-status-flag" ${tooltipAttrs(escapeGameText(partner.name), escapeGameText(body))}>${nationFlagHtmlFor(state, partnerId, 18)}</span>`;
             }).join("");
             rows.push(`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--trade" aria-hidden="true" ${iconMaskStyle("trade")}></span><span class="diplo-status-items">${flags}</span></div>`);
@@ -250,8 +275,12 @@ export class DiplomacyPanel {
             if (overlord >= 0) {
                 const lord = state.nations[overlord];
                 bits.push(`<span class="diplo-status-vassal">${vassalTypeIcon(state, nationId)}<span class="diplo-status-flag" ${tooltipAttrs(
-                    escapeGameText(lord?.name ?? "宗主国"),
-                    escapeGameText(`${nation.name} 是 ${lord?.name ?? "?"} 的${VASSAL_PROFILES[vassalTypeOf(state, nationId) ?? "autonomous"].name}附庸`),
+                    escapeGameText(lord?.name ?? t("panels.diplomacy.overlord.fallback")),
+                    escapeGameText(t("panels.diplomacy.status.vassal.of", {
+                        name: nation.name,
+                        lord: lord?.name ?? "?",
+                        type: VASSAL_PROFILES[vassalTypeOf(state, nationId) ?? "autonomous"].name,
+                    })),
                 )}>${nationFlagHtmlFor(state, overlord, 18)}</span></span>`);
             }
             for (const vassalId of vassals) {
@@ -259,12 +288,16 @@ export class DiplomacyPanel {
                 if (!vassal) continue;
                 bits.push(`<span class="diplo-status-vassal">${vassalTypeIcon(state, vassalId)}<span class="diplo-status-flag" ${tooltipAttrs(
                     escapeGameText(vassal.name),
-                    escapeGameText(`${vassal.name} 是 ${nation.name} 的${VASSAL_PROFILES[vassalTypeOf(state, vassalId) ?? "autonomous"].name}附庸`),
+                    escapeGameText(t("panels.diplomacy.status.vassal.of", {
+                        name: vassal.name,
+                        lord: nation.name,
+                        type: VASSAL_PROFILES[vassalTypeOf(state, vassalId) ?? "autonomous"].name,
+                    })),
                 )}>${nationFlagHtmlFor(state, vassalId, 18)}</span></span>`);
             }
             rows.push(`<div class="diplo-status-row"><span class="diplo-status-items">${bits.join("")}</span></div>`);
         }
-        return rows.length ? `<div class="diplo-status" aria-label="外交状态">${rows.join("")}</div>` : "";
+        return rows.length ? `<div class="diplo-status" aria-label="${t("panels.diplomacy.status.label")}">${rows.join("")}</div>` : "";
     }
 
     private requestsHtml(): string {
@@ -274,17 +307,17 @@ export class DiplomacyPanel {
         const rows = requests.map((request) => {
             const from = state.nations[request.from];
             if (!from) return "";
-            return `<div class="diplo-request" data-request-id="${request.id}">
+            return game`<div class="diplo-request" data-request-id="${request.id}">
                 <div class="diplo-request-head">${nationFlagHtmlFor(state, request.from, 20)}<b>${escapeHtml(this.requestTitle(request))}</b>
-                    <span class="diplo-request-days">剩 ${renderGameText(textToken("turn", Math.max(0, request.expiresDay - state.day)))}</span></div>
+                    <span class="diplo-request-days">${t("panels.diplomacy.time.remaining", { days: Math.max(0, request.expiresDay - state.day) })}</span></div>
                 <div class="diplo-request-body">${request.kind === "trade" ? this.tradeRequestDetailHtml(request) : escapeHtml(this.requestDetail(request))}</div>
                 <div class="diplo-request-actions">
-                    <button class="btn btn-primary" data-action="respond-request" data-request="${request.id}" data-accept="1" ${state.winner === null ? "" : "disabled"}>接受</button>
-                    <button class="btn btn-outline" data-action="respond-request" data-request="${request.id}" data-accept="0" ${state.winner === null ? "" : "disabled"}>拒绝</button>
+                    <button class="btn btn-primary" data-action="respond-request" data-request="${request.id}" data-accept="1" ${state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.request.accept")}</button>
+                    <button class="btn btn-outline" data-action="respond-request" data-request="${request.id}" data-accept="0" ${state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.request.reject")}</button>
                 </div>
             </div>`;
         }).join("");
-        return `<div class="diplo-requests"><div class="diplo-requests-head">待处理外交请求</div>${rows}</div>`;
+        return `<div class="diplo-requests"><div class="diplo-requests-head">${t("panels.diplomacy.request.head")}</div>${rows}</div>`;
     }
 
     /** Player-side vassal contract: independence, tribute and contract upgrade. */
@@ -300,29 +333,35 @@ export class DiplomacyPanel {
             const upgradeCooldown = requestCooldownDays(state, "upgrade", overlord);
             let upgradeTip = "";
             if (upgradeCooldown > 0) {
-                upgradeTip = tooltipAttrs("请求改善契约", proposalCooldownTip(upgradeCooldown));
+                upgradeTip = tooltipAttrs(t("panels.diplomacy.upgrade.label"), proposalCooldownTip(upgradeCooldown));
             } else if (upgradeTarget) {
                 upgradeTip = canUpgrade
                     ? decisionTooltipAttrs(
-                        `向 ${escapeGameText(state.nations[overlord]?.name ?? "宗主国")} 请求将契约改善为${VASSAL_PROFILES[upgradeTarget].name}，需 ${textToken("politics", VASSAL_UPGRADE_COST)}。确认后送出，下一回合答复。`,
+                        t("panels.diplomacy.upgrade.confirmBody", {
+                            lord: escapeGameText(state.nations[overlord]?.name ?? t("panels.diplomacy.overlord.fallback")),
+                            profile: VASSAL_PROFILES[upgradeTarget].name,
+                            cost: VASSAL_UPGRADE_COST,
+                        }),
                         [{ decision: decideUpgrade(state, overlord, 0) }],
                     )
-                    : tooltipAttrs("请求改善契约", `独立性达到上限的 60%、国家倾向愿意改善且需要 ${textToken("politics", VASSAL_UPGRADE_COST)} 时可提出；宗主国可能拒绝。改善目标：${VASSAL_PROFILES[upgradeTarget].name}。`);
+                    : tooltipAttrs(t("panels.diplomacy.upgrade.label"), t("panels.diplomacy.upgrade.requirement", {
+                        cost: VASSAL_UPGRADE_COST, profile: VASSAL_PROFILES[upgradeTarget].name,
+                    }));
             }
             const upgrade = upgradeTarget
-                ? `<button class="btn btn-outline${upgradeCooldown > 0 ? " cooldown" : ""}" data-action="request-upgrade" ${upgradeCooldown > 0 ? 'aria-disabled="true"' : canUpgrade ? "" : "disabled"} ${upgradeTip}>请求改善契约</button>`
+                ? `<button class="btn btn-outline${upgradeCooldown > 0 ? " cooldown" : ""}" data-action="request-upgrade" ${upgradeCooldown > 0 ? 'aria-disabled="true"' : canUpgrade ? "" : "disabled"} ${upgradeTip}>${t("panels.diplomacy.upgrade.label")}</button>`
                 : "";
             const tributeControl = type === "cooperative"
-                ? `<div class="diplo-vassal-tribute"><span class="vassal-tribute-label">贡赋比例</span> ${Math.round(rate * 100)}%
+                ? `<div class="diplo-vassal-tribute"><span class="vassal-tribute-label">${t("panels.diplomacy.vassal.tributeLabel")}</span> ${Math.round(rate * 100)}%
                     <button class="btn btn-outline" data-action="tribute-rate" data-delta="-0.05" ${rate <= profile.resourceMin + 1e-9 ? "disabled" : ""}>-5%</button>
                     <button class="btn btn-outline" data-action="tribute-rate" data-delta="0.05" ${rate >= profile.resourceMax - 1e-9 ? "disabled" : ""}>+5%</button></div>`
                 : "";
             return `<div class="diplo-vassal-self">
                 <div class="diplo-vassal-head">${nationFlagHtmlFor(state, overlord, 22)}
-                    <b>附庸于：${escapeHtml(state.nations[overlord].name)}</b>
+                    <b>${t("panels.diplomacy.vassal.vassalOf", { name: escapeHtml(state.nations[overlord].name) })}</b>
                     ${vassalTypeIcon(state, 0)}
                     ${vassalIndependenceIcon(state, 0)}
-                    ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}
+                    ${helpButton({ title: t("panels.diplomacy.vassal.help.title"), body: VASSAL_HELP_BODY })}
                 </div>
                 ${tributeControl}
                 ${upgrade ? `<div class="diplo-button-row">${upgrade}</div>` : ""}
@@ -336,13 +375,13 @@ export class DiplomacyPanel {
                 <span class="diplo-vassal-name">${escapeHtml(state.nations[id].name)}</span>
                 ${vassalTypeIcon(state, id)}
                 ${vassalIndependenceIcon(state, id)}
-                <button class="btn btn-outline" data-action="diplo-target" data-nation="${id}" data-diplo-focus="vassal-view-${id}" ${tooltipAttrs("查看附庸", `查看 ${state.nations[id].name} 的外交详情，在那里释放或改变契约。`)}>查看附庸</button>
+                <button class="btn btn-outline" data-action="diplo-target" data-nation="${id}" data-diplo-focus="vassal-view-${id}" ${tooltipAttrs(t("panels.diplomacy.vassal.view"), t("panels.diplomacy.vassal.viewTip", { name: state.nations[id].name }))}>${t("panels.diplomacy.vassal.view")}</button>
             </div>`).join("");
         return `<div class="diplo-vassal-self">
             <div class="diplo-vassal-head">
-                <b>你拥有 ${vassals.length} 个附庸</b>
-                ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}
-                <button type="button" class="diplo-vassal-caret" data-vassal-collapse data-diplo-focus="vassal-collapse" aria-label="${this.vassalListCollapsed ? "展开附庸列表" : "收起附庸列表"}">${this.vassalListCollapsed ? "▸" : "▾"}</button>
+                <b>${t("panels.diplomacy.vassal.owned", { count: vassals.length })}</b>
+                ${helpButton({ title: t("panels.diplomacy.vassal.help.title"), body: VASSAL_HELP_BODY })}
+                <button type="button" class="diplo-vassal-caret" data-vassal-collapse data-diplo-focus="vassal-collapse" aria-label="${this.vassalListCollapsed ? t("panels.diplomacy.vassal.expand") : t("panels.diplomacy.vassal.collapse")}">${this.vassalListCollapsed ? "▸" : "▾"}</button>
             </div>
             <div class="diplo-vassal-list${this.vassalListCollapsed ? " hidden" : ""}">${rows}</div>
         </div>`;
@@ -354,18 +393,18 @@ export class DiplomacyPanel {
         const alliance = allianceOf(state, 0);
         if (alliance) {
             const leader = state.nations[alliance.leader];
-            const members = alliance.members.map((id) => state.nations[id]?.name ?? "?").join("、");
+            const members = alliance.members.map((id) => state.nations[id]?.name ?? "?").join(t("common.listSeparator"));
             return `<div class="diplo-alliance">
-                <div class="diplo-alliance-head"><b>联盟</b><span class="status-pill ready">${alliance.members.length} 国</span>${helpButton({ title: "联盟制度", body: ALLIANCE_HELP_BODY })}</div>
-                <p class="diplo-note">领袖：${escapeHtml(leader?.name ?? "?")} · 成员：${escapeHtml(members)}</p>
-                <button class="btn btn-outline" data-action="leave-alliance" ${tooltipAttrs("退出联盟", `退出后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内无法重新加入同一联盟；共享通行权与共同敌人即刻失效。`)}>退出联盟</button>
+                <div class="diplo-alliance-head"><b>${t("panels.diplomacy.alliance.label")}</b><span class="status-pill ready">${t("panels.diplomacy.alliance.memberCount", { count: alliance.members.length })}</span>${helpButton({ title: t("panels.diplomacy.alliance.help.title"), body: ALLIANCE_HELP_BODY })}</div>
+                <p class="diplo-note">${t("panels.diplomacy.alliance.summary", { leader: escapeHtml(leader?.name ?? "?"), members: escapeHtml(members) })}</p>
+                <button class="btn btn-outline" data-action="leave-alliance" ${tooltipAttrs(t("panels.diplomacy.alliance.leave"), t("panels.diplomacy.alliance.leave.tip", { days: REQUEST_COOLDOWN_DAYS }))}>${t("panels.diplomacy.alliance.leave")}</button>
             </div>`;
         }
         if (!canCreateAlliance(state, 0)) return "";
         return `<div class="diplo-alliance">
-            <div class="diplo-alliance-head"><b>尚未结盟</b>${helpButton({ title: "联盟制度", body: ALLIANCE_HELP_BODY })}</div>
-            <p class="diplo-note">创建阵营消耗 ${ALLIANCE_CREATE_COST} 政治点；随后可邀请有共同敌人或战略倾向相近的国家。</p>
-            <button class="btn btn-outline" data-action="create-alliance" ${tooltipAttrs("创建联盟", `消耗 ${ALLIANCE_CREATE_COST} 政治点；孤立主义国家不会主动创建联盟。`)}>创建联盟</button>
+            <div class="diplo-alliance-head"><b>${t("panels.diplomacy.alliance.none")}</b>${helpButton({ title: t("panels.diplomacy.alliance.help.title"), body: ALLIANCE_HELP_BODY })}</div>
+            <p class="diplo-note">${t("panels.diplomacy.alliance.create.note", { cost: ALLIANCE_CREATE_COST })}</p>
+            <button class="btn btn-outline" data-action="create-alliance" ${tooltipAttrs(t("panels.diplomacy.alliance.create.label"), t("panels.diplomacy.alliance.create.tip", { cost: ALLIANCE_CREATE_COST }))}>${t("panels.diplomacy.alliance.create.label")}</button>
         </div>`;
     }
 
@@ -382,39 +421,48 @@ export class DiplomacyPanel {
             const selected = this.target === nation.id;
             const war = nation.alive && isAtWar(state, 0, nation.id);
             const truce = nation.alive && !war && truceDays(state, 0, nation.id) > 0;
-            const status = !nation.alive ? "已灭亡" : war ? "交战中" : truce ? "停战中" : "电脑";
+            const status = !nation.alive ? t("panels.diplomacy.status.dead")
+                : war ? t("panels.diplomacy.status.atWar")
+                    : truce ? t("panels.diplomacy.status.truce") : t("panels.diplomacy.status.ai");
             const controlledStates = state.states.filter((region) =>
                 region.provinces.some((site) => state.provinces[site].owner === nation.id)).length;
-            const tip = `${status}\n外交倾向：${tendencyProfileOf(nation.tendency).name}\n拥有军团：${nationArmyCount(state, nation.id)}\n拥有地区：${controlledStates} 州（${nationProvinceCount(state, nation.id)} 省）`;
+            const tip = t("panels.diplomacy.nation.tip", {
+                status,
+                tendency: tendencyProfileOf(nation.tendency).name,
+                armies: nationArmyCount(state, nation.id),
+                states: controlledStates,
+                provinces: nationProvinceCount(state, nation.id),
+            });
             const color = nationDisplayColor(state, nation.id);
             return `<button class="diplo-swatch${selected ? " selected" : ""}${nation.alive ? "" : " dead"}${war ? " war" : ""}${truce ? " truce" : ""}" role="tab" aria-selected="${selected}"
-                aria-label="${escapeHtml(`${nation.name}（${status}）`)}" style="--pc:${escapeHtml(color)}"
+                aria-label="${escapeHtml(t("panels.diplomacy.nation.swatchLabel", { name: nation.name, status }))}" style="--pc:${escapeHtml(color)}"
                 data-action="diplo-target" data-nation="${nation.id}" data-diplo-focus="nation-${nation.id}"
                 ${tooltipAttrs(escapeGameText(nation.name), tip)}>${nationFlagHtmlFor(state, nation.id, 22)}</button>`;
         }).join("");
         return `
             <div class="diplo-overview-stats">
-                <span class="status-pill ready">吞并 ${conquered}/${others.length}</span>
-                <span class="status-pill ${wars ? "war" : "idle"}">${wars} 场战争</span>
-                <span class="status-pill ${ready ? "ready" : "idle"}">借口就绪 ${ready}</span>
+                <span class="status-pill ready">${t("panels.diplomacy.overview.annexed", { count: conquered, total: others.length })}</span>
+                <span class="status-pill ${wars ? "war" : "idle"}">${t("panels.diplomacy.overview.wars", { count: wars })}</span>
+                <span class="status-pill ${ready ? "ready" : "idle"}">${t("panels.diplomacy.overview.ready", { count: ready })}</span>
             </div>
             ${this.requestsHtml()}
             ${this.selfVassalHtml()}
             ${this.selfAllianceHtml()}
-            <div class="diplo-swatches" role="tablist" aria-label="目标国家">${tabs}</div>
-            ${state.winner !== null ? '<p class="diplo-requirement">战役已结束，外交操作已关闭。</p>' : ""}
-            ${this.target !== null ? this.nationHtml(this.target) : '<p class="diplo-note">没有可交互的目标国家。</p>'}`;
+            <div class="diplo-swatches" role="tablist" aria-label="${t("panels.diplomacy.overview.targets")}">${tabs}</div>
+            ${state.winner !== null ? `<p class="diplo-requirement">${t("panels.diplomacy.overview.ended")}</p>` : ""}
+            ${this.target !== null ? this.nationHtml(this.target) : `<p class="diplo-note">${t("panels.diplomacy.overview.noTarget")}</p>`}`;
     }
 
     private stateName(stateId: number | null): string {
-        return stateId === null ? "未指定州" : this.engine.state.states[stateId]?.name ?? "已失效州";
+        return stateId === null ? t("panels.diplomacy.state.unspecified")
+            : this.engine.state.states[stateId]?.name ?? t("panels.diplomacy.state.invalid");
     }
 
     private actionLabel(action: DiplomaticAction): string {
         const scope = action.kind === "annex"
-            ? this.engine.state.nations[action.target]?.name ?? "目标国家"
+            ? this.engine.state.nations[action.target]?.name ?? t("panels.diplomacy.nation.targetFallback")
             : this.stateName(action.stateId);
-        return `${DIPLOMATIC_PROFILES[action.kind].label} · ${scope}`;
+        return t("panels.diplomacy.action.fullLabel", { label: DIPLOMATIC_PROFILES[action.kind].label, scope });
     }
 
     private projectsHtml(target: number): string {
@@ -425,9 +473,19 @@ export class DiplomacyPanel {
             const preparing = state.day < action.readyDay;
             const expired = state.day >= action.expiresDay;
             const ready = !preparing && !expired;
-            const short = action.kind === "annex" ? "吞并" : `夺取·${this.stateName(action.stateId)}`;
-            const time = expired ? "已过期" : preparing ? `剩 ${renderGameText(textToken("turn", action.readyDay - state.day))}` : `就绪 · 剩 ${renderGameText(textToken("turn", action.expiresDay - state.day))}`;
-            const tip = `${this.actionLabel(action)}\n${expired ? "已过期，可在外交行动菜单清除。" : preparing ? "准备中，完成后可宣战。" : "已就绪，点击【宣战】选择此目标。"}\n取消请打开【制造战争借口／停止制造】菜单。`;
+            const short = action.kind === "annex"
+                ? t("panels.diplomacy.project.annex")
+                : t("panels.diplomacy.project.conquest", { name: this.stateName(action.stateId) });
+            const time = expired ? t("panels.diplomacy.project.expired")
+                : preparing ? t("panels.diplomacy.time.remaining", { days: action.readyDay - state.day })
+                    : t("panels.diplomacy.time.readyRemaining", { days: action.expiresDay - state.day });
+            const status = expired ? t("panels.diplomacy.project.tip.expired")
+                : preparing ? t("panels.diplomacy.project.tip.preparing")
+                    : t("panels.diplomacy.project.tip.ready");
+            const tip = t("panels.diplomacy.project.tip", {
+                label: this.actionLabel(action), status,
+                cancelHint: t("panels.diplomacy.project.cancelHint"),
+            });
             return `<span class="diplo-project-chip${ready ? " ready" : ""}${expired ? " expired" : ""}" ${tooltipAttrs(escapeGameText(short), tip)}>${escapeHtml(short)} · ${time}</span>`;
         }).join("");
         return `<div class="diplo-projects">${chips}</div>`;
@@ -442,7 +500,7 @@ export class DiplomacyPanel {
             ? {
                 blocked: true,
                 attrs: 'aria-disabled="true"',
-                tip: tooltipAttrs("请求过于频繁", proposalCooldownTip(days)),
+                tip: tooltipAttrs(t("panels.diplomacy.request.tooFrequent"), proposalCooldownTip(days)),
             }
             : { blocked: false, attrs: "", tip: normalTip };
     }
@@ -452,8 +510,13 @@ export class DiplomacyPanel {
         const state = this.engine.state;
         const nation = state.nations[nationId];
         const overlord = overlordOf(state, 0);
-        const overlordName = overlord >= 0 ? state.nations[overlord]?.name ?? "宗主国" : "宗主国";
-        const description = `向 ${escapeGameText(nation.name)} 请求外援。对方是 ${escapeGameText(overlordName)} 的附庸；接受后会提供 [[funds]] 与 [[politics]]，并可能因此对宗主国宣战。确认后送出，下一回合答复；拒绝后需等待 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合才能再试。`;
+        const fallback = t("panels.diplomacy.overlord.fallback");
+        const overlordName = overlord >= 0 ? state.nations[overlord]?.name ?? fallback : fallback;
+        const description = t("panels.diplomacy.aid.tip", {
+            nation: escapeGameText(nation.name),
+            overlord: escapeGameText(overlordName),
+            days: REQUEST_COOLDOWN_DAYS,
+        });
         return decisionTooltipAttrs(description, [{ decision: decideAid(state, 0, nationId) }]);
     }
 
@@ -463,7 +526,10 @@ export class DiplomacyPanel {
         const atWar = isAtWar(state, 0, nationId);
         const hasOffer = state.peaceOffers.includes(nationId);
         const truce = truceDays(state, 0, nationId);
-        const status = !nation.alive ? "已灭亡" : atWar ? `交战 ${renderGameText(textToken("turn", warDuration(state, 0, nationId)))}` : truce > 0 ? `停战 ${renderGameText(textToken("turn", truce))}` : "电脑";
+        const status = !nation.alive ? t("panels.diplomacy.status.dead")
+            : atWar ? t("panels.diplomacy.status.atWarDays", { days: warDuration(state, 0, nationId) })
+                : truce > 0 ? t("panels.diplomacy.status.truceDays", { days: truce })
+                    : t("panels.diplomacy.status.ai");
         const summary = nationStats(state, nationId);
         const head = `<div class="diplo-head">${nationFlagHtmlFor(state, nation.id, 26)}<span class="diplo-name">${escapeHtml(nation.name)}</span><span class="status-pill ${!nation.alive ? "dead" : atWar ? "war" : "idle"}">${status}</span></div>`;
         const stats = nationOverviewBody(state, summary, " diplo-kv");
@@ -474,17 +540,17 @@ export class DiplomacyPanel {
         const claimCount = state.claims.filter((claim) => claim.nation === 0 &&
             state.states[claim.stateId]?.provinces.some((site) => state.provinces[site].legalOwner === nationId)).length;
         const declareTip = ready.length
-            ? "向这个国家宣战：选择已就绪的战争借口后确认，宣战立即生效。\n\n[[note:无需对方接受]]\n宗主国与盟友可能依关系参战；停战期内不能再次宣战。"
-            : truce > 0 ? `尚在停战期，剩 [[turn:${truce}]]。`
-                : `暂无可用借口：先在「扩张」页或州模式地图宣称该国土州（已宣称 ${claimCount} 项），再打开【制造战争借口】制造夺取或吞并借口；就绪后回到此处宣战。每国同时仅计时一项借口。`;
-        const declareBtn = `<button class="btn btn-primary" data-action="declare-open" data-nation="${nationId}" data-diplo-focus="declare-${nationId}" ${ready.length && state.winner === null ? "" : "disabled"} ${tooltipAttrs("宣战", declareTip)}>宣战</button>`;
+            ? t("panels.diplomacy.declare.tip.ready")
+            : truce > 0 ? t("panels.diplomacy.declare.tip.truce", { days: truce })
+                : t("panels.diplomacy.declare.tip.none", { count: claimCount });
+        const declareBtn = `<button class="btn btn-primary" data-action="declare-open" data-nation="${nationId}" data-diplo-focus="declare-${nationId}" ${ready.length && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.declare.label"), declareTip)}>${t("panels.diplomacy.declare.label")}</button>`;
 
         const preparing = state.diplomaticActions.some((action) => action.nation === 0 && action.target === nationId && state.day < action.readyDay);
-        const craftLabel = preparing ? "停止制造" : "制造战争借口";
+        const craftLabel = preparing ? t("panels.diplomacy.craft.stop") : t("panels.diplomacy.craft.start");
         const craftTip = preparing
-            ? "打开外交行动菜单：取消正在制造的借口（返还创建政治点，持续消耗不返还），或改选其他目标。"
-            : "打开外交行动菜单：勾选已宣称的州制造夺取借口，或制造全面吞并借口；也可取消现有项目。";
-        const craftBtn = `<button class="btn btn-outline" data-action="diplo-menu-open" data-nation="${nationId}" data-diplo-focus="menu-${nationId}" ${atWar || state.winner !== null ? "disabled" : ""} ${tooltipAttrs(craftLabel, atWar ? "交战中无法制造或取消借口。" : craftTip)}>${craftLabel}</button>`;
+            ? t("panels.diplomacy.craft.tip.stop")
+            : t("panels.diplomacy.craft.tip.start");
+        const craftBtn = `<button class="btn btn-outline" data-action="diplo-menu-open" data-nation="${nationId}" data-diplo-focus="menu-${nationId}" ${atWar || state.winner !== null ? "disabled" : ""} ${tooltipAttrs(craftLabel, atWar ? t("panels.diplomacy.craft.tip.atWar") : craftTip)}>${craftLabel}</button>`;
 
         let goalHtml = "";
         const actionButtons: string[] = [craftBtn];
@@ -493,19 +559,24 @@ export class DiplomacyPanel {
             if (war) {
                 const progress = warGoalProgress(state, war);
                 const ours = war.aggressor === 0;
-                const goal = war.goal === "annex" ? "全面吞并" : `夺取 ${this.stateName(war.stateId)}`;
+                const goal = war.goal === "annex" ? t("panels.diplomacy.goal.annex")
+                    : t("panels.diplomacy.goal.conquest", { name: this.stateName(war.stateId) });
                 const requirement = war.goal === "annex"
-                    ? "需控制敌国首都及至少 60% 正式领土，且无第三方占领；或控制全部正式领土。"
-                    : "需控制目标州内全部敌方正式领土；不会转移第三国土地。";
-                goalHtml = `<div class="diplo-goal" ${tooltipAttrs("战争目标", escapeGameText(requirement))}>${ours ? "我方" : "对方"}目标：${escapeHtml(goal)} · 控制 ${progress.held}/${progress.total} 省${progress.canEnforce ? " · 可落实" : ""}</div>`;
-                if (ours) actionButtons.push(`<button class="btn btn-outline" data-action="enforce-war-goal" data-nation="${nationId}" data-diplo-focus="enforce-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs("落实战争目标", "按约定目标议和，目标之外的临时占领退还，双方撤军至可控地区。")}>落实目标</button>`);
-                if (ours && war.goal === "annex") actionButtons.push(`<button class="btn btn-outline" data-action="enforce-vassal" data-nation="${nationId}" data-diplo-focus="enforce-vassal-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs("扶为附庸", "以压迫型附庸结束战争：不割让领土，对方保留国土、上缴固定资源与政治点，独立性与宗主国通行权随之生效。")}>扶为附庸</button>`);
+                    ? t("panels.diplomacy.goal.requirement.annex")
+                    : t("panels.diplomacy.goal.requirement.conquest");
+                goalHtml = `<div class="diplo-goal" ${tooltipAttrs(t("panels.diplomacy.goal.title"), escapeGameText(requirement))}>${t("panels.diplomacy.goal.summary", {
+                    side: ours ? t("panels.diplomacy.goal.ours") : t("panels.diplomacy.goal.theirs"),
+                    goal: escapeHtml(goal), held: progress.held, total: progress.total,
+                    enforceNote: progress.canEnforce ? t("panels.diplomacy.goal.enforceNote") : "",
+                })}</div>`;
+                if (ours) actionButtons.push(`<button class="btn btn-outline" data-action="enforce-war-goal" data-nation="${nationId}" data-diplo-focus="enforce-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.goal.enforce.label"), t("panels.diplomacy.goal.enforce.tip"))}>${t("panels.diplomacy.goal.enforce.button")}</button>`);
+                if (ours && war.goal === "annex") actionButtons.push(`<button class="btn btn-outline" data-action="enforce-vassal" data-nation="${nationId}" data-diplo-focus="enforce-vassal-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.goal.vassalize.label"), t("panels.diplomacy.goal.vassalize.tip"))}>${t("panels.diplomacy.goal.vassalize.label")}</button>`);
             }
             actionButtons.push(hasOffer
-                ? `<button class="btn btn-outline" data-action="accept-peace" data-nation="${nationId}" data-diplo-focus="accept-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs("接受求和", "双方返还临时占领区、解除会战并撤军，进入停战期。")}>接受求和</button><button class="btn btn-outline" data-action="reject-peace" data-nation="${nationId}" data-diplo-focus="reject-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs("拒绝求和", "拒绝此次提议，战争继续。")}>拒绝</button>`
-                : `<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" ${state.winner === null ? "" : "disabled"} ${decisionTooltipAttrs(`提议与 ${escapeGameText(nation.name)} 白和平：双方临时占领均退还，不保留战果。`, [{ decision: decidePeace(state, nationId, 0) }])}>求和</button>`);
+                ? `<button class="btn btn-outline" data-action="accept-peace" data-nation="${nationId}" data-diplo-focus="accept-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.peace.accept.label"), t("panels.diplomacy.peace.accept.tip"))}>${t("panels.diplomacy.peace.accept.label")}</button><button class="btn btn-outline" data-action="reject-peace" data-nation="${nationId}" data-diplo-focus="reject-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.peace.reject.label"), t("panels.diplomacy.peace.reject.tip"))}>${t("panels.diplomacy.peace.reject.button")}</button>`
+                : `<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" ${state.winner === null ? "" : "disabled"} ${decisionTooltipAttrs(t("panels.diplomacy.peace.propose.white", { name: escapeGameText(nation.name) }), [{ decision: decidePeace(state, nationId, 0) }])}>${t("panels.diplomacy.peace.propose.label")}</button>`);
         } else {
-            actionButtons.push(`<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" disabled ${tooltipAttrs("求和", "仅交战中可提议白和平。")}>求和</button>`);
+            actionButtons.push(`<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" disabled ${tooltipAttrs(t("panels.diplomacy.peace.propose.label"), t("panels.diplomacy.peace.propose.disabledTip"))}>${t("panels.diplomacy.peace.propose.label")}</button>`);
             actionButtons.push(declareBtn);
         }
         // All vassal and alliance actions share the card's single 外交行动 row.
@@ -514,13 +585,13 @@ export class DiplomacyPanel {
         // valid helpers qualify — the overlord is never a candidate.
         if (canRequestAid(state, 0) && aidCandidates(state, 0).includes(nationId)) {
             const gate = this.requestGate("aid", nationId, this.aidTooltipAttrs(nationId));
-            actionButtons.push(`<button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="request-aid" data-nation="${nationId}" ${gate.blocked ? gate.attrs : state.winner === null ? "" : "disabled"} ${gate.tip}>请求外援</button>`);
+            actionButtons.push(`<button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="request-aid" data-nation="${nationId}" ${gate.blocked ? gate.attrs : state.winner === null ? "" : "disabled"} ${gate.tip}>${t("panels.diplomacy.aid.label")}</button>`);
         }
 
         return `<div class="diplo-row diplo-card${hasOffer ? " offer" : ""}" data-diplo-card="${nationId}" tabindex="-1">
             ${base}
             ${this.statusBarHtml(nationId)}
-            <div class="diplo-actions-head">外交行动</div>
+            <div class="diplo-actions-head">${t("panels.diplomacy.actions.head")}</div>
             <div class="diplo-button-row">${actionButtons.join("")}</div>
             ${goalHtml}${this.projectsHtml(nationId)}
             ${this.allianceActionsHtml(nationId)}
@@ -537,11 +608,11 @@ export class DiplomacyPanel {
 
         if (targetOverlord === 0) {
             const actions = [
-                `<button class="btn btn-outline" data-action="release-vassal" data-nation="${nationId}" ${tooltipAttrs("释放附庸", "解除附庸关系并给予 [[turn:10]]停战期；不会返还已收取的贡赋。")}>释放附庸</button>`,
-                `<button class="btn btn-outline" data-action="vassal-type-open" data-nation="${nationId}" data-type="${type ?? ""}" ${tooltipAttrs("改变附庸类型", "打开对话框选择新的契约类型；独立性进度按比例保留并限制在新上限内。")}>改变附庸类型</button>`,
+                `<button class="btn btn-outline" data-action="release-vassal" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.release.label"), t("panels.diplomacy.vassal.release.tip"))}>${t("panels.diplomacy.vassal.release.label")}</button>`,
+                `<button class="btn btn-outline" data-action="vassal-type-open" data-nation="${nationId}" data-type="${type ?? ""}" ${tooltipAttrs(t("panels.diplomacy.vassal.changeType.label"), t("panels.diplomacy.vassal.changeType.tip"))}>${t("panels.diplomacy.vassal.changeType.label")}</button>`,
             ];
             if (canAnnexVassal(state, 0, nationId)) {
-                actions.push(`<button class="btn btn-outline" data-action="annex-vassal" data-nation="${nationId}" ${tooltipAttrs("吞并附庸", "该附庸独立性极低且无反叛意图，可直接吞并：其全部领土与军团并入我方。")}>吞并附庸</button>`);
+                actions.push(`<button class="btn btn-outline" data-action="annex-vassal" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.annex.label"), t("panels.diplomacy.vassal.annex.tip"))}>${t("panels.diplomacy.vassal.annex.label")}</button>`);
             }
             return actions;
         }
@@ -553,23 +624,23 @@ export class DiplomacyPanel {
         if (canOffer) {
             const cooldown = requestCooldownDays(state, "vassalize", nationId);
             if (cooldown > 0) {
-                actions.push(`<button class="btn btn-outline cooldown" data-action="vassal-request" data-nation="${nationId}" aria-disabled="true" ${tooltipAttrs("请求成为附庸", proposalCooldownTip(cooldown))}>请求成为附庸…</button>`);
+                actions.push(`<button class="btn btn-outline cooldown" data-action="vassal-request" data-nation="${nationId}" aria-disabled="true" ${tooltipAttrs(t("panels.diplomacy.vassal.offer.label"), proposalCooldownTip(cooldown))}>${t("panels.diplomacy.vassal.offer.button")}</button>`);
             } else {
                 const offerTip = decisionTooltipAttrs(
-                    `向 ${escapeGameText(state.nations[nationId].name)} 请求成为附庸；下方按契约类型分别显示对方的判定。确认后送出，下一回合答复。`,
+                    t("panels.diplomacy.vassal.offer.tip", { name: escapeGameText(state.nations[nationId].name) }),
                     [
-                        { title: "合作型", decision: decideVassalOffer(state, nationId, 0, "cooperative") },
-                        { title: "自治型", decision: decideVassalOffer(state, nationId, 0, "autonomous") },
+                        { title: t("panels.diplomacy.vassal.type.cooperative"), decision: decideVassalOffer(state, nationId, 0, "cooperative") },
+                        { title: t("panels.diplomacy.vassal.type.autonomous"), decision: decideVassalOffer(state, nationId, 0, "autonomous") },
                     ],
                 );
                 actions.push(`<details class="diplo-submenu">
-                    <summary ${offerTip}>请求成为附庸…</summary>
+                    <summary ${offerTip}>${t("panels.diplomacy.vassal.offer.button")}</summary>
                     <div class="diplo-submenu-body">
                         <label class="diplo-radio"><input type="radio" name="vassal-type-${nationId}" value="cooperative" checked />
-                            <span><b>合作型</b>：${renderGameText("上缴 5%–40% [[funds]]/[[industry]]（默认 15%），换取保护与每[[turn]] [[politics:1]]；独立性低。")}</span></label>
+                            <span><b>${t("panels.diplomacy.vassal.type.cooperative")}</b>${t("panels.diplomacy.vassal.offer.cooperativeNote")}</span></label>
                         <label class="diplo-radio"><input type="radio" name="vassal-type-${nationId}" value="autonomous" />
-                            <span><b>自治型</b>：${renderGameText("仅每[[turn]]上缴 [[politics:2]]，经济自主；独立性较高。")}</span></label>
-                        <button class="btn btn-primary" data-action="vassal-request" data-nation="${nationId}" ${tooltipAttrs("请求成为附庸", "按所选契约类型提交；确认后送出，下一回合答复。压迫型不能主动选择。判定结果见上方说明。")}>提交请求</button>
+                            <span><b>${t("panels.diplomacy.vassal.type.autonomous")}</b>${t("panels.diplomacy.vassal.offer.autonomousNote")}</span></label>
+                        <button class="btn btn-primary" data-action="vassal-request" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.offer.label"), t("panels.diplomacy.vassal.offer.submitTip"))}>${t("panels.diplomacy.vassal.offer.submit")}</button>
                     </div>
                 </details>`);
             }
@@ -577,12 +648,12 @@ export class DiplomacyPanel {
         if (canDemand) {
             const cooldown = requestCooldownDays(state, "vassalize", nationId);
             const demandTip = cooldown > 0
-                ? tooltipAttrs("要求附庸", proposalCooldownTip(cooldown))
+                ? tooltipAttrs(t("panels.diplomacy.vassal.demand.label"), proposalCooldownTip(cooldown))
                 : decisionTooltipAttrs(
-                    `以实力施压，要求 ${escapeGameText(state.nations[nationId].name)} 成为压迫型附庸：不割地，但上缴固定 30% [[funds]]/[[industry]] 与每[[turn]] [[politics:3]]，且不可主动提升独立性。确认后送出，下一回合答复。`,
+                    t("panels.diplomacy.vassal.demand.tip", { name: escapeGameText(state.nations[nationId].name) }),
                     [{ decision: decideVassalDemand(state, 0, nationId) }],
                 );
-            actions.push(`<button class="btn btn-outline${cooldown > 0 ? " cooldown" : ""}" data-action="vassal-demand" data-nation="${nationId}" ${cooldown > 0 ? 'aria-disabled="true"' : ""} ${demandTip}>要求附庸</button>`);
+            actions.push(`<button class="btn btn-outline${cooldown > 0 ? " cooldown" : ""}" data-action="vassal-demand" data-nation="${nationId}" ${cooldown > 0 ? 'aria-disabled="true"' : ""} ${demandTip}>${t("panels.diplomacy.vassal.demand.label")}</button>`);
         }
         return actions;
     }
@@ -593,27 +664,30 @@ export class DiplomacyPanel {
         const myAlliance = allianceOf(state, 0);
         const targetAlliance = allianceOf(state, nationId);
         if (myAlliance && targetAlliance && myAlliance.id === targetAlliance.id) {
-            return `<p class="diplo-note">盟友：共享通行权，并把彼此的敌人视为共同敌人。</p>`;
+            return `<p class="diplo-note">${t("panels.diplomacy.alliance.allyNote")}</p>`;
         }
         if (myAlliance && myAlliance.leader === 0 && canInviteToAlliance(state, 0, nationId)) {
             const inviteTip = decisionTooltipAttrs(
-                `邀请 ${escapeGameText(state.nations[nationId].name)} 加入我方阵营；成员共享通行权与共同敌人。确认后送出，下一回合答复。`,
+                t("panels.diplomacy.alliance.invite.tip", { name: escapeGameText(state.nations[nationId].name) }),
                 [{ decision: decideAllianceInvite(state, 0, nationId) }],
             );
             const gate = this.requestGate("alliance", nationId, inviteTip);
-            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">联盟事务</div>
-                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="invite-alliance" data-nation="${nationId}" ${gate.attrs} ${gate.tip}>邀请加入联盟</button>
+            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">${t("panels.diplomacy.alliance.section")}</div>
+                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="invite-alliance" data-nation="${nationId}" ${gate.attrs} ${gate.tip}>${t("panels.diplomacy.alliance.invite.label")}</button>
             </div>`;
         }
         if (!myAlliance && targetAlliance && overlordOf(state, 0) < 0) {
             const leader = state.nations[targetAlliance.leader];
             const joinTip = decisionTooltipAttrs(
-                `向 ${escapeGameText(leader?.name ?? "领袖")} 申请加入其阵营；确认后送出，下一回合答复；拒绝后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内不能再次申请。`,
+                t("panels.diplomacy.alliance.join.tip", {
+                    leader: escapeGameText(leader?.name ?? t("panels.diplomacy.alliance.leaderFallback")),
+                    days: REQUEST_COOLDOWN_DAYS,
+                }),
                 [{ decision: decideJoinRequest(state, targetAlliance.leader, 0) }],
             );
             const gate = this.requestGate("alliance", targetAlliance.leader, joinTip);
-            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">联盟事务</div>
-                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="join-alliance" data-leader="${targetAlliance.leader}" ${gate.attrs} ${gate.tip}>申请加入联盟</button>
+            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">${t("panels.diplomacy.alliance.section")}</div>
+                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="join-alliance" data-leader="${targetAlliance.leader}" ${gate.attrs} ${gate.tip}>${t("panels.diplomacy.alliance.join.label")}</button>
             </div>`;
         }
         return "";
@@ -641,7 +715,7 @@ export class DiplomacyPanel {
         this.menuCraft = null;
         const scrim = document.createElement("div");
         scrim.className = "diplo-menu-scrim";
-        scrim.innerHTML = `<div class="diplo-menu" role="dialog" aria-label="外交行动 · ${escapeHtml(nation.name)}" tabindex="-1"></div>`;
+        setGameHtml(scrim, `<div class="diplo-menu" role="dialog" aria-label="${t("panels.diplomacy.actions.dialogLabel", { name: escapeHtml(nation.name) })}" tabindex="-1"></div>`);
         this.hud.appendChild(scrim);
         this.menuEl = scrim;
         scrim.addEventListener("click", this.onMenuClick);
@@ -721,10 +795,12 @@ export class DiplomacyPanel {
             const expired = state.day >= action.expiresDay;
             const refund = cancelRefund(state, action);
             const spent = action.upkeepSpent ?? 0;
-            const time = expired ? "已过期" : preparing ? `准备中 · 剩 ${renderGameText(textToken("turn", action.readyDay - state.day))}` : `已就绪 · 剩 ${renderGameText(textToken("turn", action.expiresDay - state.day))}`;
-            const refundNote = expired ? "清除不返还"
-                : preparing ? `取消返还 ${refund} · 已耗 ${spent} 不返还`
-                    : "放弃不返还";
+            const time = expired ? t("panels.diplomacy.project.expired")
+                : preparing ? t("panels.diplomacy.time.preparingRemaining", { days: action.readyDay - state.day })
+                    : t("panels.diplomacy.time.readyRemaining", { days: action.expiresDay - state.day });
+            const refundNote = expired ? t("panels.diplomacy.refund.clear")
+                : preparing ? t("panels.diplomacy.refund.cancel", { refund, spent })
+                    : t("panels.diplomacy.refund.abandon");
             const checked = this.menuCancels.has(action.id);
             return `<label class="diplo-menu-row">
                 <input type="checkbox" data-role="cancel" data-id="${action.id}" ${checked ? "checked" : ""} ${state.winner !== null ? "disabled" : ""} />
@@ -739,23 +815,23 @@ export class DiplomacyPanel {
             const allowed = !atWar && this.craftAllowed("conquest", nationId, region.id);
             const picked = this.menuCraft?.kind === "conquest" && this.menuCraft.stateId === region.id;
             const profile = DIPLOMATIC_PROFILES.conquest;
-            return `<label class="diplo-menu-row">
+            return game`<label class="diplo-menu-row">
                 <input type="checkbox" data-role="craft" data-kind="conquest" data-state="${region.id}" ${picked ? "checked" : ""} ${allowed ? "" : "disabled"} />
-                <span class="diplo-menu-main"><b>夺取 · ${escapeHtml(region.name)}</b><span>消耗 ${profile.cost} · ${renderGameText(textToken("turn", profile.days))} · 每${renderGameText("[[turn]]")} ${profile.upkeep}</span></span>
+                <span class="diplo-menu-main"><b>${t("panels.diplomacy.craft.conquest", { name: escapeHtml(region.name) })}</b><span>${t("panels.diplomacy.craft.cost", { cost: profile.cost, days: profile.days, upkeep: profile.upkeep })}</span></span>
             </label>`;
         }).join("");
         const annexAllowed = !atWar && this.craftAllowed("annex", nationId, null);
         const annexPicked = this.menuCraft?.kind === "annex";
         const annexProfile = DIPLOMATIC_PROFILES.annex;
-        const annexRow = `<label class="diplo-menu-row">
+        const annexRow = game`<label class="diplo-menu-row">
             <input type="checkbox" data-role="craft" data-kind="annex" ${annexPicked ? "checked" : ""} ${annexAllowed ? "" : "disabled"} />
-            <span class="diplo-menu-main"><b>全面吞并 · ${escapeHtml(nation?.name ?? "?")}</b><span>消耗 ${annexProfile.cost} · ${renderGameText(textToken("turn", annexProfile.days))} · 每${renderGameText("[[turn]]")} ${annexProfile.upkeep} · 无需宣称</span></span>
+            <span class="diplo-menu-main"><b>${t("panels.diplomacy.craft.annex", { name: escapeHtml(nation?.name ?? "?") })}</b><span>${t("panels.diplomacy.craft.costAnnex", { cost: annexProfile.cost, days: annexProfile.days, upkeep: annexProfile.upkeep })}</span></span>
         </label>`;
 
-        const craftBlockReason = atWar ? "交战中无法制造新借口。"
-            : state.winner !== null ? "战役已结束。"
+        const craftBlockReason = atWar ? t("panels.diplomacy.craft.block.war")
+            : state.winner !== null ? t("panels.diplomacy.craft.block.ended")
                 : projects.some((action) => state.day < action.readyDay && !this.menuCancels.has(action.id))
-                    ? "每国同时仅计时一项：先勾选取消当前准备中的项目，才能制造新借口。"
+                    ? t("panels.diplomacy.craft.block.busy")
                     : "";
         const delta = (this.menuCraft ? -DIPLOMATIC_PROFILES[this.menuCraft.kind].cost : 0)
             + [...this.menuCancels].reduce((sum, id) => {
@@ -764,20 +840,20 @@ export class DiplomacyPanel {
             }, 0);
         const changed = this.menuCancels.size > 0 || this.menuCraft !== null;
 
-        card.innerHTML = `
-            <div class="diplo-menu-head"><span>外交行动 · ${escapeHtml(nation?.name ?? "?")}</span><button class="diplo-menu-x" data-menu-close aria-label="关闭外交行动菜单">×</button></div>
-            <p class="diplo-menu-note">勾选现有项目以取消（准备中返还创建政治点，持续消耗不返还）；勾选宣称或吞并以制造新借口。</p>
-            <div class="diplo-menu-section">当前借口项目</div>
-            ${projectRows || '<p class="diplo-menu-empty">暂无进行中的借口项目。</p>'}
-            <div class="diplo-menu-section">制造新借口</div>
+        setGameHtml(card, `
+            <div class="diplo-menu-head"><span>${t("panels.diplomacy.actions.dialogLabel", { name: escapeHtml(nation?.name ?? "?") })}</span><button class="diplo-menu-x" data-menu-close aria-label="${t("panels.diplomacy.menu.close")}">×</button></div>
+            <p class="diplo-menu-note">${t("panels.diplomacy.menu.note")}</p>
+            <div class="diplo-menu-section">${t("panels.diplomacy.menu.section.current")}</div>
+            ${projectRows || `<p class="diplo-menu-empty">${t("panels.diplomacy.menu.empty.current")}</p>`}
+            <div class="diplo-menu-section">${t("panels.diplomacy.menu.section.new")}</div>
             ${craftBlockReason ? `<p class="diplo-menu-empty">${escapeHtml(craftBlockReason)}</p>` : ""}
-            ${craftRows || '<p class="diplo-menu-empty">无已宣称的该国土州；先到「扩张」页或州模式地图提出宣称。</p>'}
+            ${craftRows || `<p class="diplo-menu-empty">${t("panels.diplomacy.menu.empty.claims")}</p>`}
             ${annexRow}
             <div class="diplo-menu-foot">
-                <span class="diplo-menu-delta ${delta > 0 ? "pos" : delta < 0 ? "neg" : ""}">政治点 ${delta > 0 ? "+" : ""}${delta}</span>
-                <button class="btn btn-primary" data-menu-confirm ${changed && state.winner === null ? "" : "disabled"}>确认</button>
-                <button class="btn" data-menu-close>取消</button>
-            </div>`;
+                <span class="diplo-menu-delta ${delta > 0 ? "pos" : delta < 0 ? "neg" : ""}">${t("panels.diplomacy.menu.delta", { sign: delta > 0 ? "+" : "", amount: delta })}</span>
+                <button class="btn btn-primary" data-menu-confirm ${changed && state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.menu.confirm")}</button>
+                <button class="btn" data-menu-close>${t("panels.diplomacy.menu.cancel")}</button>
+            </div>`);
     }
 
     private confirmActionMenu(): void {
@@ -789,9 +865,9 @@ export class DiplomacyPanel {
         if (this.menuCraft && this.engine.prepareDiplomaticAction(this.menuCraft.kind, nationId, this.menuCraft.stateId)) crafted++;
         this.hooks.sound.play(crafted ? "recruit" : "select");
         const parts: string[] = [];
-        if (cancelled) parts.push(`取消 ${cancelled} 项借口`);
-        if (crafted) parts.push("开始制造新借口");
-        this.hooks.toast(parts.length ? parts.join("，") : "没有可执行的外交变更");
+        if (cancelled) parts.push(t("panels.diplomacy.toast.cancelled", { count: cancelled }));
+        if (crafted) parts.push(t("panels.diplomacy.toast.crafted"));
+        this.hooks.toast(parts.length ? parts.join(t("panels.diplomacy.toast.separator")) : t("panels.diplomacy.toast.none"));
         this.closeActionMenu();
     }
 
@@ -820,7 +896,9 @@ export class DiplomacyPanel {
         const pop = document.createElement("div");
         pop.className = "declare-pop";
         pop.setAttribute("role", "dialog");
-        pop.setAttribute("aria-label", `向${this.engine.state.nations[nationId]?.name ?? "目标"}宣战`);
+        pop.setAttribute("aria-label", t("panels.diplomacy.declare.ariaLabel", {
+            name: this.engine.state.nations[nationId]?.name ?? t("panels.diplomacy.declare.targetFallback"),
+        }));
         this.hud.appendChild(pop);
         this.declarePop = pop;
         pop.addEventListener("click", this.onPopClick);
@@ -886,16 +964,17 @@ export class DiplomacyPanel {
         if (this.declarePick !== null && !actions.some((action) => action.id === this.declarePick)) this.declarePick = null;
         const options = actions.map((action) => {
             const picked = this.declarePick === action.id;
-            const scope = action.kind === "annex" ? "全面吞并" : `夺取 ${this.stateName(action.stateId)}`;
-            return `<button class="declare-option${picked ? " picked" : ""}" data-pick="${action.id}" aria-pressed="${picked}">
-                <b>${escapeHtml(scope)}</b><span>借口有效剩 ${renderGameText(textToken("turn", action.expiresDay - state.day))}</span>
+            const scope = action.kind === "annex" ? t("panels.diplomacy.goal.annex")
+                : t("panels.diplomacy.goal.conquest", { name: this.stateName(action.stateId) });
+            return game`<button class="declare-option${picked ? " picked" : ""}" data-pick="${action.id}" aria-pressed="${picked}">
+                <b>${escapeHtml(scope)}</b><span>${t("panels.diplomacy.declare.valid", { days: action.expiresDay - state.day })}</span>
             </button>`;
         }).join("");
-        this.declarePop.innerHTML = `
-            <div class="declare-head"><span>向 ${escapeHtml(nation?.name ?? "?")} 宣战</span><button class="declare-x" data-close aria-label="关闭宣战窗口">×</button></div>
-            <p class="declare-hint">选择战争目标：</p>
+        setGameHtml(this.declarePop, `
+            <div class="declare-head"><span>${t("panels.diplomacy.declare.title", { name: escapeHtml(nation?.name ?? "?") })}</span><button class="declare-x" data-close aria-label="${t("panels.diplomacy.declare.close")}">×</button></div>
+            <p class="declare-hint">${t("panels.diplomacy.declare.hint")}</p>
             <div class="declare-options">${options}</div>
-            <button class="btn btn-primary declare-confirm" data-action="declare" data-nation="${this.declareNation}" ${this.declarePick === null ? "disabled" : `data-diplomatic-id="${this.declarePick}"`}>确认宣战</button>`;
+            <button class="btn btn-primary declare-confirm" data-action="declare" data-nation="${this.declareNation}" ${this.declarePick === null ? "disabled" : `data-diplomatic-id="${this.declarePick}"`}>${t("panels.diplomacy.declare.confirm")}</button>`);
     }
 
     private positionDeclare(): void {

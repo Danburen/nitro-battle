@@ -55,6 +55,8 @@
 .game-text--neg { color: #f85149; }
 .game-text--note { color: var(--site-fg); }
 .game-text--zero { color: var(--site-fg); }
+/* Registry-default label colour: follows the active theme instead of #fff. */
+.game-text--plain { color: var(--site-fg); }
 .game-text--chip {
     display: inline-flex;
     align-items: center;
@@ -63,7 +65,7 @@
     border-radius: 4px;
     border: 1px solid color-mix(in srgb, var(--pc, var(--site-muted)) 55%, transparent);
     background: color-mix(in srgb, var(--pc, var(--site-muted)) 18%, transparent);
-    color: var(--site-text);
+    color: var(--site-fg);
     font-size: 0.92em;
     line-height: 1.5;
     white-space: nowrap;
@@ -76,6 +78,12 @@
     background: var(--pc, var(--site-muted));
 }
 .game-text-amount { display: inline-flex; align-items: center; gap: 0.18em; white-space: nowrap; }
+
+/* Unified token shell: the value carries semantic colour while the glyph keeps
+   the registry keyword colour (both inherit from theme variables). */
+.gtext { display: inline-flex; align-items: center; gap: 0.18em; white-space: nowrap; }
+.gtext-value { font-weight: 600; }
+.gtext-icon { flex: none; }
 
 /* External monochrome icons: the URL comes from an inline --icon custom property so it
    resolves against the document (browser + Electron), and currentColor supplies the ink. */

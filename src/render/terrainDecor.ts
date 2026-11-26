@@ -1,6 +1,6 @@
-import { Biome } from "../terrain/biome.ts";
-import type { BiomeMap } from "../terrain/biome.ts";
-import type { Vec2, VoronoiGraph } from "../terrain/voronoi/index.ts";
+import { Biome } from "../game/terrain/biome.ts";
+import type { BiomeMap } from "../game/terrain/biome.ts";
+import type { Vec2, VoronoiGraph } from "../game/terrain/voronoi/index.ts";
 
 /** Stable per-site pseudo random in [0, 1); rebuilds stay identical. */
 function hash01(n: number): number {

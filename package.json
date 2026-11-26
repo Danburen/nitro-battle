@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node --test src/tests/*-regression.ts",
-    "gen:names": "node src/tools/gen-names.ts",
+    "gen:names": "node src/utils/gen-names.ts",
     "electron:dev": "node scripts/electron-dev.mjs",
     "electron:start": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder"

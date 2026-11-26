@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { inSameAlliance, isVassalOf } from "./access.ts";
 import { isAtWar } from "./diplomacy.ts";
@@ -33,12 +34,12 @@ export const TRADE_RESOURCE_POOL: readonly TradeResource[] = ["industry", "raw",
 export const TRADE_AID_POOL: readonly TradeResource[] = TRADE_RESOURCE_POOL;
 
 export const TRADE_HELP_BODY = [
-    "贸易条约分「每月」与「固定」两部分：每月部分每回合自动交割，持续回合数可在提议时调整（默认 20 回合）；固定部分在签署时一次交付。",
-    "资源交换：双方各出原料、粮食、工业或战略资源，不含财政、人力与政治点。",
-    "资源购买：我方只出现金，对方提供上述四种资源。雇佣兵：我方只出现金，对方只出人力。",
-    "请求援助：我方不提供对价，只能索要原料、粮食、工业或战略资源；战时、灭亡或拒绝的国家不会交易。",
-    "AI 会核对自己要付出的库存与每日净增长；负增长且库存撑不住、或正与请求方交战时一律拒绝。",
-    "玩家确认后提议即刻送出，下一回合统一答复；对方拒绝后，同类提议在 [[turn:5]] 内不能再次发给同一国家。",
+    t("game.trade.help.agreement"),
+    t("game.trade.help.exchange"),
+    t("game.trade.help.purchase"),
+    t("game.trade.help.aid"),
+    t("game.trade.help.ai"),
+    t("game.trade.help.cooldown"),
 ].join("\n");
 
 const RESOURCE_WEIGHT: Readonly<Record<TradeResource, number>> = {
@@ -51,12 +52,12 @@ const RESOURCE_WEIGHT: Readonly<Record<TradeResource, number>> = {
 };
 
 const RESOURCE_NAME: Readonly<Record<TradeResource, string>> = {
-    funds: "财政",
-    manpower: "人力",
-    industry: "工业",
-    raw: "原料",
-    food: "粮食",
-    strategic: "战略资源",
+    get funds() { return t("game.resourceVisibility.funds"); },
+    get manpower() { return t("game.resourceVisibility.manpower"); },
+    get industry() { return t("game.resourceVisibility.industry"); },
+    get raw() { return t("game.resourceVisibility.raw"); },
+    get food() { return t("game.resourceVisibility.food"); },
+    get strategic() { return t("game.resourceVisibility.strategic"); },
 };
 
 interface TendencyTradeRule {
@@ -67,15 +68,15 @@ interface TendencyTradeRule {
 }
 
 const TENDENCY_TRADE: Readonly<Record<AITendencyId, TendencyTradeRule>> = {
-    trader: { threshold: 0.85, aidShare: 0.28, label: "贸易立国：乐于以互惠条件成交", sign: 1 },
-    pacifist: { threshold: 0.95, aidShare: 0.34, label: "和平主义：愿意通过贸易与援助维持关系", sign: 1 },
-    ideologue: { threshold: 1.0, aidShare: 0.26, label: "重视长期信誉，愿意考虑互利交易", sign: 1 },
-    defensive: { threshold: 1.05, aidShare: 0.18, label: "专注防御：交易可以，但不会廉价外流物资", sign: 0 },
-    opportunist: { threshold: 1.02, aidShare: 0.15, label: "机会主义：只看当下得失", sign: 0 },
-    hegemon: { threshold: 1.15, aidShare: 0.1, label: "霸权争雄：要求明显更高的回报", sign: -1 },
-    bully: { threshold: 1.2, aidShare: 0.08, label: "恃强凌弱：不愿与平起平坐者做公平交易", sign: -1 },
-    militarist: { threshold: 1.25, aidShare: 0.06, label: "军国动员：资源优先供军，贸易条件苛刻", sign: -1 },
-    isolated: { threshold: 1.35, aidShare: 0.03, label: "孤立堡垒：不愿让资源外流", sign: -1 },
+    trader: { threshold: 0.85, aidShare: 0.28, get label() { return t("game.trade.tendency.trader"); }, sign: 1 },
+    pacifist: { threshold: 0.95, aidShare: 0.34, get label() { return t("game.trade.tendency.pacifist"); }, sign: 1 },
+    ideologue: { threshold: 1.0, aidShare: 0.26, get label() { return t("game.trade.tendency.ideologue"); }, sign: 1 },
+    defensive: { threshold: 1.05, aidShare: 0.18, get label() { return t("game.trade.tendency.defensive"); }, sign: 0 },
+    opportunist: { threshold: 1.02, aidShare: 0.15, get label() { return t("game.trade.tendency.opportunist"); }, sign: 0 },
+    hegemon: { threshold: 1.15, aidShare: 0.1, get label() { return t("game.trade.tendency.hegemon"); }, sign: -1 },
+    bully: { threshold: 1.2, aidShare: 0.08, get label() { return t("game.trade.tendency.bully"); }, sign: -1 },
+    militarist: { threshold: 1.25, aidShare: 0.06, get label() { return t("game.trade.tendency.militarist"); }, sign: -1 },
+    isolated: { threshold: 1.35, aidShare: 0.03, get label() { return t("game.trade.tendency.isolated"); }, sign: -1 },
 };
 
 function living(state: GameState, id: number): boolean {
@@ -161,17 +162,17 @@ function transferTotalByResource(
 /** Immediate + first-installment stock requirement for one side of an offer. */
 function stockIssue(state: GameState, nationId: number, outgoing: readonly TradeTransfer[]): string | null {
     const nation = state.nations[nationId];
-    if (!nation) return "交易方不存在";
+    if (!nation) return t("game.trade.issue.noTrader");
     const fixed = transferTotalByResource(outgoing, "fixed");
     const monthly = transferTotalByResource(outgoing, "monthly");
     for (const [resource, amount] of fixed) {
         if (stockOf(nation, resource) + 1e-9 < amount) {
-            return `本方${RESOURCE_NAME[resource]}库存不足以立即交付 ${amount}`;
+            return t("game.trade.issue.stockFixedImmediate", { resource: RESOURCE_NAME[resource], amount });
         }
     }
     for (const [resource, amount] of monthly) {
         if (stockOf(nation, resource) + 1e-9 < (fixed.get(resource) ?? 0) + amount) {
-            return `本方${RESOURCE_NAME[resource]}库存不足以支付首期 ${amount}`;
+            return t("game.trade.issue.stockFirstInstallment", { resource: RESOURCE_NAME[resource], amount });
         }
     }
     return null;
@@ -181,39 +182,39 @@ function stockIssue(state: GameState, nationId: number, outgoing: readonly Trade
 export function tradeOfferIssue(
     state: GameState, proposer: number, offer: TradeOffer, counterpart?: number,
 ): string | null {
-    if (!living(state, proposer)) return "提议方已不具备资格";
+    if (!living(state, proposer)) return t("game.decision.ineligible");
     if (counterpart !== undefined) {
-        if (!living(state, counterpart)) return "目标国家已灭亡";
-        if (proposer === counterpart) return "不能与自己交易";
-        if (isAtWar(state, proposer, counterpart)) return "交战国家之间无法贸易";
+        if (!living(state, counterpart)) return t("game.trade.issue.targetDead");
+        if (proposer === counterpart) return t("game.trade.issue.selfTrade");
+        if (isAtWar(state, proposer, counterpart)) return t("game.trade.issue.atWar");
     }
-    if (state.winner !== null) return "战役已结束";
+    if (state.winner !== null) return t("game.trade.issue.campaignEnded");
     const allowedGive = tradeResourcesFor(offer.kind, "give");
     const allowedReceive = tradeResourcesFor(offer.kind, "receive");
     for (const transfer of [...offer.give, ...offer.receive]) {
-        if (!Number.isFinite(transfer.amount) || transfer.amount <= 0) return "资源数量必须大于零";
+        if (!Number.isFinite(transfer.amount) || transfer.amount <= 0) return t("game.trade.issue.amountPositive");
     }
     for (const transfer of offer.give) {
-        if (!allowedGive.includes(transfer.resource)) return `${RESOURCE_NAME[transfer.resource]}不能由提议方提供`;
+        if (!allowedGive.includes(transfer.resource)) return t("game.trade.issue.proposerCantGive", { resource: RESOURCE_NAME[transfer.resource] });
     }
     for (const transfer of offer.receive) {
-        if (!allowedReceive.includes(transfer.resource)) return `${RESOURCE_NAME[transfer.resource]}不能由对方提供`;
+        if (!allowedReceive.includes(transfer.resource)) return t("game.trade.issue.targetCantGive", { resource: RESOURCE_NAME[transfer.resource] });
     }
     const seenGive = new Set<string>();
     const seenReceive = new Set<string>();
     for (const [transfers, seen] of [[offer.give, seenGive], [offer.receive, seenReceive]] as const) {
         for (const transfer of transfers) {
             const key = `${transfer.resource}:${transfer.cadence}`;
-            if (seen.has(key)) return "同一侧同一资源的同一交割频率只能出现一次";
+            if (seen.has(key)) return t("game.trade.issue.duplicate");
             seen.add(key);
         }
     }
     if (offer.kind === "aid") {
-        if (offer.give.length > 0) return "资源援助不包含我方对价";
+        if (offer.give.length > 0) return t("game.trade.issue.aidNoConsideration");
     } else if (offer.give.length === 0 || offer.receive.length === 0) {
-        return "双方都需要至少提供一项资源";
+        return t("game.trade.issue.bothNeedResource");
     }
-    if (offer.receive.length === 0) return "对方没有提供任何资源";
+    if (offer.receive.length === 0) return t("game.trade.issue.targetNoResource");
     const proposerIssue = stockIssue(state, proposer, offer.give);
     if (proposerIssue) return proposerIssue;
     if (counterpart !== undefined) {
@@ -244,30 +245,30 @@ function abilityFactors(
         const projected = stock + rate * days;
         if (stock + 1e-9 < initial) {
             solvable = false;
-            hardReason = `自身${RESOURCE_NAME[resource]}库存不足以支付首期 ${initial}`;
+            hardReason = t("game.trade.ability.stockFirst", { resource: RESOURCE_NAME[resource], amount: initial });
             factors.push(minus(hardReason));
             break;
         }
         if (projected + 1e-9 < total) {
             solvable = false;
             hardReason = rate < 0
-                ? `自身${RESOURCE_NAME[resource]}负增长，库存撑不住整份条约`
-                : `自身${RESOURCE_NAME[resource]}库存不足以覆盖整份条约`;
+                ? t("game.trade.ability.negativeGrowth", { resource: RESOURCE_NAME[resource] })
+                : t("game.trade.ability.stockInsufficient", { resource: RESOURCE_NAME[resource] });
             factors.push(minus(hardReason));
             break;
         }
     }
     if (solvable) {
-        factors.push(plus("自身库存与每日增长足以履约"));
+        factors.push(plus(t("game.trade.ability.solvable")));
     }
     return { factors, solvable, hardReason };
 }
 
 function relationFactor(state: GameState, decider: number, proposer: number) {
     if (isVassalOf(state, decider, proposer) || isVassalOf(state, proposer, decider)) {
-        return plus("附庸与宗主关系降低了戒心");
+        return plus(t("game.trade.relation.vassal"));
     }
-    if (inSameAlliance(state, decider, proposer)) return plus("盟友关系降低了戒心");
+    if (inSameAlliance(state, decider, proposer)) return plus(t("game.trade.relation.ally"));
     return null;
 }
 
@@ -288,13 +289,13 @@ interface AttitudeRule {
 function attitudeFactor(profile: AITendencyProfile): AttitudeRule {
     if (profile.aggression >= 4 || profile.expansion >= 4) {
         return {
-            factor: minus("对外持敌对扩张态度，不愿让资源流出"),
+            factor: minus(t("game.trade.attitude.hostile")),
             threshold: 0.12,
             aidShare: -0.06,
         };
     }
     if (profile.alliance >= 4 && profile.aggression <= 2) {
-        return { factor: plus("偏好合作，愿意维持友好往来"), threshold: -0.06, aidShare: 0.06 };
+        return { factor: plus(t("game.trade.attitude.cooperative")), threshold: -0.06, aidShare: 0.06 };
     }
     return { factor: null, threshold: 0, aidShare: 0 };
 }
@@ -310,10 +311,10 @@ function verdictFor(margin: number): DiplomaticDecision["verdict"] {
 export function decideTrade(
     state: GameState, deciderId: number, proposerId: number, offer: TradeOffer, days = TRADE_AGREEMENT_DAYS,
 ): DiplomaticDecision {
-    if (!living(state, deciderId) || !living(state, proposerId)) return deny("对象已不具备资格");
-    if (deciderId === proposerId) return deny("不能与自己交易");
-    if (state.winner !== null) return deny("战役已经结束");
-    if (isAtWar(state, deciderId, proposerId)) return deny("正与请求方交战，拒绝一切贸易");
+    if (!living(state, deciderId) || !living(state, proposerId)) return deny(t("game.decision.ineligible"));
+    if (deciderId === proposerId) return deny(t("game.trade.issue.selfTrade"));
+    if (state.winner !== null) return deny(t("game.trade.decision.campaignEnded"));
+    if (isAtWar(state, deciderId, proposerId)) return deny(t("game.trade.decision.atWar"));
     const decider = state.nations[deciderId];
     const profile = tendencyProfileOf(decider.tendency);
     const tendency = tendencyFactor(profile.id);
@@ -323,9 +324,9 @@ export function decideTrade(
     const outgoing = offerValue(offer.receive, days);
 
     if (offer.kind === "aid") {
-        if (outgoing <= 0) return deny("没有可提供的援助");
+        if (outgoing <= 0) return deny(t("game.trade.decision.noAid"));
         const rule = TENDENCY_TRADE[profile.id];
-        const factors = [minus("无偿援助没有对价")];
+        const factors = [minus(t("game.trade.decision.freeAidNoConsideration"))];
         if (tendency) factors.push(tendency);
         if (attitude.factor) factors.push(attitude.factor);
         if (relation) factors.push(relation);
@@ -340,7 +341,7 @@ export function decideTrade(
         return { accepts, factors, verdict: verdictFor(margin) };
     }
 
-    if (incoming <= 0 || outgoing <= 0) return deny("条约缺少对价");
+    if (incoming <= 0 || outgoing <= 0) return deny(t("game.trade.decision.noConsideration"));
     const ability = abilityFactors(state, deciderId, offer.receive, days);
     const factors = [...ability.factors];
     if (tendency) factors.push(tendency);
@@ -353,13 +354,13 @@ export function decideTrade(
     if (relation) threshold -= 0.1;
     if (state.war[deciderId]?.some(Boolean) === true) {
         threshold += 0.08;
-        factors.push(minus("自身正处于战争，资源需求更高"));
+        factors.push(minus(t("game.trade.decision.warDemand")));
     }
     const ratio = incoming / outgoing;
     const margin = ratio - threshold;
     factors.push(margin >= 0
-        ? plus("回报足以覆盖付出")
-        : minus("回报低于期望"));
+        ? plus(t("game.trade.decision.returnGood"))
+        : minus(t("game.trade.decision.returnLow")));
     return { accepts: margin >= 0, factors, verdict: verdictFor(margin) };
 }
 
@@ -412,9 +413,9 @@ export function signTrade(
         state.tradeAgreements.push(agreement);
     }
     clampPair(state, from, to);
-    core.log(`${core.nationChip(from)} 与 ${core.nationChip(to)} 签署贸易条约`, "diplo", from, false);
+    core.log(t("game.trade.signed", { from: core.nationChip(from), to: core.nationChip(to) }), "diplo", from, false);
     if (fixed.length) {
-        core.log(`${core.nationChip(from)} 向 ${core.nationChip(to)} 一次性交付贸易物资`, "econ", from, false);
+        core.log(t("game.trade.delivered", { from: core.nationChip(from), to: core.nationChip(to) }), "econ", from, false);
     }
     core.emit({ type: "state" });
     return true;
@@ -434,13 +435,13 @@ export function proposeTrade(
             tradeDays: normalizeTradeDays(days),
         });
         if (!request) return false;
-        core.log(`我方已向 ${core.nationChip(targetId)} 送出${offer.kind}贸易提议，等待答复`, "diplo", 0);
+        core.log(t("game.trade.proposed", { target: core.nationChip(targetId), kind: offer.kind }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
     const decision = decideTrade(state, targetId, proposerId, offer, days);
     if (!decision.accepts) {
-        core.log(`${core.nationChip(targetId)} 拒绝 ${core.nationChip(proposerId)} 的贸易提议`, "diplo", targetId);
+        core.log(t("game.trade.refused", { target: core.nationChip(targetId), proposer: core.nationChip(proposerId) }), "diplo", targetId);
         core.emit({ type: "state" });
         return false;
     }
@@ -468,17 +469,17 @@ export function tickTradeAgreements(core: GameCore): void {
         const to = state.nations[agreement.to];
         if (!from?.alive || !to?.alive) {
             state.tradeAgreements.splice(i, 1);
-            core.log(`${core.nationChip(agreement.from)} 与 ${core.nationChip(agreement.to)} 的贸易条约因一方灭亡而终止`, "diplo", agreement.from);
+            core.log(t("game.trade.endedDead", { from: core.nationChip(agreement.from), to: core.nationChip(agreement.to) }), "diplo", agreement.from);
             continue;
         }
         if (isAtWar(state, agreement.from, agreement.to)) {
             state.tradeAgreements.splice(i, 1);
-            core.log(`${core.nationChip(agreement.from)} 与 ${core.nationChip(agreement.to)} 的贸易条约因战争终止`, "diplo", agreement.from, true);
+            core.log(t("game.trade.endedWar", { from: core.nationChip(agreement.from), to: core.nationChip(agreement.to) }), "diplo", agreement.from, true);
             continue;
         }
         if (state.day > agreement.expiresDay) {
             state.tradeAgreements.splice(i, 1);
-            core.log(`${core.nationChip(agreement.from)} 与 ${core.nationChip(agreement.to)} 的贸易条约到期`, "diplo", agreement.from);
+            core.log(t("game.trade.expired", { from: core.nationChip(agreement.from), to: core.nationChip(agreement.to) }), "diplo", agreement.from);
             continue;
         }
         for (const transfer of agreement.give) {
@@ -583,7 +584,7 @@ export function runAITrade(core: GameCore, nationId: number): void {
             tradeKind: offer.kind, tradeGive: offer.give, tradeReceive: offer.receive,
         });
         if (request) {
-            core.log(`${core.nationChip(nationId)} 向 ${core.nationChip(0)} 提议贸易协定`, "diplo", nationId);
+            core.log(t("game.trade.proposedToPlayer", { nation: core.nationChip(nationId), player: core.nationChip(0) }), "diplo", nationId);
             core.emit({ type: "state" });
         }
         return;

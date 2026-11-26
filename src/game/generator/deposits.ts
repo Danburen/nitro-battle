@@ -1,5 +1,5 @@
-import { Biome } from "../../terrain/biome.ts";
-import type { BiomeMap } from "../../terrain/biome.ts";
+import { Biome } from "../terrain/biome.ts";
+import type { BiomeMap } from "../terrain/biome.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import { DEPOSIT_BIOME_RULES, RESOURCE_DEPOSIT_MAX_LEVEL } from "../types/economy.ts";
 import type { DepositRoll } from "../types/economy.ts";

@@ -2,11 +2,18 @@ import type { GameEngine } from "../../game/engine.ts";
 import { categoryModifiers, conscriptionProfile, policyTransitionProgress } from "../../game/policy.ts";
 import { CONSCRIPTION_POLICIES, ECONOMY_POLICIES, OCCUPATION_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "../../game/types/policy.ts";
 import type { PolicyCategory, PolicyModifiers, PolicyTransition } from "../../game/types/policy.ts";
-import { escapeHtml, renderGameText, textToken } from "../text.ts";
+import { escapeHtml, gameText, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, renderPanel } from "../panel.ts";
+import { t } from "../../i18n/index.ts";
 
-const POLICY_TIP = `切换政策需要时间与政治点：\n· 开始时支付 [[politics:${POLICY_SWITCH_COST}]]，切换期间每日维护 [[politics:-${POLICY_SWITCH_UPKEEP}]]；\n· 需 ${textToken("turn", POLICY_SWITCH_DAYS)} 完成，财政、工业、人力、[[occupation]]等增益按进度逐回合逼近新政策；\n· 切换中的目标政策带时钟标记，悬停可看剩余回合；\n· 再次点击目标可取消切换并回到原政策；已付政治点与维护不返还，重新切换仍需时间。\n\n政策始终作用于全国产出、[[occupation]]整合与[[politics]]收入。`;
+const POLICY_TIP = {
+    get body(): string {
+        return t("panels.policy.help", {
+            cost: POLICY_SWITCH_COST, upkeep: POLICY_SWITCH_UPKEEP, days: POLICY_SWITCH_DAYS,
+        });
+    },
+};
 
 const CLOCK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.4 2"/></svg>`;
 
@@ -17,9 +24,9 @@ interface PolicyGroup {
 }
 
 const GROUPS: readonly PolicyGroup[] = [
-    { category: "economy", label: "经济", options: ECONOMY_POLICIES },
-    { category: "conscription", label: "兵役", options: CONSCRIPTION_POLICIES },
-    { category: "occupation", label: "占领", options: OCCUPATION_POLICIES },
+    { category: "economy", get label() { return t("panels.policy.category.economy"); }, options: ECONOMY_POLICIES },
+    { category: "conscription", get label() { return t("panels.policy.category.conscription"); }, options: CONSCRIPTION_POLICIES },
+    { category: "occupation", get label() { return t("panels.policy.category.occupation"); }, options: OCCUPATION_POLICIES },
 ];
 
 interface LiveMetric {
@@ -38,22 +45,22 @@ function liveMetrics(
             tone: percent === 0 ? "" : percent > 0 ? "pos" : "neg",
         };
     };
-    if (category === "economy") return [bonus("财政", mods.fundsMult), bonus("工业", mods.industryMult)];
+    if (category === "economy") return [bonus(t("panels.policy.metric.funds"), mods.fundsMult), bonus(t("panels.policy.metric.industry"), mods.industryMult)];
     if (category === "conscription" && conscription) {
         return [
-            { label: "可招募", value: `${Math.round(conscription.share * 1000) / 10}%`, tone: "" },
+            { label: t("panels.policy.metric.recruitable"), value: `${Math.round(conscription.share * 1000) / 10}%`, tone: "" },
             {
-                label: "稳定", value: `${conscription.stabilityTarget > 0 ? "+" : ""}${Math.round(conscription.stabilityTarget)}`,
+                label: t("panels.policy.metric.stability"), value: `${conscription.stabilityTarget > 0 ? "+" : ""}${Math.round(conscription.stabilityTarget)}`,
                 tone: conscription.stabilityTarget === 0 ? "" : conscription.stabilityTarget > 0 ? "pos" : "neg",
             },
-            bonus("财政", mods.fundsMult),
+            bonus(t("panels.policy.metric.funds"), mods.fundsMult),
         ];
     }
     return [
-        bonus("占领收入", mods.occupiedIncomeMult),
-        bonus("增长", mods.growthMult),
+        bonus(t("panels.policy.metric.occupiedIncome"), mods.occupiedIncomeMult),
+        bonus(t("panels.policy.metric.growth"), mods.growthMult),
         {
-            label: "政治", value: `${mods.ppModifier >= 0 ? "+" : ""}${mods.ppModifier.toFixed(0)}`,
+            label: t("panels.policy.metric.politics"), value: `${mods.ppModifier >= 0 ? "+" : ""}${mods.ppModifier.toFixed(0)}`,
             tone: mods.ppModifier === 0 ? "" : mods.ppModifier > 0 ? "pos" : "neg",
         },
     ];
@@ -98,7 +105,7 @@ export class PolicyPanel {
             return `<section class="policy-group${transition ? " switching" : ""}" data-category="${group.category}">
                 <div class="policy-group-head">
                     <span class="policy-group-label">${group.label} <b>${escapeHtml(label)}</b></span>
-                    <span class="policy-live" aria-label="${group.label}实时增益">${live}</span>
+                    <span class="policy-live" aria-label="${t("panels.policy.liveGains", { category: group.label })}">${live}</span>
                 </div>
                 <div class="policy-opts">${chips}</div>
             </section>`;
@@ -106,11 +113,11 @@ export class PolicyPanel {
 
         renderPanel(this.el, {
             head: panelHead({
-                title: "政策",
-                help: { title: "政策切换规则", body: POLICY_TIP },
-                status: renderGameText(textToken("politics", Math.floor(player.politicalPower))),
+                title: t("panels.policy.title"),
+                help: { title: t("panels.policy.helpTitle"), body: POLICY_TIP.body },
+                status: gameText(game`[[politics:${Math.floor(player.politicalPower)}]]`),
             }),
-            body: `${groups}<p class="micro-hint">${renderGameText(`切换需 ${textToken("turn", POLICY_SWITCH_DAYS)}，增益逐回合生效；取消不返还已花费的[[politics]]。`)}</p>`,
+            body: `${groups}<p class="micro-hint">${t("panels.policy.hint", { days: POLICY_SWITCH_DAYS })}</p>`,
         });
     }
 
@@ -126,16 +133,16 @@ export class PolicyPanel {
         const locked = finished || blocked || unaffordable;
         let tip: string;
         if (active) {
-            tip = `${profile.desc}\n当前政策：增益已完全生效。`;
+            tip = `${profile.desc}\n${t("panels.policy.tip.active")}`;
         } else if (pending && transition) {
             const remaining = Math.max(0, transition.readyDay - day);
             const from = optionName(group, transition.from);
             const progress = Math.round(policyTransitionProgress(transition, day) * 100);
-            tip = `${profile.desc}\n切换中：${from} → ${profile.name}，进度 ${progress}%，还需 ${textToken("turn", remaining)}。\n增益随进度逐回合逼近新政策。\n再次点击取消切换并回到「${from}」；已付政治点与维护不返还，重新切换仍需时间。`;
+            tip = `${profile.desc}\n${t("panels.policy.tip.switching", { from, to: profile.name, progress, remaining })}`;
         } else if (blocked) {
-            tip = `${profile.desc}\n该组切换进行中：先点击带时钟的目标取消，才能改选其他政策。`;
+            tip = `${profile.desc}\n${t("panels.policy.tip.blocked")}`;
         } else {
-            tip = `${profile.desc}\n开始切换：支付 [[politics:${POLICY_SWITCH_COST}]]，每日维护 [[politics:-${POLICY_SWITCH_UPKEEP}]]，需 ${textToken("turn", POLICY_SWITCH_DAYS)}。\n增益随进度逐步生效。`;
+            tip = `${profile.desc}\n${t("panels.policy.tip.start", { cost: POLICY_SWITCH_COST, upkeep: POLICY_SWITCH_UPKEEP, days: POLICY_SWITCH_DAYS })}`;
         }
         const classes = `policy-chip${active ? " active" : ""}${pending ? " pending" : ""}${locked ? " locked" : ""}`;
         return `<button class="${classes}" data-action="policy" data-category="${group.category}" data-value="${value}" aria-pressed="${active}"${locked ? ' aria-disabled="true"' : ""} ${tooltipAttrs(profile.name, tip)}>${

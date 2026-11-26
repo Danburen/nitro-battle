@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
-import { chipToken, escapeGameText, escapeHtml, RELATION_COLORS, renderGameText, setGameText, TEXT_TERMS, textToken } from "../ui/text.ts";
+import { chipToken, escapeGameText, escapeHtml, game, RELATION_COLORS, renderGameMarkup, renderGameText, setGameHtml, setGameText, TEXT_TERMS } from "../ui/text.ts";
 import type { RelationTone, TextKey } from "../ui/text.ts";
 import { tooltipAttrs } from "../ui/tooltip.ts";
 import { garrisonRelation } from "../ui/common.ts";
@@ -27,8 +27,9 @@ function readStyles(): string {
 for (const key of Object.keys(TEXT_TERMS) as TextKey[]) {
     test(`${key} has a consistent colored label and plain equivalent`, () => {
         const term = TEXT_TERMS[key];
-        assert.equal(renderGameText(textToken(key), "plain"), term.label);
-        assert.equal(renderGameText(textToken(key)), `<span class="game-text game-text--${term.tone}">${term.label}</span>`);
+        const style = "style" in term && term.style === "plain" ? "game-text--plain" : `game-text--${term.tone}`;
+        assert.equal(renderGameText(game`[[${key}]]`, "plain"), term.label);
+        assert.equal(renderGameText(game`[[${key}]]`), `<span class="game-text ${style}">${term.label}</span>`);
     });
 }
 
@@ -60,19 +61,19 @@ test("relation tokens name garrisons explicitly without changing generic garriso
     const labels: Record<RelationTone, string> = { friendly: "友方", neutral: "中立", hostile: "敌方" };
     for (const tone of Object.keys(RELATION_COLORS) as RelationTone[]) {
         assert.deepEqual(TEXT_TERMS[tone], { label: labels[tone], tone });
-        const source = `${textToken(tone)}驻军`;
+        const source = game`[[${tone}]]驻军`;
         assert.equal(renderGameText(source, "plain"), `${labels[tone]}驻军`);
         assert.equal(renderGameText(source), `<span class="game-text game-text--${tone}">${labels[tone]}</span>驻军`);
     }
-    assert.equal(renderGameText("[[garrison]]"), '<span class="game-text game-text--keyword">驻军</span>');
+    assert.equal(renderGameText("[[garrison]]"), '<span class="game-text game-text--plain">驻军</span>');
 });
 
 test("resource amounts have suffix icons and accessible names without duplicate speech", () => {
     const html = renderGameText("消耗 [[funds:1234]] 与 [[industry:20]]");
     assert.match(html, /aria-label="1,234 财政"/);
     assert.match(html, /aria-label="20 工业"/);
-    assert.match(html, /<span aria-hidden="true" class="game-text--pos">1,234<\/span><span class="resource-icon"/);
-    assert.equal((html.match(/<span class="resource-icon" aria-hidden="true"/g) ?? []).length, 2);
+    assert.match(html, /<span class="gtext-value game-text--pos">1,234<\/span><span class="gtext-icon resource-icon game-text--funds"/);
+    assert.equal((html.match(/class="gtext-icon resource-icon/g) ?? []).length, 2);
     assert.match(html, /--icon:url\('\.\/assets\/icons\/funds\.svg'\)/);
     assert.ok(!html.includes("<path"));
     assert.equal(renderGameText("消耗 [[funds:1234]] 与 [[industry:20]]", "plain"), "消耗 1,234 财政 与 20 工业");
@@ -90,14 +91,38 @@ test("signed bonuses color green, penalties red and zero stays neutral", () => {
     assert.match(html, /<span class="game-text game-text--pos">\+20%<\/span>/);
     assert.match(html, /<span class="game-text game-text--neg">-5%<\/span>/);
     assert.match(html, /<span class="game-text game-text--zero">\+0<\/span>/);
-    assert.match(renderGameText("[[industry:+20%]]"), /class="game-text--pos">\+20%<\/span>/);
-    assert.match(renderGameText("[[funds:-3.5]]"), /class="game-text--neg">-3\.5<\/span>/);
+    assert.match(renderGameText("[[industry:+20%]]"), /class="gtext-value game-text--pos">\+20%<\/span>/);
+    assert.match(renderGameText("[[funds:-3.5]]"), /class="gtext-value game-text--neg">-3\.5<\/span>/);
     assert.equal(renderGameText("产出 +20%", "plain"), "产出 +20%");
 });
 
+test("unified forms cover bare icons, forced labels and static semantics", () => {
+    assert.equal(renderGameText("[[funds:]]", "plain"), "财政");
+    assert.match(renderGameText("[[funds:]]"), /class="gtext-icon resource-icon game-text--funds"/);
+    assert.equal(renderGameText("[[icon:funds]]", "plain"), "财政");
+    assert.equal(renderGameText("[[label:funds]]"), '<span class="game-text game-text--plain">财政</span>');
+    assert.match(renderGameText("[[funds:13:pos]]"), /class="gtext-value game-text--pos">13<\/span>/);
+    assert.match(renderGameText("[[funds:13:neg]]"), /class="gtext-value game-text--neg">13<\/span>/);
+    assert.match(renderGameText("[[funds:13:neutral]]"), /class="gtext-value game-text--plain">13<\/span>/);
+    assert.equal(renderGameText("[[fund:13]]", "plain"), "13 财政");
+});
+
+test("current-value tokens resolve through an injected read-only resolver", () => {
+    const resolver = (id: string, scope: string | null): number | null =>
+        id === "funds" ? (scope === null || scope === "@USER" ? 13 : scope === "@1" ? 7 : null) : null;
+    assert.equal(renderGameText("[[funds:~]]", "plain", resolver), "13 财政");
+    assert.equal(renderGameText("[[@1:funds:~]]", "plain", resolver), "7 财政");
+    assert.equal(renderGameText("[[funds:~]]", "plain"), "财政", "no active resolver keeps the semantic label");
+    assert.match(renderGameText("[[@USER:funds:~:pos]]", "html", resolver), /class="gtext-value game-text--pos">13<\/span>/);
+    assert.match(renderGameText("[[funds:~:10]]", "html", resolver), /class="gtext-value game-text--plain">13<\/span>/);
+    assert.match(renderGameText("[[funds:~:20]]", "html", resolver), /class="gtext-value game-text--neg">13<\/span>/);
+    assert.match(renderGameText("[[funds:~:20:neg]]", "html", resolver), /class="gtext-value game-text--pos">13<\/span>/);
+    assert.match(renderGameText("[[funds:~:10:pos]]", "html", resolver), /class="gtext-value game-text--pos">13<\/span>/);
+});
+
 test("unknown, malformed, nested and nonfinite tokens remain literal", () => {
-    for (const source of ["[[unknown]]", "[[constructor]]", "[[__proto__]]", "[[funds", "[[funds:abc]]", "[[funds:1e3]]",
-        "[[funds:Infinity]]", "[[funds:NaN]]", "[[funds:1,234]]", "[[funds:[[industry]]]]", "[[funds:2+3]]", "[[ funds ]]",
+    for (const source of ["[[unknown]]", "[[constructor]]", "[[__proto__]]", "[[funds", "[[ funds ]]", "[[funds:[[industry]]]]",
+        "[[funds:1:pos:extra:extra]]", "[[@BAD:funds]]", "[[funds:1:abc]]", "[[icon:unknown]]", "[[label:funds:extra]]",
         `[[funds:${"9".repeat(400)}]]`]) {
         assert.equal(renderGameText(source), escapeHtml(source));
         assert.equal(renderGameText(source, "plain"), source);
@@ -133,17 +158,47 @@ test("dynamic names can contain literal tokens, backslashes and HTML safely", ()
     const name = `[[funds:900]] <script>bad()</script> \\ frontier`;
     const source = `地点：${escapeGameText(name)}\n成本：[[industry:12]]`;
     const html = renderGameText(source);
-    assert.equal((html.match(/class="game-text game-text--/g) ?? []).length, 1);
+    assert.equal((html.match(/class="gtext game-text-amount"/g) ?? []).length, 1);
     assert.ok(html.includes("[[funds:900]] &lt;script&gt;bad()&lt;/script&gt; \\ frontier"));
     assert.equal(renderGameText(source, "plain"), `地点：${name}\n成本：12 工业`);
 });
 
-test("token helper cannot smuggle markup through its amount", () => {
+test("game tag cannot smuggle markup through a token value", () => {
     const payload = '1]][[industry:999]]<img src=x onerror="bad()">';
-    const html = renderGameText(textToken("funds", payload));
+    const source = game`[[funds:${payload}]]`;
+    assert.equal(source, `[[funds:${escapeGameText(payload)}]]`);
+    const html = renderGameText(source);
     assert.ok(!html.includes("<svg"));
     assert.ok(!html.includes("<img"));
-    assert.equal(renderGameText(textToken("funds", payload), "plain"), `[[funds:${payload}]]`);
+    assert.equal(renderGameText(source, "plain"), `${payload} 财政`);
+});
+
+test("game tag escapes every value inside a multi-value token", () => {
+    const source = game`[[${"funds"}:${"1]]<img onerror=bad()>"}]]`;
+    assert.equal(source, `[[funds:${escapeGameText("1]]<img onerror=bad()>")}]]`);
+    assert.ok(!renderGameText(source).includes("<img"));
+    assert.equal(renderGameText(source, "plain"), `1]]<img onerror=bad()> 财政`);
+});
+
+test("invalid interpolated values degrade to a label, never a sentinel string", () => {
+    for (const value of [NaN, Infinity, -Infinity, undefined, null]) {
+        assert.equal(game`[[funds:${value}]]`, "[[funds:undefined]]");
+    }
+    // String sentinels stay literal in the source; parse still degrades them.
+    for (const value of [NaN, Infinity, -Infinity, undefined, null, "NaN", "undefined", "Infinity"]) {
+        const source = game`[[funds:${value}]]`;
+        assert.equal(renderGameText(source, "plain"), "财政", `value: ${String(value)}`);
+        const html = renderGameText(source);
+        assert.ok(!html.includes("undefined"), html);
+        assert.ok(!html.includes("NaN"), html);
+        assert.match(html, /class="game-text game-text--funds">财政<\/span>/);
+    }
+    // A live resolver that hands back a bad value degrades the same way.
+    const badResolver = (): number => Number.NaN;
+    assert.equal(renderGameText("[[funds:~]]", "plain", badResolver), "财政");
+    assert.ok(!renderGameText("[[funds:~]]", "html", badResolver).includes("NaN"));
+    // Values outside tokens keep ordinary template-literal semantics.
+    assert.equal(game`花费 ${NaN} 与 ${undefined}`, "花费 NaN 与 undefined");
 });
 
 test("nation chips render colored labels and round-trip hostile names safely", () => {
@@ -192,6 +247,48 @@ test("DOM text updates skip unchanged content and keep nodes independent", () =>
     const second = { innerHTML: "" } as HTMLElement;
     assert.equal(setGameText(second, "[[funds:2]]"), true);
     assert.match(second.innerHTML, /aria-label="2 财政"/);
+
+    let current = 1;
+    const live = (): number => current;
+    const third = { innerHTML: "" } as HTMLElement;
+    assert.equal(setGameText(third, "[[funds:~]]", "html", live), true);
+    assert.equal(setGameText(third, "[[funds:~]]", "html", live), false);
+    current = 2;
+    assert.equal(setGameText(third, "[[funds:~]]", "html", live), true, "same source must refresh when its value changes");
+});
+
+test("markup rendering keeps attribute tokens as source and renders text nodes", () => {
+    const markup = renderGameMarkup('<div title="[[funds:2]]">消耗 [[funds:2]] 与 +5</div>');
+    assert.match(markup, /title="\[\[funds:2\]\]"/);
+    assert.equal((markup.match(/aria-label="2 财政"/g) ?? []).length, 1);
+    assert.match(markup, /<span class="game-text game-text--pos">\+5<\/span>/);
+
+    const feed = renderGameMarkup('<p data-x="[[turn]]">最近 3 [[turn]]没有战况。</p>');
+    assert.match(feed, /data-x="\[\[turn\]\]"/);
+    assert.match(feed, /<span class="game-text game-text--plain">回合<\/span>/);
+    assert.ok(!feed.includes("[[turn]]没有"));
+});
+
+test("setGameHtml deduplicates rendered markup and refreshes live tokens", () => {
+    const element = { innerHTML: "" } as HTMLElement;
+    assert.equal(setGameHtml(element, "<b>[[funds:1]]</b>"), true);
+    const first = element.innerHTML;
+    assert.equal(setGameHtml(element, "<b>[[funds:1]]</b>"), false);
+    assert.equal(element.innerHTML, first);
+    assert.equal(setGameHtml(element, "<b>[[funds:2]]</b>"), true);
+
+    let current = 1;
+    const live = (): number => current;
+    const liveElement = { innerHTML: "" } as HTMLElement;
+    assert.equal(setGameHtml(liveElement, "<b>[[funds:~]]</b>", live), true);
+    assert.equal(setGameHtml(liveElement, "<b>[[funds:~]]</b>", live), false);
+    current = 2;
+    assert.equal(setGameHtml(liveElement, "<b>[[funds:~]]</b>", live), true);
+});
+
+test("registry plain labels use the theme foreground class", () => {
+    const css = readStyles();
+    assert.match(css, /\.game-text--plain\s*\{\s*color:\s*var\(--site-fg\);\s*\}/);
 });
 
 test("large unmatched and unknown input stays literal without recursion", () => {

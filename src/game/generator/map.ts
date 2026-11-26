@@ -1,7 +1,7 @@
-import { buildVoronoiGraph } from "../../terrain/voronoi/index.ts";
-import type { Point, VoronoiGraph } from "../../terrain/voronoi/index.ts";
-import { TerrainGenerator } from "../../terrain/biome.ts";
-import type { BiomeMap } from "../../terrain/biome.ts";
+import { buildVoronoiGraph } from "../terrain/voronoi/index.ts";
+import type { Point, VoronoiGraph } from "../terrain/voronoi/index.ts";
+import { TerrainGenerator } from "../terrain/biome.ts";
+import type { BiomeMap } from "../terrain/biome.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import { SEASONS } from "../types/world.ts";
 import { MAP_SIZES } from "../../types/settings.ts";

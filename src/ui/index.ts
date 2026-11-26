@@ -11,7 +11,7 @@ import { CONSTRUCTION_BLOCKED_COLOR, CONSTRUCTION_COLORS } from "../render/index
 import { RESOURCE_MAP_COLORS } from "../render/resources.ts";
 import type { ColorMode } from "../render/types.ts";
 import type { SoundManager } from "../audio/index.ts";
-import type { UIContext, UICallbacks } from "./context.ts";
+import type { UIContext, UICallbacks, TabId, UIDispatchData, UIDispatchOptions } from "./context.ts";
 import { TopBar } from "./topbar.ts";
 import { GlobalTooltip } from "./tooltip.ts";
 import { BattleReport } from "./report/feed.ts";
@@ -31,9 +31,11 @@ import { handleArmyAction, handleDiplomacyAction, handleEconomyAction } from "./
 import { ConfirmDialog } from "./confirm.ts";
 import type { ConfirmSpec } from "./confirm.ts";
 import { MapLegend } from "./mapLegend.ts";
-import { setGameText, textToken } from "./text.ts";
+import { setGameText } from "./text.ts";
+import { t } from "../i18n/index.ts";
+import { clearActiveTokenContext, setActiveTokenContext } from "./tokenValues.ts";
 
-type TabId = "deploy" | "construction" | "policy" | "diplomacy" | "trade" | "expansion";
+const TAB_IDS: readonly TabId[] = ["deploy", "construction", "policy", "diplomacy", "trade", "expansion"];
 
 /** UI controller: event delegation, selection mode and refresh orchestration. */
 export class GameUI implements UIContext {
@@ -89,6 +91,21 @@ export class GameUI implements UIContext {
         this.sound = sound;
         this.callbacks = callbacks;
 
+        // `~` tokens read a derived view of engine.state; getters keep it live
+        // across engine swaps and selection changes without a second store.
+        const ui = this;
+        const player = Math.max(0, engine.state.nations.findIndex((nation) => nation.isPlayer));
+        setActiveTokenContext({
+            get state() { return ui.engine.state; },
+            player,
+            get selectedSite() { return ui.engine.state.selected; },
+            get selectedState() {
+                const site = ui.engine.state.selected;
+                return site === null ? null : ui.engine.state.provinces[site]?.stateId ?? null;
+            },
+            get selectedArmyId() { return ui.engine.state.selectedArmyId; },
+        });
+
         this.tooltip = new GlobalTooltip();
         this.topbar = new TopBar(engine, sound, (text) => this.toast(text));
         this.feed = new BattleReport(engine);
@@ -137,6 +154,7 @@ export class GameUI implements UIContext {
 
     destroy(): void {
         this.unsubscribe();
+        clearActiveTokenContext();
         this.cancelRefreshFrame();
         this.refreshTasks.length = 0;
         this.topbar.endTurnBtn.removeEventListener("click", this.handleEndTurn);
@@ -172,7 +190,7 @@ export class GameUI implements UIContext {
         this.dockCollapsed = false;
         this.hud.classList.remove("dock-collapsed", "command-mode", "construction-mode", "layers-collapsed", "focus-mode");
         this.armyPanelEl.classList.remove("army-collapsed");
-        this.dockToggleBtn.textContent = "«";
+        setGameText(this.dockToggleBtn, "«", "plain");
         this.multiSelect.clear();
         this.splitChecks.clear();
     }
@@ -285,7 +303,10 @@ export class GameUI implements UIContext {
         return tasks;
     }
 
-    private readonly handleEndTurn = (): void => {
+    private readonly handleEndTurn = (): void => this.endTurn();
+
+    /** Real turn entry point, shared by the DOM button, hotkey and debug console. */
+    endTurn(): void {
         if (this.briefing.isActive()) {
             this.sound.play("select");
             // Committing may tear this UI down and build the campaign UI; do nothing after it.
@@ -295,7 +316,7 @@ export class GameUI implements UIContext {
         if (this.engine.state.winner !== null) return;
         this.sound.play("endTurn");
         this.engine.endTurn();
-    };
+    }
     private readonly handleSound = (): void => this.topbar.toggleSound();
     private readonly handleMenu = (): void => this.callbacks.onNewGame();
     private readonly handleHome = (): void => this.callbacks.onHome();
@@ -303,7 +324,7 @@ export class GameUI implements UIContext {
     private readonly handleTabs = (event: Event): void => {
         const button = (event.target as HTMLElement).closest<HTMLElement>("[data-tab]");
         if (!button) return;
-        this.setTab(button.dataset.tab as TabId);
+        this.dispatchAction("tab", { tab: button.dataset.tab });
     };
 
     isConstructionOpen(): boolean {
@@ -322,7 +343,7 @@ export class GameUI implements UIContext {
         this.engine.select(site);
         if (!this.expansion.isManaging()) {
             this.sound.play("select");
-            this.toast("点击「管理宣称」进入管理：在地图上标记新增或取消");
+            this.toast(t("misc.index.claims.mapClickHint"));
             return;
         }
         const result = this.expansion.toggleDraft(stateId);
@@ -353,10 +374,10 @@ export class GameUI implements UIContext {
         this.callbacks.onConstructionView(kind);
         this.callbacks.onClaimsOverlay(this.isClaimsOpen() && this.engine.state.winner === null);
         renderModeBar(this.engine, this.modeBar, this.hintEl, this.hud.classList.contains("command-mode"));
-        const area = this.mapMode === "state" ? "州" : "省份";
-        if (kind) this.hintEl.textContent = `已选${BUILDING_PROFILES[kind].name} · 点击己方${area}加入队列 · 右键 / Esc 取消`;
-        else if (this.isConstructionOpen() && this.engine.state.winner === null) this.hintEl.textContent = `先选择左侧建筑，再点击己方${area}加入队列`;
-        else if (this.isClaimsOpen() && this.engine.state.winner === null) this.hintEl.textContent = "扩张页：进入「管理宣称」后点击金色闪烁州标记新增 · 已宣称州以我方颜色覆盖 · Esc 确认退出";
+        const area = t(this.mapMode === "state" ? "misc.common.area.state" : "misc.common.area.province");
+        if (kind) setGameText(this.hintEl, t("misc.index.hint.selected", { name: BUILDING_PROFILES[kind].name, area }), "plain");
+        else if (this.isConstructionOpen() && this.engine.state.winner === null) setGameText(this.hintEl, t("misc.index.hint.selectFirst", { area }), "plain");
+        else if (this.isClaimsOpen() && this.engine.state.winner === null) setGameText(this.hintEl, t("misc.index.hint.claims"), "plain");
         this.syncMapLegend();
     }
 
@@ -369,50 +390,51 @@ export class GameUI implements UIContext {
         }
         if (this.isClaimsOpen()) {
             this.legend.set({
-                title: "扩张 · 州图例",
+                title: t("misc.index.legend.claimsTitle"),
                 items: [
-                    { label: "可宣称", pulse: true },
-                    { label: "已宣称", overlay: nationDisplayColor(state, 0) },
-                    { label: "聚焦州", ring: true },
+                    { label: t("misc.index.legend.claimable"), pulse: true },
+                    { label: t("misc.index.legend.claimed"), overlay: nationDisplayColor(state, 0) },
+                    { label: t("misc.index.legend.focus"), ring: true },
                 ],
-                note: "金色闪烁可点击宣称 · 再次点击取消并返还[[politics]]",
+                note: t("misc.index.legend.claimsNote"),
             });
             return;
         }
         const kind = this.construction.selectedKind;
         if (this.isConstructionOpen() && kind !== null && BUILDING_PROFILES[kind].scope === this.mapMode) {
             const local = BUILDING_PROFILES[kind].scope === "province";
+            const area = t(local ? "misc.common.area.province" : "misc.common.area.state");
             this.legend.set({
-                title: `建造 · ${BUILDING_PROFILES[kind].name}`,
+                title: t("misc.index.legend.buildTitle", { name: BUILDING_PROFILES[kind].name }),
                 items: [
-                    { label: "空闲", color: CONSTRUCTION_COLORS.empty },
+                    { label: t("misc.index.legend.idle"), color: CONSTRUCTION_COLORS.empty },
                     ...(local ? [] : [
-                        { label: "较少", color: CONSTRUCTION_COLORS.low },
-                        { label: "较多", color: CONSTRUCTION_COLORS.high },
+                        { label: t("misc.index.legend.low"), color: CONSTRUCTION_COLORS.low },
+                        { label: t("misc.index.legend.high"), color: CONSTRUCTION_COLORS.high },
                     ]),
-                    { label: "已满", color: CONSTRUCTION_COLORS.full },
-                    { label: "不可建造", color: CONSTRUCTION_BLOCKED_COLOR },
+                    { label: t("misc.index.legend.full"), color: CONSTRUCTION_COLORS.full },
+                    { label: t("misc.index.legend.blocked"), color: CONSTRUCTION_BLOCKED_COLOR },
                 ],
-                note: `地图＝已建＋在建 / 上限 · ${local ? "省份" : "州"}容量；绿色数字与阴影＝施工中`,
+                note: t("misc.index.legend.buildNote", { area }),
             });
             return;
         }
         if (this.callbacks.getColorMode() === "resource") {
             this.legend.set({
-                title: "资源分布图例",
+                title: t("misc.index.legend.resourceTitle"),
                 items: [
-                    { label: "原料矿", icons: [{ name: "raw", color: RESOURCE_MAP_COLORS.raw }] },
-                    { label: "战略矿", icons: [{ name: "strategic", color: RESOURCE_MAP_COLORS.strategic }] },
+                    { label: t("misc.index.legend.raw"), icons: [{ name: "raw", color: RESOURCE_MAP_COLORS.raw }] },
+                    { label: t("misc.index.legend.strategic"), icons: [{ name: "strategic", color: RESOURCE_MAP_COLORS.strategic }] },
                     {
-                        label: "两种矿共存",
+                        label: t("misc.index.legend.both"),
                         icons: [
                             { name: "raw", color: RESOURCE_MAP_COLORS.raw },
                             { name: "strategic", color: RESOURCE_MAP_COLORS.strategic },
                         ],
                     },
-                    { label: "粮食 / 无矿", icons: [{ name: "food", color: RESOURCE_MAP_COLORS.food }] },
+                    { label: t("misc.index.legend.foodOrNone"), icons: [{ name: "food", color: RESOURCE_MAP_COLORS.food }] },
                 ],
-                note: "颜色越深矿点等级越高 · 悬停省份查看每省实际产量",
+                note: t("misc.index.legend.resourceNote"),
             });
             return;
         }
@@ -438,20 +460,25 @@ export class GameUI implements UIContext {
         const province = state.provinces[site];
         const region = state.states[province.stateId];
         const local = kind === "supply" || kind === "fort";
-        const area = local ? "省份" : "州";
+        const area = t(local ? "misc.common.area.province" : "misc.common.area.state");
         if (!state.terrain.passable[site] || province.owner !== 0 || (!local && (!region || state.provinces[region.center].owner !== 0))) {
             this.sound.play("error");
-            this.toast(`只能在己方控制的陆地${area}内建造`);
+            this.toast(t("misc.index.build.onlyOwnLand", { area }));
             return;
         }
         const queued = local ? this.engine.queueProvinceBuild(site, kind) : this.engine.queueBuild(region.id, kind);
         if (queued) {
             this.sound.play("recruit");
-            this.toast(`${local ? province.name : region.name}：${BUILDING_PROFILES[kind].name}已加入施工队列`);
+            this.toast(t("misc.index.build.queued", {
+                place: local ? province.name : region.name,
+                building: BUILDING_PROFILES[kind].name,
+            }));
         } else {
             this.sound.play("error");
             const { used, limit } = local ? provinceBuildingCapacity(state, province, kind) : stateBuildingCapacity(state, region, kind);
-            this.toast(used >= limit ? `该${area}已满（包含在建），请选择其他${area}` : "资金或工业不足，无法建造");
+            this.toast(used >= limit
+                ? t("misc.index.build.full", { area })
+                : t("misc.index.build.insufficient"));
         }
     }
 
@@ -480,7 +507,7 @@ export class GameUI implements UIContext {
             if (this.expansion.isManaging()) {
                 this.expansion.cancelDraft();
                 this.syncClaimBanner();
-                this.toast("已退出宣称管理，未确认的宣称变更已丢弃");
+                this.toast(t("misc.index.claims.discarded"));
             }
         }
         this.syncConstructionView();
@@ -515,8 +542,10 @@ export class GameUI implements UIContext {
         this.hud.classList.toggle("layers-collapsed", this.layersCollapsed);
         document.querySelector("[data-action='layers-toggle']")!.setAttribute("aria-expanded", String(!this.layersCollapsed));
         const resourceMode = this.callbacks.getColorMode() === "resource";
-        document.querySelector("#map-layer-name")!.textContent = resourceMode ? "资源" : this.mapMode === "state" ? "州" : "省份";
-        document.querySelector("#map-layer-chevron")!.textContent = this.layersCollapsed ? "▸" : "▾";
+        setGameText(document.querySelector("#map-layer-name")!, resourceMode
+            ? t("misc.colorMode.resource")
+            : t(this.mapMode === "state" ? "misc.common.area.state" : "misc.common.area.province"), "plain");
+        setGameText(document.querySelector("#map-layer-chevron")!, this.layersCollapsed ? "▸" : "▾", "plain");
         for (const button of options.querySelectorAll<HTMLElement>("[data-mode]")) {
             const active = button.dataset.mode === this.mapMode;
             button.classList.toggle("active", active);
@@ -541,7 +570,7 @@ export class GameUI implements UIContext {
         const threshold = this.settingsPop.querySelector<HTMLInputElement>("#color-threshold")!;
         threshold.value = String(deepZoom);
         threshold.disabled = colorMode === "uniform";
-        this.settingsPop.querySelector<HTMLElement>("#color-threshold-value")!.textContent = deepZoom.toFixed(2);
+        setGameText(this.settingsPop.querySelector<HTMLElement>("#color-threshold-value")!, deepZoom.toFixed(2), "plain");
     }
 
     private readonly handleSettingsToggle = (): void => {
@@ -679,11 +708,11 @@ export class GameUI implements UIContext {
     };
 
     /** Policy chips go through a confirm card; a pending target click cancels its switch. */
-    private requestPolicySwitch(target: HTMLElement): void {
+    private requestPolicySwitch(data: UIDispatchData): void {
         const state = this.engine.state;
         const player = state.nations[0];
-        const category = target.dataset.category as PolicyCategory | undefined;
-        const value = target.dataset.value ?? "";
+        const category = data.category as PolicyCategory | undefined;
+        const value = data.value ?? "";
         if (!category || !value || !POLICY_LABELS[category] || state.winner !== null) return;
         const currentName = policyOption(category, player.policies[category])?.name ?? player.policies[category];
         const transition = player.policyTransitions?.[category];
@@ -691,19 +720,27 @@ export class GameUI implements UIContext {
         if (transition) {
             if (transition.to !== value) {
                 this.sound.play("error");
-                this.toast(`该组政策正在切换：先点击带时钟的「${policyOption(category, transition.to)?.name ?? transition.to}」取消`);
+                this.toast(t("misc.index.policy.switching", {
+                    name: policyOption(category, transition.to)?.name ?? transition.to,
+                }));
                 return;
             }
             const remaining = Math.max(0, transition.readyDay - state.day);
             const targetName = policyOption(category, transition.to)?.name ?? transition.to;
             this.confirmDialog.show({
-                title: `取消${POLICY_LABELS[category]}政策切换`,
-                body: `「${currentName} → ${targetName}」还需 ${textToken("turn", remaining)}。\n取消后回到「${currentName}」；已支付的 ${textToken("politics", POLICY_SWITCH_COST)} 与每日维护不返还，重新切换仍需 ${textToken("turn", POLICY_SWITCH_DAYS)}。`,
+                title: t("misc.index.policy.cancelTitle", { category: POLICY_LABELS[category] }),
+                body: t("misc.index.policy.cancelBody", {
+                    current: currentName,
+                    target: targetName,
+                    days: remaining,
+                    cost: POLICY_SWITCH_COST,
+                    switchDays: POLICY_SWITCH_DAYS,
+                }),
                 danger: true,
                 onConfirm: () => {
                     if (this.engine.cancelPolicySwitch(category)) {
                         this.sound.play("select");
-                        this.toast(`已取消${POLICY_LABELS[category]}政策切换，已花费[[politics]]不返还`);
+                        this.toast(t("misc.index.policy.cancelToast", { category: POLICY_LABELS[category] }));
                     } else {
                         this.sound.play("error");
                     }
@@ -715,20 +752,29 @@ export class GameUI implements UIContext {
         if (player.policies[category] === value) return;
         if (player.politicalPower < POLICY_SWITCH_COST) {
             this.sound.play("error");
-            this.toast(`${textToken("politics", POLICY_SWITCH_COST)}不足，无法开始切换`);
+            this.toast(t("misc.index.policy.insufficient", { cost: POLICY_SWITCH_COST }));
             return;
         }
         const nextName = policyOption(category, value)?.name ?? value;
         this.confirmDialog.show({
-            title: `切换${POLICY_LABELS[category]}政策`,
-            body: `${currentName} → ${nextName}\n开始支付 ${textToken("politics", POLICY_SWITCH_COST)}，切换期间每日维护 ${textToken("politics", -POLICY_SWITCH_UPKEEP)}。\n需 ${textToken("turn", POLICY_SWITCH_DAYS)} 完成，增益按进度逐步生效；期间再次点击目标可取消，已花费[[politics]]不返还。`,
+            title: t("misc.index.policy.switchTitle", { category: POLICY_LABELS[category] }),
+            body: t("misc.index.policy.switchBody", {
+                current: currentName,
+                next: nextName,
+                cost: POLICY_SWITCH_COST,
+                upkeep: -POLICY_SWITCH_UPKEEP,
+                days: POLICY_SWITCH_DAYS,
+            }),
             onConfirm: () => {
                 if (this.engine.startPolicySwitch(category, value)) {
                     this.sound.play("select");
-                    this.toast(`已开始${POLICY_LABELS[category]}政策切换（${textToken("politics", -POLICY_SWITCH_COST)}）`);
+                    this.toast(t("misc.index.policy.startToast", {
+                        category: POLICY_LABELS[category],
+                        cost: -POLICY_SWITCH_COST,
+                    }));
                 } else {
                     this.sound.play("error");
-                    this.toast("无法开始切换：[[politics]]不足或目标无效");
+                    this.toast(t("misc.index.policy.startFailed"));
                 }
             },
         });
@@ -737,43 +783,54 @@ export class GameUI implements UIContext {
     private enterClaimManagement(): void {
         if (this.engine.state.winner !== null) {
             this.sound.play("error");
-            this.toast("战役已结束，无法管理宣称");
+            this.toast(t("misc.index.claims.ended"));
             return;
         }
         if (!this.expansion.enterManage()) return;
         this.sound.play("select");
         this.syncClaimBanner();
-        this.toast("已进入宣称管理：点击地图州标记新增 / 取消，按 Esc 确认退出");
+        this.toast(t("misc.index.claims.enter"));
     }
 
     /** Esc / exit button: summarize the cached claim changes before committing them. */
     private requestClaimExit(): void {
         if (!this.expansion.isManaging()) return;
         const { adds, cancels } = this.expansion.draft();
-        const names = (ids: number[]): string => ids.map((id) => this.engine.state.states[id]?.name ?? "未知州").join("、");
+        const names = (ids: number[]): string => ids.map((id) => this.engine.state.states[id]?.name ?? t("misc.common.unknownState")).join(t("misc.common.listSeparator"));
         if (adds.length === 0 && cancels.length === 0) {
             this.confirmDialog.show({
-                title: "退出宣称管理",
-                body: "当前没有待确认的宣称变更。\n退出不会修改任何宣称。",
+                title: t("misc.index.claims.exitTitle"),
+                body: t("misc.index.claims.exitBody"),
                 onConfirm: () => {
                     this.expansion.cancelDraft();
                     this.syncClaimBanner();
-                    this.toast("已退出宣称管理");
+                    this.toast(t("misc.index.claims.exitToast"));
                 },
             });
             return;
         }
         const net = (adds.length - cancels.length) * CLAIM_COST;
+        const addLine = adds.length ? t("misc.index.claims.addList", { names: names(adds) }) : "";
+        const cancelLine = cancels.length ? t("misc.index.claims.cancelList", { names: names(cancels) }) : "";
         this.confirmDialog.show({
-            title: "确认宣称变更",
-            body: `${adds.length ? `新增宣称：${names(adds)}` : ""}${adds.length && cancels.length ? "\n" : ""}${cancels.length ? `取消宣称：${names(cancels)}` : ""}\n\n确认后一次性提交；${textToken("politics", net > 0 ? -net : `+${-net}`)}。取消的宣称每项返还 ${textToken("politics", CLAIM_COST)}，交战中可能取消失败。`,
+            title: t("misc.index.claims.confirmTitle"),
+            body: t("misc.index.claims.confirmBody", {
+                adds: addLine,
+                sep: addLine && cancelLine ? "\n" : "",
+                cancels: cancelLine,
+                net: net > 0 ? -net : `+${-net}`,
+                cost: CLAIM_COST,
+            }),
             onConfirm: () => {
                 const result = this.expansion.applyDraft();
                 this.syncClaimBanner();
                 this.sound.play(result.failed ? "error" : "select");
-                const parts = [`新增 ${result.added}`, `取消 ${result.cancelled}`];
-                if (result.failed) parts.push(`失败 ${result.failed}`);
-                this.toast(`宣称变更已提交：${parts.join(" · ")}`);
+                const parts = [
+                    t("misc.index.claims.resultAdd", { count: result.added }),
+                    t("misc.index.claims.resultCancel", { count: result.cancelled }),
+                ];
+                if (result.failed) parts.push(t("misc.index.claims.resultFail", { count: result.failed }));
+                this.toast(t("misc.index.claims.resultToast", { parts: parts.join(" · ") }));
             },
         });
     }
@@ -790,52 +847,91 @@ export class GameUI implements UIContext {
         if (!target) return;
         const action = target.dataset.action;
         if (!action || action === "split-check") return;
+        const select = target.closest<HTMLElement>("[data-diplo-card]")?.querySelector<HTMLSelectElement>("[data-diplo-state]");
+        const mouse = event as MouseEvent;
+        this.dispatchAction(action, target.dataset, {
+            ctrlKey: mouse.ctrlKey,
+            metaKey: mouse.metaKey,
+            inMapLayerOptions: target.closest("#map-layer-options") !== null,
+            cooldown: target.classList.contains("cooldown"),
+            cooldownTooltip: target.dataset.tooltipBody ?? null,
+            selectedState: select && select.value !== "" ? Number(select.value) : null,
+            vassalType: target.closest("details")?.querySelector<HTMLInputElement>("input[type='radio']:checked")?.value,
+        });
+    }
 
+    /** Expand the left dock; every panel-opening path funnels through here. */
+    private expandDock(): void {
+        if (!this.dockCollapsed) return;
+        this.dockCollapsed = false;
+        this.hud.classList.remove("dock-collapsed");
+        setGameText(this.dockToggleBtn, "«", "plain");
+        this.dockToggleBtn.setAttribute("aria-label", t("misc.layout.dock.collapse"));
+    }
+
+    /** Open a dock panel with all dock/map-mode side effects applied. */
+    openPanel(tab: TabId): void {
+        this.expandDock();
+        this.setTab(tab);
+    }
+
+    /** Single router for UI actions, driven by both DOM clicks and debug commands. */
+    dispatchAction(action: string, data: UIDispatchData = {}, options: UIDispatchOptions = {}): boolean {
+        if (!action || action === "split-check") return false;
+
+        if (action === "tab") {
+            const tab = data.tab as TabId | undefined;
+            if (!tab || !TAB_IDS.includes(tab)) return false;
+            this.openPanel(tab);
+            return true;
+        }
         if (action === "dock-toggle") {
             this.dockCollapsed = !this.dockCollapsed;
             this.hud.classList.toggle("dock-collapsed", this.dockCollapsed);
-            this.dockToggleBtn.textContent = this.dockCollapsed ? "»" : "«";
-            this.dockToggleBtn.setAttribute("aria-label", this.dockCollapsed ? "展开面板" : "收起面板");
+            setGameText(this.dockToggleBtn, this.dockCollapsed ? "»" : "«", "plain");
+            this.dockToggleBtn.setAttribute("aria-label", t(this.dockCollapsed ? "misc.layout.dock.expand" : "misc.layout.dock.collapse"));
             this.syncConstructionView();
-            return;
+            return true;
         }
-
+        if (action === "dock-expand" || action === "dock-collapse") {
+            const collapsed = action === "dock-collapse";
+            if (collapsed !== this.dockCollapsed) this.dispatchAction("dock-toggle");
+            return true;
+        }
         if (action === "army-toggle") {
             this.armyPanelEl.classList.toggle("army-collapsed");
             this.sound.play("select");
             this.armies.render();
-            return;
+            return true;
         }
-        if (action === "select-army" && !(event as MouseEvent).ctrlKey && !(event as MouseEvent).metaKey
-            && this.narrowQuery.matches) {
+        if (action === "select-army" && !options.ctrlKey && !options.metaKey && this.narrowQuery.matches) {
             this.armyPanelEl.classList.add("army-collapsed");
         }
         if (action === "layers-toggle") {
             this.layersCollapsed = !this.layersCollapsed;
             this.renderLayers();
-            return;
+            return true;
         }
         if (action === "map-mode" || action === "construction-scope") {
-            const mode = target.dataset.mode;
-            if (mode !== "province" && mode !== "state") return;
+            const mode = data.mode;
+            if (mode !== "province" && mode !== "state") return false;
             this.changeMapMode(mode);
-            return;
+            return true;
         }
         if (action === "settings-close") {
             this.closeSettings();
-            return;
+            return true;
         }
         if (action === "color-mode") {
-            const picked = target.dataset.color;
-            if (picked !== "uniform" && picked !== "gradient" && picked !== "resource") return;
+            const picked = data.color;
+            if (picked !== "uniform" && picked !== "gradient" && picked !== "resource") return false;
             let color: ColorMode = picked;
-            if (color === "resource" && this.callbacks.getColorMode() === "resource"
-                && target.closest("#map-layer-options")) color = "gradient";
+            if (color === "resource" && this.callbacks.getColorMode() === "resource" && options.inMapLayerOptions) color = "gradient";
             this.callbacks.onColorMode(color);
             this.sound.play("select");
             this.renderLayers();
             this.syncMapLegend();
-            return;
+            return true;
         }
         if (action === "color-reset") {
             this.callbacks.onColorMode("gradient");
@@ -843,111 +939,106 @@ export class GameUI implements UIContext {
             this.sound.play("select");
             this.renderLayers();
             this.syncMapLegend();
-            this.toast("染色已恢复默认（渐变 · 阈值 0.8）");
-            return;
+            this.toast(t("misc.index.colorResetToast", { threshold: 0.8 }));
+            return true;
         }
         if (action === "construction-kind") {
-            const kind = target.dataset.kind as BuildingKind;
-            if (this.engine.state.winner !== null || !BUILDING_KINDS.includes(kind)) return;
+            const kind = data.kind as BuildingKind;
+            if (this.engine.state.winner !== null || !BUILDING_KINDS.includes(kind)) return false;
             this.construction.selectedKind = kind;
             this.changeMapMode(BUILDING_PROFILES[kind].scope);
             this.tooltip.refresh();
-            return;
+            return true;
         }
         if (action === "construction-jump") {
-            const site = Number(target.dataset.site);
+            const site = Number(data.site);
             this.selectConstructionSite(site);
-            this.changeMapMode(target.dataset.mode === "province" ? "province" : "state");
-            return;
+            this.changeMapMode(data.mode === "province" ? "province" : "state");
+            return true;
         }
         if (action === "open-construction") {
-            this.dockCollapsed = false;
-            this.hud.classList.remove("dock-collapsed");
-            this.dockToggleBtn.textContent = "«";
-            this.dockToggleBtn.setAttribute("aria-label", "收起面板");
-            this.setTab("construction");
-            return;
+            this.openPanel("construction");
+            return true;
         }
-
         if (action === "trade-goto") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
-                this.setTab("trade");
+                this.openPanel("trade");
                 this.trade.setTarget(nationId);
                 this.sound.play("select");
             }
-            return;
+            return true;
         }
         if (action === "vassal-goto") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
                 this.topbar.closeCountryMenu();
-                this.setTab("diplomacy");
+                this.openPanel("diplomacy");
                 this.diplomacy.setTarget(nationId);
                 this.sound.play("select");
             }
-            return;
+            return true;
         }
         if (action === "diplo-target") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
                 this.diplomacy.setTarget(nationId);
                 this.sound.play("select");
             }
-            return;
+            return true;
         }
         if (action === "declare-open") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId)) {
                 this.diplomacy.openDeclare(nationId);
                 this.sound.play("select");
             }
-            return;
+            return true;
         }
         if (action === "diplo-menu-open") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId)) {
                 this.diplomacy.openActionMenu(nationId);
                 this.sound.play("select");
             }
-            return;
+            return true;
         }
         if (action === "claim-focus") {
-            const stateId = Number(target.dataset.state);
-            if (!Number.isInteger(stateId) || !this.engine.state.states[stateId]) return;
+            const stateId = Number(data.state);
+            if (!Number.isInteger(stateId) || !this.engine.state.states[stateId]) return false;
             this.expansion.focusFromMap(stateId);
             this.engine.select(this.engine.state.states[stateId].center);
             this.sound.play("select");
-            return;
+            return true;
         }
         if (action === "claim-manage") {
             this.enterClaimManagement();
-            return;
+            return true;
         }
         if (action === "claim-manage-exit") {
             this.requestClaimExit();
-            return;
+            return true;
         }
         if (action === "claim-draft") {
-            const stateId = Number(target.dataset.state);
-            if (!Number.isInteger(stateId)) return;
+            const stateId = Number(data.state);
+            if (!Number.isInteger(stateId)) return false;
             const result = this.expansion.toggleDraft(stateId);
             this.sound.play(result.ok ? "recruit" : "error");
             this.toast(result.message);
-            return;
+            return true;
         }
         if (action === "feed-toggle") {
             this.feed.toggle();
-            return;
+            return true;
         }
         if (action === "policy") {
-            this.requestPolicySwitch(target);
-            return;
+            this.requestPolicySwitch(data);
+            return true;
         }
 
-        if (handleEconomyAction(this, action, target)) return;
-        if (this.trade.handleAction(action, target)) return;
-        if (handleDiplomacyAction(this, action, target)) return;
-        handleArmyAction(this, action, target, event);
+        if (handleEconomyAction(this, action, data)) return true;
+        if (this.trade.handleAction(action, data)) return true;
+        if (handleDiplomacyAction(this, action, data, options)) return true;
+        return handleArmyAction(this, action, data, options);
     }
 }

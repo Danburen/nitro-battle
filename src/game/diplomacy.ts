@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import { tendencyProfileOf, tendencyTuning } from "./ai/tendencies.ts";
 import type { AITuning } from "./ai/types.ts";
 import { isProtectedRelation, overlordOf } from "./access.ts";
@@ -17,8 +18,14 @@ import type { GameState } from "./types/state.ts";
 
 export const CLAIM_COST = 8;
 export const DIPLOMATIC_PROFILES = {
-    conquest: { label: "夺取宣称州", cost: 12, days: 4, validDays: 12, upkeep: 1 },
-    annex: { label: "全面吞并", cost: 35, days: 8, validDays: 16, upkeep: 2 },
+    conquest: {
+        get label() { return t("game.diplomacy.conquest"); },
+        cost: 12, days: 4, validDays: 12, upkeep: 1,
+    },
+    annex: {
+        get label() { return t("game.diplomacy.annex"); },
+        cost: 35, days: 8, validDays: 16, upkeep: 2,
+    },
 } as const satisfies Record<DiplomaticActionKind, { label: string; cost: number; days: number; validDays: number; upkeep: number }>;
 
 export const TRUCE_DAYS = 10;
@@ -123,19 +130,23 @@ export function claimState(core: GameCore, nation: number, stateId: number): boo
     state.nations[nation].politicalPower -= CLAIM_COST;
     state.claims.push({ nation, stateId });
     const name = state.states[stateId].name;
-    core.log(`${core.nationChip(nation)} 宣称 ${name}`, "diplo", nation);
+    core.log(t("game.diplomacy.claim", { nation: core.nationChip(nation), state: name }), "diplo", nation);
     // Every nation with a legal/core stake receives a report. The player's is a
     // prominent warning; AI owners quietly harden the threatened state.
     const owners = new Set(claimedStateOwners(state, stateId, nation));
     if (nation !== 0 && isPlayerState(state, stateId)) owners.add(0);
     for (const owner of owners) {
         if (owner === 0) {
-            core.log(`${core.nationChip(nation)} 宣称我国领土 ${name}！`, "diplo", 0, true, {
+            core.log(t("game.diplomacy.claimPlayer", {
+                nation: core.nationChip(nation), state: name,
+            }), "diplo", 0, true, {
                 kind: "claim", nation, stateName: name,
             });
             core.emit({ type: "claim-warning", nation, stateId, stateName: name });
         } else {
-            core.log(`${core.nationChip(nation)} 宣称 ${core.nationName(owner)} 的领土 ${name}！`, "diplo", owner, false, {
+            core.log(t("game.diplomacy.claimOther", {
+                nation: core.nationChip(nation), owner: core.nationName(owner), state: name,
+            }), "diplo", owner, false, {
                 kind: "claim", nation, stateName: name,
             });
             fortifyClaimedState(core, owner, stateId);
@@ -160,7 +171,9 @@ export function cancelClaim(core: GameCore, nation: number, stateId: number): bo
     const index = state.claims.findIndex((claim) => claim.nation === nation && claim.stateId === stateId);
     state.claims.splice(index, 1);
     state.nations[nation].politicalPower += CLAIM_COST;
-    core.log(`${core.nationChip(nation)} 取消宣称 ${state.states[stateId].name}`, "diplo", nation);
+    core.log(t("game.diplomacy.cancelClaim", {
+        nation: core.nationChip(nation), state: state.states[stateId].name,
+    }), "diplo", nation);
     core.emit({ type: "state" });
     return true;
 }
@@ -265,7 +278,9 @@ export function prepareDiplomaticAction(
         startedDay: state.day, readyDay, expiresDay: readyDay + profile.validDays, upkeepSpent: 0,
     });
     const destination = stateId === null ? state.nations[target].name : state.states[stateId].name;
-    core.log(`${core.nationChip(nation)} 制造${profile.label}借口 ${destination}`, "diplo", nation);
+    core.log(t("game.diplomacy.preparePretext", {
+        nation: core.nationChip(nation), kind: profile.label, destination,
+    }), "diplo", nation);
     core.emit({ type: "state" });
     return true;
 }
@@ -283,7 +298,10 @@ export function cancelDiplomaticAction(core: GameCore, nation: number, id: numbe
     const [action] = state.diplomaticActions.splice(index, 1);
     const refund = cancelRefund(state, action);
     if (refund > 0) state.nations[nation].politicalPower += refund;
-    core.log(`${core.nationChip(nation)} 取消借口 ${DIPLOMATIC_PROFILES[action.kind].label}${refund > 0 ? `（返还 ${refund} 政治点）` : ""}`, "diplo", nation);
+    core.log(t("game.diplomacy.cancelPretext", {
+        nation: core.nationChip(nation), kind: DIPLOMATIC_PROFILES[action.kind].label,
+        refund: refund > 0 ? t("game.diplomacy.refund", { amount: refund }) : "",
+    }), "diplo", nation);
     core.invalidateReach();
     core.emit({ type: "state" });
     return true;
@@ -321,11 +339,11 @@ export function advanceDiplomacy(core: GameCore): void {
         if (!activeAction(state, action)) {
             state.diplomaticActions.splice(i, 1);
             notified.delete(action.id);
-            core.log(`${chip} 借口失效 ${label}`, "diplo", action.nation);
+            core.log(t("game.diplomacy.pretextExpired", { nation: chip, kind: label }), "diplo", action.nation);
             changed = true;
         } else if (state.day >= action.readyDay && !notified.has(action.id)) {
             notified.add(action.id);
-            core.log(`${chip} 借口就绪 ${label}`, "diplo", action.nation);
+            core.log(t("game.diplomacy.pretextReady", { nation: chip, kind: label }), "diplo", action.nation);
             changed = true;
         }
     }
@@ -373,20 +391,20 @@ export function dropOffers(state: GameState, a: number, b: number): void {
 /** Whether the AI accepts a white peace; the same object feeds the player's tooltip. */
 export function decidePeace(state: GameState, aiId: number, otherId: number): DiplomaticDecision {
     if (!isAtWar(state, aiId, otherId)) {
-        return { accepts: false, factors: [minus("双方并未交战")], verdict: "refuse" };
+        return { accepts: false, factors: [minus(t("game.diplomacy.peace.noWar"))], verdict: "refuse" };
     }
     const tuning = aiTuningOf(state, aiId);
     const duration = warDuration(state, aiId, otherId);
     if (duration < MIN_PEACE_DAYS) {
-        return { accepts: false, factors: [minus("战争尚未持续足够久")], verdict: "refuse" };
+        return { accepts: false, factors: [minus(t("game.diplomacy.peace.tooShort"))], verdict: "refuse" };
     }
     if (duration >= tuning.fatigueDays) {
-        return { accepts: true, factors: [plus("战争疲劳已达上限")], verdict: "sure" };
+        return { accepts: true, factors: [plus(t("game.diplomacy.peace.fatigued"))], verdict: "sure" };
     }
     const outmatched = nationPower(state, aiId) < nationPower(state, otherId) * tuning.peacePowerRatio;
     return {
         accepts: outmatched,
-        factors: [outmatched ? plus("己方实力已处劣势") : minus("己方实力仍然占优")],
+        factors: [outmatched ? plus(t("game.diplomacy.peace.powerLow")) : minus(t("game.diplomacy.peace.powerHigh"))],
         verdict: outmatched ? "likely" : "refuse",
     };
 }
@@ -455,9 +473,12 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
     const joined = [...participants];
     const named = joined.slice(0, 3).map((id) => core.nationChip(id)).join("、");
     const suffix = joined.length === 0 ? ""
-        : joined.length > 3 ? `，${named} 等 ${joined.length} 个国家也参与战争`
-            : `，${named} 也参与战争`;
-    core.log(`${core.nationChip(aggressor)} 对 ${core.nationChip(defender)} 宣战（${DIPLOMATIC_PROFILES[action.kind].label}）${suffix}`, "diplo", aggressor, true, {
+        : joined.length > 3 ? t("game.diplomacy.war.joinedMany", { named, count: joined.length })
+            : t("game.diplomacy.war.joinedOne", { named });
+    core.log(t("game.diplomacy.war.declared", {
+        aggressor: core.nationChip(aggressor), defender: core.nationChip(defender),
+        kind: DIPLOMATIC_PROFILES[action.kind].label, suffix,
+    }), "diplo", aggressor, true, {
         kind: "war",
         nation: aggressor,
     });
@@ -479,7 +500,9 @@ export function proposePeace(core: GameCore, targetId: number): boolean {
         makePeace(core, 0, targetId);
         return true;
     }
-    core.log(`${core.nationChip(targetId)} 拒绝求和 ${core.nationChip(0)}`, "diplo", targetId);
+    core.log(t("game.diplomacy.peace.refusePlayer", {
+        target: core.nationChip(targetId), player: core.nationChip(0),
+    }), "diplo", targetId);
     core.emit({ type: "state" });
     return false;
 }
@@ -491,7 +514,9 @@ export function respondPeace(core: GameCore, fromId: number, accept: boolean): b
     dropOffers(state, fromId, fromId);
     if (!accept) {
         state.peaceCooldown[fromId] = state.day;
-        core.log(`${core.nationChip(0)} 拒绝求和 ${core.nationChip(fromId)}`, "diplo", 0);
+        core.log(t("game.diplomacy.peace.refuseAI", {
+            player: core.nationChip(0), from: core.nationChip(fromId),
+        }), "diplo", 0);
         core.emit({ type: "state" });
         return false;
     }
@@ -543,7 +568,9 @@ export function runAIDiplomacy(core: GameCore, nationId: number): void {
     if (player.alive && isAtWar(state, nationId, player.id)) {
         if (aiOffersPlayerPeace(state, nationId)) {
             state.peaceOffers.push(nationId);
-            core.log(`${core.nationChip(nationId)} 求和 ${core.nationChip(0)}`, "diplo", nationId);
+            core.log(t("game.diplomacy.peace.offered", {
+                nation: core.nationChip(nationId), player: core.nationChip(0),
+            }), "diplo", nationId);
             core.emit({ type: "state" });
         }
         return;

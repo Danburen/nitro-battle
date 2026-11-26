@@ -1,6 +1,6 @@
 /** The single mutable game state aggregate. Composed from the feature type modules. */
-import type { BiomeMap } from "../../terrain/biome.ts";
-import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
+import type { BiomeMap } from "../terrain/biome.ts";
+import type { VoronoiGraph } from "../terrain/voronoi/index.ts";
 import type { GameSettings } from "../../types/settings.ts";
 import type { ConstructionOrder } from "./building.ts";
 import type {

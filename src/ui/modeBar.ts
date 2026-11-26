@@ -1,8 +1,9 @@
 import type { GameEngine } from "../game/engine.ts";
+import { t } from "../i18n/index.ts";
 import { DEFAULT_HINT } from "./layout.ts";
-import { renderGameText } from "./text.ts";
+import { setGameHtml, setGameText } from "./text.ts";
 
-const COMMAND_HINT = "点击军团徽标切换部队 · 点击脚下地块查看地区 · 蓝色地块移动／红色地块进攻 · Esc / 右键取消";
+const COMMAND_HINT = t("misc.modeBar.commandHint");
 
 /** Bottom-center bar: strategic redeploy targeting, or the mode-aware hint line. */
 export function renderModeBar(engine: GameEngine, modeBar: HTMLElement, hintEl: HTMLElement, commandMode: boolean): void {
@@ -12,17 +13,17 @@ export function renderModeBar(engine: GameEngine, modeBar: HTMLElement, hintEl: 
     modeBar.classList.toggle("hidden", !active);
     hintEl.classList.toggle("hidden", active);
     if (!active) {
-        modeBar.innerHTML = "";
-        hintEl.textContent = commandMode ? COMMAND_HINT : DEFAULT_HINT;
+        setGameHtml(modeBar, "");
+        setGameText(hintEl, commandMode ? COMMAND_HINT : DEFAULT_HINT, "plain");
         return;
     }
     const army = state.armies.get(armyId);
-    modeBar.innerHTML = `
+    setGameHtml(modeBar, `
         <div class="mode-text">
-            <b>${army?.name ?? "军团"} 战略转移</b>
-            <span>点击绿色省份完成转移 · 组织度降至 20 · 本${renderGameText("[[turn]]")}结束</span>
+            <b>${army?.name ?? t("misc.common.army")} ${t("misc.modeBar.redeploy")}</b>
+            <span>${t("misc.modeBar.redeployHint", { org: 20 })}</span>
         </div>
         <div class="mode-actions">
-            <button class="btn btn-sm" data-action="redeploy-cancel">取消 <kbd>Esc</kbd></button>
-        </div>`;
+            <button class="btn btn-sm" data-action="redeploy-cancel">${t("misc.common.cancel")} <kbd>Esc</kbd></button>
+        </div>`);
 }

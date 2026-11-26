@@ -1,11 +1,12 @@
 import type { GameEngine } from "../game/engine.ts";
 import { NEUTRAL } from "../game/types/world.ts";
 import type { Nation } from "../game/types/entities.ts";
-import { escapeHtml, renderGameText } from "./text.ts";
+import { t } from "../i18n/index.ts";
+import { escapeHtml, setGameHtml } from "./text.ts";
 import { NationPanel } from "./panels/nation.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 
-const BRIEF_TIP = "开局巡视：点击地图上的任意国家领土，左侧显示该国概况并高亮其疆界。\n点击右上角「开始游戏」，以当前选中的国家进入战役。";
+const BRIEF_TIP = t("misc.briefing.tip");
 
 export interface BriefingHooks {
     /** Highlight the nation's borders; the camera stays where the player put it. */
@@ -31,8 +32,8 @@ export class Briefing {
         this.engine = engine;
         this.hooks = hooks;
         this.panel = new NationPanel(engine, this.el, {
-            help: { title: "开局巡视", body: BRIEF_TIP },
-            footer: "点击地图上的其他国家查看概况 · 点击右上角「开始游戏」进入战役",
+            help: { title: t("misc.briefing.title"), body: BRIEF_TIP },
+            footer: t("misc.briefing.footer"),
         });
     }
 
@@ -44,7 +45,7 @@ export class Briefing {
         this.active = true;
         this.hud.classList.add("briefing-mode");
         this.shell.classList.add("briefing-mode");
-        this.endTurnBtn.innerHTML = `开始游戏 <kbd>E</kbd>`;
+        setGameHtml(this.endTurnBtn, `${t("misc.common.startGame")} <kbd>E</kbd>`);
         this.el.classList.remove("hidden");
         this.hintEl.classList.remove("hidden");
         this.selectNation(nationId);
@@ -85,16 +86,16 @@ export class Briefing {
     }
 
     private renderHint(nation: Nation): void {
-        this.hintEl.innerHTML = `<span>当前选中【<b>${nationFlagHtmlFor(this.engine.state, nation.id, 18)}${escapeHtml(nation.name)}</b>】 点击「开始游戏」</span>`;
+        setGameHtml(this.hintEl, `<span>${t("misc.briefing.hintBefore")}<b>${nationFlagHtmlFor(this.engine.state, nation.id, 18)}${escapeHtml(nation.name)}</b>${t("misc.briefing.hintAfter")}</span>`);
     }
 
     private close(): void {
         this.active = false;
         this.hud.classList.remove("briefing-mode");
         this.shell.classList.remove("briefing-mode");
-        this.endTurnBtn.innerHTML = `${renderGameText("结束[[turn]]")} <kbd>E</kbd>`;
+        setGameHtml(this.endTurnBtn, `${t("misc.common.endTurn")} <kbd>E</kbd>`);
         this.hintEl.classList.add("hidden");
-        this.hintEl.innerHTML = "";
+        setGameHtml(this.hintEl, "");
         this.el.classList.add("hidden");
         this.panel.destroy();
     }

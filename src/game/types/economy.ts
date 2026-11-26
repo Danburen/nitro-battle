@@ -1,5 +1,5 @@
 /** Resource caps, production, occupation and supply constants/data. */
-import { Biome } from "../../terrain/biome.ts";
+import { Biome } from "../terrain/biome.ts";
 
 export const START_FUNDS = 300;
 export const START_MANPOWER = 500;

@@ -4,7 +4,8 @@
  * Prints sample names per culture/terrain, or writes a JSON pool with --out.
  */
 import { writeFileSync } from "node:fs";
-import { LCGRandom } from "../utils/LCGRandom.ts";
+import { LCGRandom } from "./LCGRandom.ts";
+import { t } from "../i18n/index.ts";
 import { CULTURES, NameGenerator, TERRAIN_CLASSES } from "../game/generator/names.ts";
 import type { TerrainClass } from "../game/generator/names.ts";
 
@@ -47,6 +48,6 @@ if (out !== "") {
             console.log(`${CULTURES[culture].name} / ${terrain}: ${names.join("、")}`);
         }
         const regions = Array.from({ length: count }, () => generator.regionName(culture, "plain"));
-        console.log(`${CULTURES[culture].name} / 州: ${regions.join("、")}`);
+        console.log(`${CULTURES[culture].name} / ${t("misc.common.area.state")}: ${regions.join("、")}`);
     }
 }

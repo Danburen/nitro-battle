@@ -1,3 +1,5 @@
+import { t } from "../i18n/index.ts";
+import { chipToken } from "../utils/spec.ts";
 import { LCGRandom } from "../utils/LCGRandom.ts";
 import { nationDisplayColor } from "./access.ts";
 import { StandardAI } from "./ai/index.ts";
@@ -49,16 +51,14 @@ export class GameCore {
     }
 
     nationName(id: number): string {
-        return id === NEUTRAL ? "中立守军" : this.state.nations[id].name;
+        return id === NEUTRAL ? t("game.core.neutralGarrison") : this.state.nations[id].name;
     }
 
     /** Colored nation chip for log lines; falls back to plain text for invalid colors. */
     nationChip(id: number): string {
-        if (id === NEUTRAL) return "中立守军";
+        if (id === NEUTRAL) return t("game.core.neutralGarrison");
         const nation = this.state.nations[id];
-        const label = nation.name.replace(/[\\[\]]/g, "\\$&");
-        const color = nationDisplayColor(this.state, id);
-        return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? `[[chip:${color}|${label}]]` : label;
+        return chipToken(nationDisplayColor(this.state, id), nation.name);
     }
 
     invalidateReach(): void {

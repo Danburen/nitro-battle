@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import { ALLIANCE_INVITE_COOLDOWN, allianceOf, commonEnemy, joinAlliance, leaveAlliance } from "./alliance.ts";
 import {
     borderingNations, dropOffers, isAtWar, nationPower, setWar, TRUCE_DAYS, truceDays,
@@ -44,9 +45,9 @@ export interface VassalProfile {
  */
 export const VASSAL_PROFILES = {
     cooperative: {
-        name: "合作型",
-        short: "合作",
-        blurb: "上缴可调比例的[[funds]]与[[industry]]，换取保护与[[politics]]；独立性上限 300。",
+        get name() { return t("game.vassal.profile.cooperative.name"); },
+        get short() { return t("game.vassal.profile.cooperative.short"); },
+        get blurb() { return t("game.vassal.profile.cooperative.blurb"); },
         resourceShare: 0.15,
         resourceMin: 0.05,
         resourceMax: 0.4,
@@ -57,9 +58,9 @@ export const VASSAL_PROFILES = {
         independenceStart: 90,
     },
     autonomous: {
-        name: "自治型",
-        short: "自治",
-        blurb: "只上缴[[politics]]，宗主国仅提供保护；经济自主，独立性上限 100。",
+        get name() { return t("game.vassal.profile.autonomous.name"); },
+        get short() { return t("game.vassal.profile.autonomous.short"); },
+        get blurb() { return t("game.vassal.profile.autonomous.blurb"); },
         resourceShare: 0,
         resourceMin: 0,
         resourceMax: 0,
@@ -70,9 +71,9 @@ export const VASSAL_PROFILES = {
         independenceStart: 55,
     },
     oppressive: {
-        name: "压迫型",
-        short: "压迫",
-        blurb: "战败和谈的产物：上缴[[politics]]与固定比例[[funds]]，独立性上限 500，最易反叛。",
+        get name() { return t("game.vassal.profile.oppressive.name"); },
+        get short() { return t("game.vassal.profile.oppressive.short"); },
+        get blurb() { return t("game.vassal.profile.oppressive.blurb"); },
         resourceShare: 0.3,
         resourceMin: 0.3,
         resourceMax: 0.3,
@@ -98,14 +99,14 @@ const UPGRADE_WILL_MIN = 0.45;
 
 /** Full player-facing rules, shown by the [i] next to the vassal status. */
 export const VASSAL_HELP_BODY = [
-    "附庸国与宗主国使用相同的疆域背景色，只有国旗纹章不同；宗主国对所有类型的附庸都拥有通行权，附庸也可进入宗主国领土。",
+    t("game.vassal.help.territory"),
     "",
-    "独立性是唯一的附庸状态值：只会随时间和对宗主有利的贡赋被动增长，宗主国的保护与馈赠会降低它。自治型上限 100，合作型 300，压迫型 500；达到 80% 进入高位，容易倒戈或起义；达到上限时自治/合作型和平独立，压迫型起兵反叛。",
+    t("game.vassal.help.independence"),
     "",
-    "附庸参战取决于国家倾向：进攻、扩张倾向强的附庸乐于响应宗主的进攻战争；防御倾向强的附庸在宗主主动开战时不情愿。宗主是被侵略方时各附庸更愿援助。压迫型无条件参加宗主的每一场战争；玩家作为附庸会收到待处理召唤。",
-    "翻盘：恃强凌弱、机会主义扩张的附庸在宗主弱小、进攻方强大时会向进攻方求援独立，压迫型尤其如此；自治与合作型反叛倾向较低。独立性处在高位时更易发生。",
-    `契约改善：当附庸独立性达到上限的 60%、国家倾向愿意改善且攒够 [[politics:${VASSAL_UPGRADE_COST}]] 时，可请求宗主国改善契约（压迫型→合作型，合作型→自治型），宗主国可以拒绝。`,
-    "弱小国家可主动请求成为附庸（压迫型不可主动选择）；宗主国亦可要求弱国附庸。选中附庸后可在外交行动中调整贡赋比例与契约类型。",
+    t("game.vassal.help.war"),
+    t("game.vassal.help.defection"),
+    t("game.vassal.help.upgrade", { cost: VASSAL_UPGRADE_COST }),
+    t("game.vassal.help.request"),
 ].join("\n");
 
 /** Vassal-only thresholds read from the nation's own tendency and contract. */
@@ -254,7 +255,7 @@ export function setVassal(core: GameCore, vassalId: number, overlordId: number, 
     vassal.tributeRate = profile.resourceShare;
     core.invalidateReach();
     state.supplyDirty = true;
-    core.log(`${core.nationChip(vassalId)} 成为 ${core.nationChip(overlordId)} 的${profile.name}附庸`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.became", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId), type: profile.name }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
     });
@@ -277,7 +278,7 @@ export function releaseVassal(core: GameCore, vassalId: number, peaceful = true)
         state.truce[overlord][vassalId] = until;
     }
     core.invalidateReach();
-    core.log(`${core.nationChip(vassalId)} 脱离 ${core.nationChip(overlord)}，恢复独立`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.independent", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlord) }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
     });
@@ -307,7 +308,7 @@ export function changeVassalType(core: GameCore, vassalId: number, type: VassalT
         profile.independenceCap * 0.7,
         Math.max(profile.independenceStart, ratio * profile.independenceCap),
     );
-    core.log(`${core.nationChip(vassalId)} 的附庸契约由${VASSAL_PROFILES[current].name}改为${profile.name}`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.contractChanged", { vassal: core.nationChip(vassalId), oldType: VASSAL_PROFILES[current].name, newType: profile.name }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
     });
@@ -326,7 +327,7 @@ export function adjustTributeRate(core: GameCore, vassalId: number, delta: numbe
     const next = Math.max(profile.resourceMin, Math.min(profile.resourceMax, current + delta));
     if (Math.abs(next - current) < 1e-9) return false;
     state.nations[vassalId].tributeRate = next;
-    core.log(`${core.nationChip(vassalId)} 将贡赋调整为 ${Math.round(next * 100)}%`, "diplo", vassalId);
+    core.log(t("game.vassal.tributeAdjusted", { vassal: core.nationChip(vassalId), rate: Math.round(next * 100) }), "diplo", vassalId);
     core.emit({ type: "state" });
     return true;
 }
@@ -367,7 +368,7 @@ function applyVassalUpgrade(core: GameCore, vassalId: number, target: VassalType
     nation.independence = Math.min(
         profile.independenceCap * 0.7, Math.max(profile.independenceStart, ratio * profile.independenceCap),
     );
-    core.log(`${core.nationChip(vassalId)} 的附庸契约改善为${profile.name}`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.contractUpgraded", { vassal: core.nationChip(vassalId), type: profile.name }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
     });
@@ -378,20 +379,20 @@ function applyVassalUpgrade(core: GameCore, vassalId: number, target: VassalType
 
 /** The overlord's side of a contract upgrade; the vassal's own gate is `canRequestUpgrade`. */
 export function decideUpgrade(state: GameState, overlordId: number, vassalId: number): DiplomaticDecision {
-    if (!living(state, overlordId) || !living(state, vassalId)) return deny("契约对象已不具备资格");
+    if (!living(state, overlordId) || !living(state, vassalId)) return deny(t("game.vassal.decision.ineligible"));
     const tendency = state.nations[overlordId].tendency;
     const minimum = tendency === "isolated" ? 0.7
         : tendency === "hegemon" || tendency === "militarist" ? 0.6
             : UPGRADE_WILL_MIN;
     const will = vassalTuningOf(state, vassalId).upgradeWill;
     const tendencyFactor = tendency === "isolated"
-        ? minus("宗主倾向孤立，对契约改善格外谨慎")
+        ? minus(t("game.vassal.upgrade.isolatedCautious"))
         : tendency === "hegemon" || tendency === "militarist"
-            ? minus("宗主倾向强势，对契约改善较为谨慎")
-            : plus("宗主对契约改善没有额外戒心");
+            ? minus(t("game.vassal.upgrade.hegemonCautious"))
+            : plus(t("game.vassal.upgrade.noConcern"));
     const willFactor = will >= minimum
-        ? plus("附庸改善意愿达到其要求")
-        : minus("附庸改善意愿未达到其要求");
+        ? plus(t("game.vassal.upgrade.willMet"))
+        : minus(t("game.vassal.upgrade.willUnmet"));
     const accepts = will >= minimum;
     return {
         accepts,
@@ -414,14 +415,14 @@ export function requestVassalUpgrade(core: GameCore, vassalId: number): boolean 
         if (requestCooldownDays(state, "upgrade", overlord) > 0) return false;
         const request = queuePlayerProposal(state, "upgrade", 0, overlord, { vassalType: target });
         if (!request) return false;
-        core.log(`我方请求 ${core.nationChip(overlord)} 改善附庸契约，等待答复`, "diplo", 0);
+        core.log(t("game.vassal.upgrade.playerRequested", { overlord: core.nationChip(overlord) }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
     if (overlord === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "upgrade", vassalId, overlord, { vassalType: target });
         if (!request) return false;
-        core.log(`${core.nationChip(vassalId)} 请求改善附庸契约（${VASSAL_PROFILES[target].name}）`, "diplo", vassalId);
+        core.log(t("game.vassal.upgrade.requested", { vassal: core.nationChip(vassalId), type: VASSAL_PROFILES[target].name }), "diplo", vassalId);
         core.emit({ type: "state" });
         return true;
     }
@@ -431,7 +432,7 @@ export function requestVassalUpgrade(core: GameCore, vassalId: number): boolean 
         return applyVassalUpgrade(core, vassalId, target);
     }
     setPairCooldown(state.vassalCooldown, vassalId, overlord, state.day + VASSAL_OFFER_COOLDOWN);
-    core.log(`${core.nationChip(overlord)} 拒绝 ${core.nationChip(vassalId)} 的契约改善请求`, "diplo", overlord);
+    core.log(t("game.vassal.upgrade.rejected", { overlord: core.nationChip(overlord), vassal: core.nationChip(vassalId) }), "diplo", overlord);
     core.emit({ type: "state" });
     return false;
 }
@@ -462,7 +463,7 @@ export function applyVassalCallToArms(core: GameCore, overlordId: number, enemyI
         if (vassalId === 0) {
             const request = createDiplomaticRequest(state, "call", overlordId, 0, { enemy: enemyId });
             if (request) {
-                core.log(`${core.nationChip(overlordId)} 号召 ${core.nationChip(0)} 履行附庸义务，对 ${core.nationChip(enemyId)} 作战`, "diplo", overlordId);
+                core.log(t("game.vassal.call.player", { overlord: core.nationChip(overlordId), player: core.nationChip(0), enemy: core.nationChip(enemyId) }), "diplo", overlordId);
                 core.emit({ type: "state" });
             }
             continue;
@@ -486,13 +487,13 @@ export function applyVassalCallToArms(core: GameCore, overlordId: number, enemyI
             willingness = 0.45 + 0.4 * (1 - tuning.callToArmsAccept);
         }
         if (Math.max(0, Math.min(1, willingness)) <= core.rand.nextFloat()) {
-            core.log(`${core.nationChip(vassalId)} 拒绝 ${core.nationChip(overlordId)} 的参战号召`, "diplo", vassalId);
+            core.log(t("game.vassal.call.refused", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId) }), "diplo", vassalId);
             continue;
         }
         setWar(state, vassalId, enemyId, true);
         joined.push(vassalId);
         if (!quiet) {
-            core.log(`${core.nationChip(vassalId)} 响应宗主召唤，对 ${core.nationChip(enemyId)} 宣战`, "diplo", vassalId, true, {
+            core.log(t("game.vassal.call.joined", { vassal: core.nationChip(vassalId), enemy: core.nationChip(enemyId) }), "diplo", vassalId, true, {
                 kind: "war",
                 nation: vassalId,
             });
@@ -514,7 +515,7 @@ export function tickVassalTribute(core: GameCore): void {
         if (overlordId < 0) {
             if (nation.overlord !== undefined && nation.overlord >= 0) {
                 clearVassalFields(nation);
-                core.log(`${core.nationChip(nation.id)} 的宗主国已不存在，恢复独立`, "system", nation.id);
+                core.log(t("game.vassal.overlordGone", { nation: core.nationChip(nation.id) }), "system", nation.id);
                 core.emit({ type: "relations" });
             }
             continue;
@@ -586,7 +587,7 @@ export function tickVassalIndependence(core: GameCore): void {
             if (type === "oppressive") {
                 rebelVassal(core, nation.id, overlord);
             } else if (releaseVassal(core, nation.id, true)) {
-                core.log(`${core.nationChip(nation.id)} 的独立性达到上限，和平脱离 ${core.nationChip(overlord)}`, "diplo", nation.id);
+                core.log(t("game.vassal.independenceCap", { nation: core.nationChip(nation.id), overlord: core.nationChip(overlord) }), "diplo", nation.id);
             }
             continue;
         }
@@ -604,7 +605,7 @@ function rebelVassal(core: GameCore, vassalId: number, overlordId: number): void
     removePairRequests(state, vassalId, overlordId);
     setWar(state, vassalId, overlordId, true);
     core.invalidateReach();
-    core.log(`${core.nationChip(vassalId)} 宣布独立，起兵反抗宗主 ${core.nationChip(overlordId)}`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.rebelled", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId) }), "diplo", vassalId, true, {
         kind: "war",
         nation: vassalId,
     });
@@ -615,22 +616,22 @@ function rebelVassal(core: GameCore, vassalId: number, overlordId: number): void
 
 /** The overlord's willingness to accept a voluntary vassal offer. */
 export function decideVassalOffer(state: GameState, overlord: number, vassal: number, type: VassalType): DiplomaticDecision {
-    if (!living(state, overlord) || !living(state, vassal)) return deny("对象已不具备资格");
-    if (isAtWar(state, overlord, vassal)) return deny("正与请求方交战");
-    if (state.nations[overlord].tendency === "isolated") return deny("倾向孤立，不接纳附庸");
+    if (!living(state, overlord) || !living(state, vassal)) return deny(t("game.decision.ineligible"));
+    if (isAtWar(state, overlord, vassal)) return deny(t("game.vassal.offer.atWar"));
+    if (state.nations[overlord].tendency === "isolated") return deny(t("game.vassal.offer.isolated"));
     const ratio = nationPower(state, overlord) / Math.max(1, nationPower(state, vassal));
     const minimum = type === "autonomous" ? 1.2 : 1.35;
     const factors: DecisionFactor[] = [
         ratio >= minimum
-            ? plus("实力达到接纳附庸的门槛")
-            : minus("实力未达到接纳附庸的门槛"),
+            ? plus(t("game.vassal.offer.powerMet"))
+            : minus(t("game.vassal.offer.powerUnmet")),
     ];
     // A protector already fighting a major war is less eager to inherit another front.
     const atWar = state.war[overlord]?.some(Boolean) === true;
     if (atWar) {
         factors.push(ratio >= 1.8
-            ? plus("虽在战争中，实力仍足以再保护一方")
-            : minus("自身正在战争中，无力再接纳附庸"));
+            ? plus(t("game.vassal.offer.warPowerMet"))
+            : minus(t("game.vassal.offer.warPowerUnmet")));
     }
     const accepts = ratio >= minimum && (!atWar || ratio >= 1.8);
     return {
@@ -654,14 +655,14 @@ export function requestVassalization(
         if (requestCooldownDays(state, "vassalize", overlordId) > 0) return false;
         const request = queuePlayerProposal(state, "vassalize", 0, overlordId, { vassalType: type });
         if (!request) return false;
-        core.log(`我方请求成为 ${core.nationChip(overlordId)} 的${VASSAL_PROFILES[type].name}附庸，等待答复`, "diplo", 0);
+        core.log(t("game.vassal.offer.playerRequested", { overlord: core.nationChip(overlordId), type: VASSAL_PROFILES[type].name }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
     if (overlordId === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "vassalize", vassalId, overlordId, { vassalType: type });
         if (!request) return false;
-        core.log(`${core.nationChip(vassalId)} 请求成为 ${core.nationChip(overlordId)} 的${VASSAL_PROFILES[type].name}附庸`, "diplo", vassalId);
+        core.log(t("game.vassal.offer.requested", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId), type: VASSAL_PROFILES[type].name }), "diplo", vassalId);
         core.emit({ type: "state" });
         return true;
     }
@@ -669,28 +670,28 @@ export function requestVassalization(
         return setVassal(core, vassalId, overlordId, type);
     }
     setPairCooldown(state.vassalCooldown, vassalId, overlordId, state.day + VASSAL_OFFER_COOLDOWN);
-    core.log(`${core.nationChip(overlordId)} 拒绝 ${core.nationChip(vassalId)} 的附庸请求`, "diplo", overlordId);
+    core.log(t("game.vassal.offer.rejected", { overlord: core.nationChip(overlordId), vassal: core.nationChip(vassalId) }), "diplo", overlordId);
     core.emit({ type: "state" });
     return false;
 }
 
 /** Willingness of a coerced target to submit; the player-side gate is `canBecomeVassal`. */
 export function decideVassalDemand(state: GameState, overlord: number, vassal: number): DiplomaticDecision {
-    if (!living(state, overlord) || !living(state, vassal)) return deny("对象已不具备资格");
+    if (!living(state, overlord) || !living(state, vassal)) return deny(t("game.decision.ineligible"));
     const ratio = nationPower(state, overlord) / Math.max(1, nationPower(state, vassal));
     const losing = state.war[vassal]?.some(Boolean) === true;
     if (ratio >= 1.8) {
-        return { accepts: true, factors: [plus("实力形成压倒性优势")], verdict: "sure" };
+        return { accepts: true, factors: [plus(t("game.vassal.demand.overwhelming"))], verdict: "sure" };
     }
     if (losing && ratio >= 1.25) {
         return {
             accepts: true,
-            factors: [plus("对方正陷入战争"), plus("实力优势足以逼其屈服")],
+            factors: [plus(t("game.vassal.demand.targetAtWar")), plus(t("game.vassal.demand.powerCoerce"))],
             verdict: "likely",
         };
     }
-    const factors: DecisionFactor[] = [minus("实力优势不足")];
-    if (!losing) factors.push(minus("对方并未陷入战争"));
+    const factors: DecisionFactor[] = [minus(t("game.vassal.demand.powerInsufficient"))];
+    if (!losing) factors.push(minus(t("game.vassal.demand.targetPeaceful")));
     return { accepts: false, factors, verdict: "refuse" };
 }
 
@@ -704,7 +705,7 @@ export function demandVassalization(core: GameCore, overlordId: number, vassalId
             vassalType: "oppressive", demand: true,
         });
         if (!request) return false;
-        core.log(`我方要求 ${core.nationChip(vassalId)} 成为压迫型附庸，等待答复`, "diplo", 0);
+        core.log(t("game.vassal.demand.playerRequested", { vassal: core.nationChip(vassalId), type: VASSAL_PROFILES.oppressive.name }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
@@ -713,7 +714,7 @@ export function demandVassalization(core: GameCore, overlordId: number, vassalId
             vassalType: "oppressive", demand: true,
         });
         if (!request) return false;
-        core.log(`${core.nationChip(overlordId)} 要求 ${core.nationChip(vassalId)} 成为压迫型附庸`, "diplo", overlordId);
+        core.log(t("game.vassal.demand.requested", { overlord: core.nationChip(overlordId), vassal: core.nationChip(vassalId), type: VASSAL_PROFILES.oppressive.name }), "diplo", overlordId);
         core.emit({ type: "state" });
         return true;
     }
@@ -721,7 +722,7 @@ export function demandVassalization(core: GameCore, overlordId: number, vassalId
         return setVassal(core, vassalId, overlordId, "oppressive");
     }
     setPairCooldown(state.vassalCooldown, overlordId, vassalId, state.day + VASSAL_OFFER_COOLDOWN);
-    core.log(`${core.nationChip(vassalId)} 拒绝 ${core.nationChip(overlordId)} 的附庸要求`, "diplo", vassalId);
+    core.log(t("game.vassal.demand.rejected", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId) }), "diplo", vassalId);
     core.emit({ type: "state" });
     return false;
 }
@@ -760,27 +761,27 @@ export function canRequestAid(state: GameState, vassalId: number): boolean {
  */
 export function decideAid(state: GameState, vassalId: number, helperId: number): DiplomaticDecision {
     const overlord = overlordOf(state, vassalId);
-    if (overlord < 0 || !living(state, helperId)) return deny("目标已不具备求援资格");
+    if (overlord < 0 || !living(state, helperId)) return deny(t("game.vassal.aid.ineligible"));
     const decisive: DecisionFactor[] = [];
-    if (isAtWar(state, helperId, overlord)) decisive.push(plus("正与宗主国交战"));
-    if (commonEnemy(state, helperId, vassalId) !== null) decisive.push(plus("有共同敌人"));
+    if (isAtWar(state, helperId, overlord)) decisive.push(plus(t("game.vassal.aid.atWar")));
+    if (commonEnemy(state, helperId, vassalId) !== null) decisive.push(plus(t("game.vassal.aid.commonEnemy")));
     if (decisive.length > 0) return { accepts: true, factors: decisive, verdict: "sure" };
     const profile = state.nations[helperId].tendency;
     const eager = profile === "militarist" || profile === "hegemon" || profile === "bully" ||
         profile === "opportunist";
     const open = profile === "ideologue" || profile === "trader";
     const tendencyFactor: DecisionFactor = eager
-        ? plus("倾向乐于介入他国冲突")
+        ? plus(t("game.vassal.aid.eagerTendency"))
         : open
-            ? plus("倾向较愿意介入")
-            : minus("倾向不愿介入他国冲突");
+            ? plus(t("game.vassal.aid.openTendency"))
+            : minus(t("game.vassal.aid.reluctantTendency"));
     if (!eager && !open) return { accepts: false, factors: [tendencyFactor], verdict: "refuse" };
 
     const threshold = eager ? 0.7 : 0.8;
     const ratio = nationPower(state, helperId) / Math.max(1, nationPower(state, overlord));
     const powerFactor: DecisionFactor = ratio >= threshold
-        ? plus("实力强于宗主国")
-        : minus("实力不足以压制宗主国");
+        ? plus(t("game.vassal.aid.powerStrong"))
+        : minus(t("game.vassal.aid.powerWeak"));
     const accepts = ratio >= threshold;
     return {
         accepts,
@@ -812,7 +813,7 @@ function applyAid(core: GameCore, helperId: number, vassalId: number): void {
         ((profile === "militarist" || profile === "hegemon" || profile === "bully" ||
             profile === "opportunist" || profile === "ideologue") && truceDays(state, helperId, overlord) === 0);
     if (!isAtWar(state, helperId, overlord) && willingToFight) setWar(state, helperId, overlord, true);
-    core.log(`${core.nationChip(helperId)} 援助 ${core.nationChip(vassalId)}（[[funds:${funds}]] · [[politics:${pp}]]）`, "diplo", helperId);
+    core.log(t("game.vassal.aid.granted", { helper: core.nationChip(helperId), vassal: core.nationChip(vassalId), funds, pp }), "diplo", helperId);
     core.emit({ type: "state" });
 }
 
@@ -827,14 +828,14 @@ export function requestForeignAid(core: GameCore, vassalId: number, helperId?: n
         if (requestCooldownDays(state, "aid", helper) > 0) return false;
         const request = queuePlayerProposal(state, "aid", 0, helper);
         if (!request) return false;
-        core.log(`我方请求 ${core.nationChip(helper)} 提供外援，等待答复`, "diplo", 0);
+        core.log(t("game.vassal.aid.playerRequested", { helper: core.nationChip(helper) }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
     if (helper === 0 && vassalId !== 0) {
         const request = createDiplomaticRequest(state, "aid", vassalId, 0);
         if (!request) return false;
-        core.log(`${core.nationChip(vassalId)} 请求 ${core.nationChip(0)} 提供外援`, "diplo", vassalId);
+        core.log(t("game.vassal.aid.requested", { vassal: core.nationChip(vassalId), helper: core.nationChip(0) }), "diplo", vassalId);
         core.emit({ type: "state" });
         return true;
     }
@@ -843,7 +844,7 @@ export function requestForeignAid(core: GameCore, vassalId: number, helperId?: n
         return true;
     }
     state.nations[vassalId].lastAidDay = state.day;
-    core.log(`${core.nationChip(helper)} 拒绝 ${core.nationChip(vassalId)} 的求援`, "diplo", helper);
+    core.log(t("game.vassal.aid.rejected", { helper: core.nationChip(helper), vassal: core.nationChip(vassalId) }), "diplo", helper);
     core.emit({ type: "state" });
     return false;
 }
@@ -860,7 +861,7 @@ export function joinVassalDefense(core: GameCore, aggressor: number, defender: n
     if (isProtectedRelation(state, overlord, aggressor)) return -1;
     setWar(state, overlord, aggressor, true);
     if (!quiet) {
-        core.log(`${core.nationChip(overlord)} 履行保护义务，对 ${core.nationChip(aggressor)} 宣战`, "diplo", overlord, true, {
+        core.log(t("game.vassal.defense.declared", { overlord: core.nationChip(overlord), aggressor: core.nationChip(aggressor) }), "diplo", overlord, true, {
             kind: "war",
             nation: overlord,
         });
@@ -884,7 +885,7 @@ function refuse(
 ): void {
     const state = core.state;
     setPairCooldown(matrix, request.from, request.to, state.day + days);
-    core.log(`${core.nationChip(request.to)} 拒绝 ${core.nationChip(request.from)} 的${offer}`, "diplo", request.to);
+    core.log(t("game.vassal.request.refused", { to: core.nationChip(request.to), from: core.nationChip(request.from), offer }), "diplo", request.to);
     core.emit({ type: "state" });
 }
 
@@ -896,7 +897,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             request.demand ? request.from : request.to,
             request.vassalType ?? "autonomous",
         ),
-        decline: (core, request) => refuse(core, request, core.state.vassalCooldown, VASSAL_OFFER_COOLDOWN, "附庸提议"),
+        decline: (core, request) => refuse(core, request, core.state.vassalCooldown, VASSAL_OFFER_COOLDOWN, t("game.requests.vassalize")),
         expire: (state, request) => setPairCooldown(
             state.vassalCooldown, request.from, request.to, state.day + VASSAL_OFFER_COOLDOWN,
         ),
@@ -906,7 +907,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             const alliance = core.state.alliances.find((entry) => entry.id === request.allianceId);
             return alliance !== undefined && joinAlliance(core, alliance, request.to);
         },
-        decline: (core, request) => refuse(core, request, core.state.allianceCooldown, ALLIANCE_INVITE_COOLDOWN, "结盟邀请"),
+        decline: (core, request) => refuse(core, request, core.state.allianceCooldown, ALLIANCE_INVITE_COOLDOWN, t("game.requests.alliance")),
         expire: (state, request) => setPairCooldown(
             state.allianceCooldown, request.from, request.to, state.day + ALLIANCE_INVITE_COOLDOWN,
         ),
@@ -922,7 +923,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             vassal.politicalPower -= VASSAL_UPGRADE_COST;
             return applyVassalUpgrade(core, request.from, target);
         },
-        decline: (core, request) => refuse(core, request, core.state.vassalCooldown, VASSAL_OFFER_COOLDOWN, "契约改善请求"),
+        decline: (core, request) => refuse(core, request, core.state.vassalCooldown, VASSAL_OFFER_COOLDOWN, t("game.requests.upgrade")),
         expire: (state, request) => setPairCooldown(
             state.vassalCooldown, request.from, request.to, state.day + VASSAL_OFFER_COOLDOWN,
         ),
@@ -934,7 +935,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             if (typeof enemy !== "number" || enemy < 0) return false;
             if (overlordOf(state, 0) !== request.from || isAtWar(state, 0, enemy)) return false;
             setWar(state, 0, enemy, true);
-            core.log(`${core.nationChip(0)} 响应宗主召唤，对 ${core.nationChip(enemy)} 宣战`, "diplo", 0, true, {
+            core.log(t("game.vassal.call.joined", { vassal: core.nationChip(0), enemy: core.nationChip(enemy) }), "diplo", 0, true, {
                 kind: "war",
                 nation: 0,
             });
@@ -947,7 +948,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
             const state = core.state;
             const cap = independenceCapOf(state, 0);
             shiftIndependence(state, 0, cap * 0.05);
-            core.log(`${core.nationChip(0)} 拒绝 ${core.nationChip(request.from)} 的召唤，独立性上升`, "diplo", 0);
+            core.log(t("game.vassal.call.playerRefused", { player: core.nationChip(0), overlord: core.nationChip(request.from) }), "diplo", 0);
             core.emit({ type: "state" });
         },
     },
@@ -959,7 +960,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
         decline: (core, request) => {
             const state = core.state;
             if (state.nations[request.from]) state.nations[request.from].lastAidDay = state.day;
-            core.log(`${core.nationChip(request.to)} 拒绝 ${core.nationChip(request.from)} 的求援`, "diplo", request.to);
+            core.log(t("game.vassal.aid.rejected", { helper: core.nationChip(request.to), vassal: core.nationChip(request.from) }), "diplo", request.to);
             core.emit({ type: "state" });
         },
         expire: (state, request) => {
@@ -969,7 +970,7 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
     trade: {
         accept: (core, request) => acceptTradeRequest(core, request),
         decline: (core, request) => {
-            core.log(`${core.nationChip(request.to)} 拒绝 ${core.nationChip(request.from)} 的贸易提议`, "diplo", request.to);
+            core.log(t("game.vassal.request.refused", { to: core.nationChip(request.to), from: core.nationChip(request.from), offer: t("game.requests.trade") }), "diplo", request.to);
             core.emit({ type: "state" });
         },
     },
@@ -1049,7 +1050,7 @@ function defectVassal(core: GameCore, vassalId: number, overlordId: number): boo
         core.emit({ type: "war", aggressor: vassalId, defender: overlordId });
     }
     core.invalidateReach();
-    core.log(`${core.nationChip(vassalId)} 倒向 ${core.nationChip(protector)}，不再效忠 ${core.nationChip(overlordId)}`, "diplo", vassalId, true, {
+    core.log(t("game.vassal.defection.defected", { vassal: core.nationChip(vassalId), protector: core.nationChip(protector), overlord: core.nationChip(overlordId) }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
     });

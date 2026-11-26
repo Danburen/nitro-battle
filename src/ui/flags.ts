@@ -1,6 +1,7 @@
 import type { GameState } from "../game/types/state.ts";
 import type { Nation } from "../game/types/entities.ts";
 import { nationDisplayColor } from "../game/access.ts";
+import { t } from "../i18n/index.ts";
 import { escapeHtml } from "./text.ts";
 
 /**
@@ -58,7 +59,7 @@ export function nationFlagSpec(
     return {
         color,
         accent: flagAccent(color),
-        emblem: emblemName(nation.name || "无名邦国"),
+        emblem: emblemName(nation.name || t("misc.flags.unknown")),
         vassal: (nation.overlord ?? -1) >= 0,
     };
 }
@@ -70,7 +71,10 @@ export function nationFlagHtml(
 ): string {
     const spec = nationFlagSpec(nation, displayColor);
     const height = Math.max(12, Math.round(size * 0.6));
-    const label = `${nation.name}${spec.vassal ? "（附庸国）" : ""}的旗帜`;
+    const label = t("misc.flags.ariaLabel", {
+        name: nation.name,
+        vassal: spec.vassal ? t("misc.flags.vassalSuffix") : "",
+    });
     return `<span class="nation-flag${spec.vassal ? " is-vassal" : ""}" role="img" aria-label="${escapeHtml(label)}" style="--flag-w:${size}px;--flag-h:${height}px;--flag-bg:${escapeHtml(spec.color)};--flag-fg:${spec.accent};--flag-emblem:url('./assets/flags/emblem-${spec.emblem}.svg')"><i></i></span>`;
 }
 

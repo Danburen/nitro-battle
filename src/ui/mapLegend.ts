@@ -1,4 +1,4 @@
-import { escapeHtml, iconMaskStyle, renderGameText } from "./text.ts";
+import { escapeHtml, iconMaskStyle, setGameHtml } from "./text.ts";
 
 export interface LegendIcon {
     /** External SVG name in `public/assets/icons/`. */
@@ -55,15 +55,15 @@ export class MapLegend {
         this.signature = signature;
         if (!spec) {
             this.el.classList.add("hidden");
-            this.el.innerHTML = "";
+            setGameHtml(this.el, "");
             return;
         }
         const items = spec.items
             .map((item) => `<span class="map-legend-item">${markerHtml(item)}${escapeHtml(item.label)}</span>`)
             .join("");
-        this.el.innerHTML = `<div class="map-legend-head">${escapeHtml(spec.title)}</div>
+        setGameHtml(this.el, `<div class="map-legend-head">${escapeHtml(spec.title)}</div>
             <div class="map-legend-items">${items}</div>
-            ${spec.note ? `<p class="map-legend-note">${renderGameText(spec.note)}</p>` : ""}`;
+            ${spec.note ? `<p class="map-legend-note">${spec.note}</p>` : ""}`);
         this.el.classList.remove("hidden");
     }
 }

@@ -1,4 +1,4 @@
-import type { UIContext } from "./context.ts";
+import type { UIContext, UIDispatchData, UIDispatchOptions } from "./context.ts";
 import { isArmyAutoManaged } from "../game/auto.ts";
 import { AUTO_GLOBAL_LOCK_TIP } from "./common.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
@@ -7,31 +7,31 @@ import { VASSAL_PROFILES, validVassalType } from "../game/vassal.ts";
 import { REQUEST_COOLDOWN_DAYS, requestCooldownDays } from "../game/requests.ts";
 import { REGIMENT_CAP } from "../game/types/unit.ts";
 import type { DiplomaticRequestKind, VassalType } from "../game/types/diplomacy.ts";
-import { textToken } from "./text.ts";
+import { t } from "../i18n/index.ts";
 import { proposalCooldownTip } from "./trade.ts";
 
 /** Training, construction and policy switches (dock panels). */
-export function handleEconomyAction(ctx: UIContext, action: string, target: HTMLElement): boolean {
+export function handleEconomyAction(ctx: UIContext, action: string, data: UIDispatchData): boolean {
     const state = ctx.engine.state;
 
     if (action === "train") {
-        const kind = Number(target.dataset.kind) as 0 | 1 | 2;
+        const kind = Number(data.kind) as 0 | 1 | 2;
         const site = state.selected;
         const destination = site !== null && state.provinces[site].owner === 0 ? site : null;
         if (ctx.engine.queueTrain(kind, destination)) {
             ctx.sound.play("recruit");
-            ctx.toast("已加入训练队列");
+            ctx.toast(t("actions.economy.train.success"));
         } else {
             ctx.sound.play("error");
-            ctx.toast("无法训练：资金、人力或工业不足");
+            ctx.toast(t("actions.economy.train.fail"));
         }
         return true;
     }
 
     if (action === "train-cancel") {
-        if (ctx.engine.cancelTrain(Number(target.dataset.order))) {
+        if (ctx.engine.cancelTrain(Number(data.order))) {
             ctx.sound.play("select");
-            ctx.toast("已取消训练并返还半数资源");
+            ctx.toast(t("actions.economy.train.cancel.success"));
         } else {
             ctx.sound.play("error");
         }
@@ -39,9 +39,9 @@ export function handleEconomyAction(ctx: UIContext, action: string, target: HTML
     }
 
     if (action === "build-cancel") {
-        if (ctx.engine.cancelBuild(Number(target.dataset.order))) {
+        if (ctx.engine.cancelBuild(Number(data.order))) {
             ctx.sound.play("select");
-            ctx.toast("已取消施工并返还半数资源");
+            ctx.toast(t("actions.economy.build.cancel.success"));
         } else {
             ctx.sound.play("error");
         }
@@ -52,7 +52,7 @@ export function handleEconomyAction(ctx: UIContext, action: string, target: HTML
 }
 
 /** Claims, diplomatic preparation, war goals and white peace (dock diplomacy tab). */
-export function handleDiplomacyAction(ctx: UIContext, action: string, target: HTMLElement): boolean {
+export function handleDiplomacyAction(ctx: UIContext, action: string, data: UIDispatchData, options: UIDispatchOptions): boolean {
     if (![
         "claim-state", "claim-cancel", "claim-locate", "prepare-diplomacy", "cancel-diplomacy", "declare", "enforce-war-goal",
         "propose-peace", "accept-peace", "reject-peace",
@@ -71,118 +71,116 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
         fail(days > 0 ? proposalCooldownTip(days) : fallback);
     };
     if (state.winner !== null) {
-        fail("战役已结束，无法进行外交操作");
+        fail(t("actions.diplomacy.ended"));
         return true;
     }
-    if (target.classList.contains("cooldown")) {
-        fail(target.dataset.tooltipBody ?? "向该国家发送请求太频繁，请稍后再尝试");
+    if (options.cooldown) {
+        fail(options.cooldownTooltip ?? t("actions.diplomacy.cooldownFallback"));
         return true;
     }
-    const nationId = Number(target.dataset.nation);
-    const nationName = state.nations[nationId]?.name ?? "中立独立区域";
-    const select = target.closest("[data-diplo-card]")?.querySelector<HTMLSelectElement>("[data-diplo-state]");
-    const selectedState = select && select.value !== "" ? Number(select.value) : null;
-    const dataState = target.dataset.state === undefined ? NaN : Number(target.dataset.state);
+    const nationId = Number(data.nation);
+    const nationName = state.nations[nationId]?.name ?? t("actions.diplomacy.unknownNation");
+    const selectedState = options.selectedState ?? null;
+    const dataState = data.state === undefined ? NaN : Number(data.state);
     const resolvedState = Number.isInteger(dataState) && state.states[dataState] ? dataState : selectedState;
     const stateId = resolvedState !== null && Number.isInteger(resolvedState) && state.states[resolvedState] ? resolvedState : null;
-    const actionId = target.dataset.diplomaticId === undefined ? NaN : Number(target.dataset.diplomaticId);
+    const actionId = data.diplomaticId === undefined ? NaN : Number(data.diplomaticId);
 
     if (action === "claim-state") {
-        if (stateId === null) fail("请先选择有效的目标州");
-        else if (ctx.engine.claimState(stateId)) ctx.toast(`已提出${state.states[stateId].name}的州宣称；尚需制造战争借口`);
-        else fail("无法宣称：请检查[[politics]]、邻接与正式归属条件，或该州已被宣称");
+        if (stateId === null) fail(t("actions.diplomacy.claim.invalidState"));
+        else if (ctx.engine.claimState(stateId)) ctx.toast(t("actions.diplomacy.claim.success", { name: state.states[stateId].name }));
+        else fail(t("actions.diplomacy.claim.fail"));
     } else if (action === "claim-cancel") {
-        if (stateId === null) fail("无法取消：目标州无效");
+        if (stateId === null) fail(t("actions.diplomacy.claim.cancel.invalidState"));
         else if (ctx.engine.cancelClaim(stateId)) {
             ctx.sound.play("select");
-            ctx.toast(`已取消${state.states[stateId].name}的州宣称，返还 ${textToken("politics", CLAIM_COST)}`);
-        } else fail("无法取消宣称：该州没有我方宣称，或正与其归属国交战");
+            ctx.toast(t("actions.diplomacy.claim.cancel.success", { name: state.states[stateId].name, cost: CLAIM_COST }));
+        } else fail(t("actions.diplomacy.claim.cancel.fail"));
     } else if (action === "claim-locate") {
-        if (stateId === null) fail("无法定位：目标州无效");
+        if (stateId === null) fail(t("actions.diplomacy.claim.locate.invalidState"));
         else {
             ctx.centerSite(state.states[stateId].center);
             ctx.sound.play("select");
         }
     } else if (action === "prepare-diplomacy") {
-        const kind = target.dataset.kind;
+        const kind = data.kind;
         if (kind !== "conquest" && kind !== "annex") {
-            fail("外交准备类型无效，请重新打开外交页");
+            fail(t("actions.diplomacy.prepare.invalidKind"));
         } else if (kind !== "annex" && stateId === null) {
-            fail("请先选择符合条件的目标州");
+            fail(t("actions.diplomacy.prepare.invalidState"));
         } else if (ctx.engine.prepareDiplomaticAction(kind, nationId, kind === "annex" ? null : stateId)) {
-            ctx.toast("已开始制造战争借口：每日消耗[[politics]]，就绪后可宣战");
+            ctx.toast(t("actions.diplomacy.prepare.success"));
         } else {
-            fail("无法准备：请检查[[politics]]、宣称、邻接和停战条件；每国仅能计时一项，同一目标不可重复");
+            fail(t("actions.diplomacy.prepare.fail"));
         }
     } else if (action === "cancel-diplomacy") {
-        if (Number.isInteger(actionId) && ctx.engine.cancelDiplomaticAction(actionId)) ctx.toast("已取消外交项目：制造中返还创建[[politics]]，已消耗维护不退还");
-        else fail("无法取消：外交项目不存在、已被消耗，或不属于我方");
+        if (Number.isInteger(actionId) && ctx.engine.cancelDiplomaticAction(actionId)) ctx.toast(t("actions.diplomacy.prepare.cancel.success"));
+        else fail(t("actions.diplomacy.prepare.cancel.fail"));
     } else if (action === "declare") {
-        if (!Number.isInteger(actionId)) fail("无法宣战：请先完成有效战争借口，并使用该借口的宣战按钮");
-        else if (ctx.engine.declareWar(nationId, actionId)) ctx.toast(`已向${nationName}宣战，按约定目标逐省争夺`);
-        else fail("无法宣战：借口尚未就绪、已过期或目标失效；也可能仍在停战期或已交战");
+        if (!Number.isInteger(actionId)) fail(t("actions.diplomacy.war.declare.invalidGoal"));
+        else if (ctx.engine.declareWar(nationId, actionId)) ctx.toast(t("actions.diplomacy.war.declare.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.war.declare.fail"));
     } else if (action === "enforce-war-goal") {
-        if (ctx.engine.enforceWarGoal(nationId)) ctx.toast(`已与${nationName}按战争目标议和，其余临时占领退还`);
-        else fail("无法落实目标：需我方发起的有效战争，并满足目标领土控制条件；吞并还需检查首都和第三方占领");
+        if (ctx.engine.enforceWarGoal(nationId)) ctx.toast(t("actions.diplomacy.war.goal.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.war.goal.fail"));
     } else if (action === "propose-peace") {
-        if (ctx.engine.proposePeace(nationId)) ctx.toast(`与${nationName}达成白和平，双方返还临时占领并撤军`);
-        else fail(`${nationName}未接受白和平：可能拒绝提议，或双方已不再交战`);
+        if (ctx.engine.proposePeace(nationId)) ctx.toast(t("actions.diplomacy.peace.white.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.peace.white.notAccepted", { nation: nationName }));
     } else if (action === "accept-peace") {
-        if (ctx.engine.respondPeace(nationId, true)) ctx.toast(`已接受${nationName}的白和平，双方返还临时占领并撤军`);
-        else fail("无法接受白和平：提议已失效或战争已结束");
+        if (ctx.engine.respondPeace(nationId, true)) ctx.toast(t("actions.diplomacy.peace.accept.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.peace.accept.fail"));
     } else if (action === "respond-request") {
-        const requestId = Number(target.dataset.request);
-        const accept = target.dataset.accept === "1";
-        if (!Number.isInteger(requestId)) fail("外交请求无效");
+        const requestId = Number(data.request);
+        const accept = data.accept === "1";
+        if (!Number.isInteger(requestId)) fail(t("actions.diplomacy.request.invalid"));
         else if (ctx.engine.respondDiplomaticRequest(requestId, accept)) {
             ctx.sound.play("select");
-            ctx.toast(accept ? "已接受外交请求" : "已拒绝外交请求");
-        } else fail("无法处理：请求已失效，或当前条件已不满足");
+            ctx.toast(accept ? t("actions.diplomacy.request.accepted") : t("actions.diplomacy.request.rejected"));
+        } else fail(t("actions.diplomacy.request.fail"));
     } else if (action === "vassal-request") {
-        const details = target.closest("details");
-        const picked = details?.querySelector<HTMLInputElement>("input[type='radio']:checked")?.value ?? "cooperative";
-        if (!Number.isInteger(nationId)) fail("附庸请求目标无效");
-        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast("附庸请求已送出，下一回合答复");
-        else proposalFail("vassalize", nationId, "附庸请求无法送出：需与目标邻接、双方均无宗主国，且对方认为你有足够价值");
+        const picked = options.vassalType ?? "cooperative";
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.request.invalidTarget"));
+        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast(t("actions.diplomacy.vassal.request.success"));
+        else proposalFail("vassalize", nationId, t("actions.diplomacy.vassal.request.fail"));
     } else if (action === "vassal-demand") {
-        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
         else ctx.confirm({
-            title: `要求 ${nationName} 成为附庸`,
-            body: `以压迫型附庸结束：不割让领土，对方上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性不可主动提升。确认后送出，下一回合答复；对方拒绝后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内不能再次要求。`,
-            confirmLabel: "提出要求",
+            title: t("actions.diplomacy.vassal.demand.title", { nation: nationName }),
+            body: t("actions.diplomacy.vassal.demand.body", { days: REQUEST_COOLDOWN_DAYS }),
+            confirmLabel: t("actions.diplomacy.vassal.demand.confirm"),
             danger: true,
             onConfirm: () => {
-                if (ctx.engine.demandVassalization(nationId)) ctx.toast("附庸要求已送出，下一回合答复");
-                else proposalFail("vassalize", nationId, "附庸要求无法送出：需明显弱于我方或无望继续战争");
+                if (ctx.engine.demandVassalization(nationId)) ctx.toast(t("actions.diplomacy.vassal.demand.success"));
+                else proposalFail("vassalize", nationId, t("actions.diplomacy.vassal.demand.fail"));
             },
         });
     } else if (action === "tribute-rate") {
-        const delta = Number(target.dataset.delta);
-        if (!Number.isFinite(delta)) fail("贡赋调整无效");
-        else if (ctx.engine.adjustTributeRate(delta)) ctx.toast("贡赋比例已调整");
-        else fail("无法调整贡赋：只有合作型附庸可在 5%–40% 内调整");
+        const delta = Number(data.delta);
+        if (!Number.isFinite(delta)) fail(t("actions.diplomacy.tribute.invalid"));
+        else if (ctx.engine.adjustTributeRate(delta)) ctx.toast(t("actions.diplomacy.tribute.success"));
+        else fail(t("actions.diplomacy.tribute.fail"));
     } else if (action === "release-vassal") {
-        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
         else ctx.confirm({
-            title: `释放 ${nationName}`,
-            body: "解除附庸关系并给予 [[turn:10]]停战期；已收取的贡赋不会返还。",
-            confirmLabel: "释放附庸",
+            title: t("actions.diplomacy.vassal.release.title", { nation: nationName }),
+            body: t("actions.diplomacy.vassal.release.body"),
+            confirmLabel: t("actions.diplomacy.vassal.release.confirm"),
             onConfirm: () => {
-                if (ctx.engine.releaseVassal(nationId)) ctx.toast(`${nationName} 已恢复独立`);
+                if (ctx.engine.releaseVassal(nationId)) ctx.toast(t("actions.diplomacy.vassal.release.success", { nation: nationName }));
                 else {
                     ctx.sound.play("error");
-                    ctx.toast("无法释放：该国不是你的附庸");
+                    ctx.toast(t("actions.diplomacy.vassal.release.fail"));
                 }
             },
         });
     } else if (action === "vassal-type-open") {
-        const current = target.dataset.type ?? "";
-        if (!Number.isInteger(nationId)) fail("附庸目标无效");
-        else if (!validVassalType(current)) fail("当前附庸类型无效");
+        const current = data.type ?? "";
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
+        else if (!validVassalType(current)) fail(t("actions.diplomacy.vassal.type.invalidCurrent"));
         else ctx.confirm({
-            title: `改变 ${nationName} 的附庸类型`,
-            body: "选择新的契约类型；独立性进度按比例保留，并限制在新上限内。",
-            confirmLabel: "确认更改",
+            title: t("actions.diplomacy.vassal.type.title", { nation: nationName }),
+            body: t("actions.diplomacy.vassal.type.body"),
+            confirmLabel: t("actions.diplomacy.vassal.type.confirm"),
             choices: (Object.keys(VASSAL_PROFILES) as VassalType[]).map((value) => ({
                 value,
                 label: VASSAL_PROFILES[value].name,
@@ -192,90 +190,90 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, target: HT
             onConfirm: (value) => {
                 const picked = value ?? "";
                 if (!validVassalType(picked)) {
-                    fail("附庸类型无效");
+                    fail(t("actions.diplomacy.vassal.type.invalidPicked"));
                     return;
                 }
                 if (picked === current) return;
                 if (ctx.engine.changeVassalType(nationId, picked)) {
                     ctx.sound.play("select");
-                    ctx.toast(`${nationName} 的契约已改为${VASSAL_PROFILES[picked].name}`);
+                    ctx.toast(t("actions.diplomacy.vassal.type.success", { nation: nationName, type: VASSAL_PROFILES[picked].name }));
                 } else {
                     ctx.sound.play("error");
-                    ctx.toast("无法改变契约：该国不是你的附庸，或已是该类型");
+                    ctx.toast(t("actions.diplomacy.vassal.type.fail"));
                 }
             },
         });
     } else if (action === "annex-vassal") {
-        if (ctx.engine.annexVassal(nationId)) ctx.toast(`${nationName} 已被吞并，领土与军团并入我方`);
-        else fail("无法吞并：仅能吞并独立性极低且无反叛意图的附庸");
+        if (ctx.engine.annexVassal(nationId)) ctx.toast(t("actions.diplomacy.vassal.annex.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.vassal.annex.fail"));
     } else if (action === "request-aid") {
-        if (ctx.engine.requestForeignAid(nationId)) ctx.toast("求援已送出，下一回合答复");
-        else proposalFail("aid", nationId, "求援无法送出：冷却未结束、暂无可用的非宗主国，或条件已变化");
+        if (ctx.engine.requestForeignAid(nationId)) ctx.toast(t("actions.diplomacy.aid.success"));
+        else proposalFail("aid", nationId, t("actions.diplomacy.aid.fail"));
     } else if (action === "request-upgrade") {
-        if (ctx.engine.requestVassalUpgrade()) ctx.toast("契约改善请求已送出，下一回合答复");
-        else proposalFail("upgrade", state.nations[0]?.overlord ?? -1, "无法请求改善契约：需独立性达到上限的 60%、国家倾向愿意改善、[[politics]]足够，且当前契约还有改善空间");
+        if (ctx.engine.requestVassalUpgrade()) ctx.toast(t("actions.diplomacy.upgrade.success"));
+        else proposalFail("upgrade", state.nations[0]?.overlord ?? -1, t("actions.diplomacy.upgrade.fail"));
     } else if (action === "create-alliance") {
         ctx.confirm({
-            title: "创建联盟阵营",
-            body: `消耗 ${textToken("politics", ALLIANCE_CREATE_COST)}。创建后可邀请有共同敌人或战略倾向相近的国家；孤立主义不会主动创建联盟。`,
-            confirmLabel: "创建",
+            title: t("actions.diplomacy.alliance.create.title"),
+            body: t("actions.diplomacy.alliance.create.body", { cost: ALLIANCE_CREATE_COST }),
+            confirmLabel: t("actions.diplomacy.alliance.create.confirm"),
             onConfirm: () => {
-                if (ctx.engine.createAlliance()) ctx.toast("联盟阵营已创建，可在外交面板邀请成员");
+                if (ctx.engine.createAlliance()) ctx.toast(t("actions.diplomacy.alliance.create.success"));
                 else {
                     ctx.sound.play("error");
-                    ctx.toast("无法创建联盟：[[politics]]不足、已有联盟，或当前倾向不适合结盟");
+                    ctx.toast(t("actions.diplomacy.alliance.create.fail"));
                 }
             },
         });
     } else if (action === "invite-alliance") {
-        if (!Number.isInteger(nationId)) fail("联盟邀请目标无效");
-        else if (ctx.engine.inviteToAlliance(nationId)) ctx.toast("结盟邀请已送出，下一回合答复");
-        else proposalFail("alliance", nationId, "无法邀请：需由联盟领袖发出，且双方有共同敌人或相近战略倾向");
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.alliance.invite.invalidTarget"));
+        else if (ctx.engine.inviteToAlliance(nationId)) ctx.toast(t("actions.diplomacy.alliance.invite.success"));
+        else proposalFail("alliance", nationId, t("actions.diplomacy.alliance.invite.fail"));
     } else if (action === "join-alliance") {
-        const leaderId = Number(target.dataset.leader);
-        if (!Number.isInteger(leaderId)) fail("联盟领袖无效");
-        else if (ctx.engine.requestJoinAlliance(leaderId)) ctx.toast("入盟申请已送出，下一回合答复");
-        else proposalFail("alliance", leaderId, `入盟申请无法送出：需有共同敌人或相近战略倾向，拒绝后 ${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内不能再次申请`);
+        const leaderId = Number(data.leader);
+        if (!Number.isInteger(leaderId)) fail(t("actions.diplomacy.alliance.join.invalidLeader"));
+        else if (ctx.engine.requestJoinAlliance(leaderId)) ctx.toast(t("actions.diplomacy.alliance.join.success"));
+        else proposalFail("alliance", leaderId, t("actions.diplomacy.alliance.join.fail", { days: REQUEST_COOLDOWN_DAYS }));
     } else if (action === "leave-alliance") {
         ctx.confirm({
-            title: "退出联盟",
-            body: `退出后共享通行权与共同敌人即刻失效，${textToken("turn", REQUEST_COOLDOWN_DAYS)}回合内无法重新加入同一联盟。`,
-            confirmLabel: "退出联盟",
+            title: t("actions.diplomacy.alliance.leave"),
+            body: t("actions.diplomacy.alliance.leave.body", { days: REQUEST_COOLDOWN_DAYS }),
+            confirmLabel: t("actions.diplomacy.alliance.leave"),
             danger: true,
             onConfirm: () => {
-                if (ctx.engine.leaveAlliance()) ctx.toast("已退出联盟");
+                if (ctx.engine.leaveAlliance()) ctx.toast(t("actions.diplomacy.alliance.leave.success"));
                 else {
                     ctx.sound.play("error");
-                    ctx.toast("无法退出：我方不在任何联盟中");
+                    ctx.toast(t("actions.diplomacy.alliance.leave.fail"));
                 }
             },
         });
     } else if (action === "enforce-vassal") {
-        if (!Number.isInteger(nationId)) fail("附庸目标无效");
+        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
         else ctx.confirm({
-            title: `扶 ${nationName} 为压迫型附庸`,
-            body: "以战争目标议和，但不割让领土：对方保留国土，上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性极低且不可主动提升。",
-            confirmLabel: "扶为附庸",
+            title: t("actions.diplomacy.vassal.enforce.title", { nation: nationName }),
+            body: t("actions.diplomacy.vassal.enforce.body"),
+            confirmLabel: t("actions.diplomacy.vassal.enforce.confirm"),
             danger: true,
             onConfirm: () => {
-                if (ctx.engine.enforceWarGoal(nationId, "oppressive")) ctx.toast(`${nationName} 已成为压迫型附庸`);
+                if (ctx.engine.enforceWarGoal(nationId, "oppressive")) ctx.toast(t("actions.diplomacy.vassal.enforce.success", { nation: nationName }));
                 else {
                     ctx.sound.play("error");
-                    ctx.toast("无法扶为附庸：需我方发起的全面吞并战争且已满足胜利条件");
+                    ctx.toast(t("actions.diplomacy.vassal.enforce.fail"));
                 }
             },
         });
     } else {
         const hadOffer = state.peaceOffers.includes(nationId);
         ctx.engine.respondPeace(nationId, false);
-        if (hadOffer && !state.peaceOffers.includes(nationId)) ctx.toast(`已拒绝${nationName}的白和平提议`);
-        else fail("无法拒绝：该白和平提议已失效");
+        if (hadOffer && !state.peaceOffers.includes(nationId)) ctx.toast(t("actions.diplomacy.peace.reject.success", { nation: nationName }));
+        else fail(t("actions.diplomacy.peace.reject.fail"));
     }
     return true;
 }
 
 /** Army selection, merging, splitting and per-army commands (list + detail window). */
-export function handleArmyAction(ctx: UIContext, action: string, target: HTMLElement, event: Event): boolean {
+export function handleArmyAction(ctx: UIContext, action: string, data: UIDispatchData, options: UIDispatchOptions): boolean {
     if (action === "auto-manage-toggle") {
         const enabled = ctx.engine.state.autoManageArmies !== true;
         ctx.engine.setAutoManageArmies(enabled);
@@ -284,8 +282,8 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
         if (ctx.engine.selectedArmy()) ctx.engine.select(ctx.engine.state.selected ?? null);
         ctx.sound.play("select");
         ctx.toast(enabled
-            ? "已开启全局托管：面板已锁定，取消标题右侧齿轮后可手动指挥"
-            : "已关闭全局托管：全部军团恢复手动指挥");
+            ? t("actions.army.autoGlobal.on")
+            : t("actions.army.autoGlobal.off"));
         return true;
     }
 
@@ -295,11 +293,11 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
             ctx.toast(AUTO_GLOBAL_LOCK_TIP);
             return true;
         }
-        const armyId = Number(target.dataset.army);
-        const name = ctx.engine.state.armies.get(armyId)?.name ?? "军团";
+        const armyId = Number(data.army);
+        const name = ctx.engine.state.armies.get(armyId)?.name ?? t("actions.army.unnamed");
         if (!ctx.engine.toggleArmyAutoManaged(armyId)) {
             ctx.sound.play("error");
-            ctx.toast("无法设置托管：目标不是我方军团");
+            ctx.toast(t("actions.army.auto.failNotOwned"));
             return true;
         }
         const managed = isArmyAutoManaged(ctx.engine.state, ctx.engine.state.armies.get(armyId));
@@ -307,7 +305,7 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
         ctx.splitChecks.clear();
         if (managed && ctx.engine.state.selectedArmyId === armyId) ctx.engine.select(ctx.engine.state.selected ?? null);
         ctx.sound.play("select");
-        ctx.toast(managed ? `${name} 已交由 AI 托管` : `${name} 已取消托管，可手动指挥`);
+        ctx.toast(managed ? t("actions.army.auto.managed", { name }) : t("actions.army.auto.unmanaged", { name }));
         return true;
     }
 
@@ -317,14 +315,13 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
             ctx.toast(AUTO_GLOBAL_LOCK_TIP);
             return true;
         }
-        const armyId = Number(target.dataset.army);
-        const mouse = event as MouseEvent;
-        if ((mouse.ctrlKey || mouse.metaKey) && isArmyAutoManaged(ctx.engine.state, ctx.engine.state.armies.get(armyId))) {
+        const armyId = Number(data.army);
+        if ((options.ctrlKey || options.metaKey) && isArmyAutoManaged(ctx.engine.state, ctx.engine.state.armies.get(armyId))) {
             ctx.sound.play("error");
-            ctx.toast("请先取消托管，再选择当前军团进行合并");
+            ctx.toast(t("actions.army.select.needUnmanage"));
             return true;
         }
-        if (mouse.ctrlKey || mouse.metaKey) {
+        if (options.ctrlKey || options.metaKey) {
             if (ctx.multiSelect.has(armyId)) ctx.multiSelect.delete(armyId);
             else ctx.multiSelect.add(armyId);
             ctx.sound.play("select");
@@ -344,17 +341,17 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
         if (blocked !== undefined) {
             ctx.multiSelect.delete(blocked);
             ctx.sound.play("error");
-            ctx.toast("请先取消托管，再选择当前军团进行合并");
+            ctx.toast(t("actions.army.select.needUnmanage"));
             ctx.refresh();
             return true;
         }
         if (ctx.engine.orderMerge(ids)) {
             ctx.multiSelect.clear();
             ctx.sound.play("select");
-            ctx.toast("合并命令已下达：小军团向大军团集结");
+            ctx.toast(t("actions.army.merge.success"));
         } else {
             ctx.sound.play("error");
-            ctx.toast(`无法合并：军团需未行动且未交战，合计不超过 ${REGIMENT_CAP} 团`);
+            ctx.toast(t("actions.army.merge.fail", { cap: REGIMENT_CAP }));
         }
         return true;
     }
@@ -380,7 +377,7 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
     if (!army || army.nation !== 0) return false;
     if (isArmyAutoManaged(ctx.engine.state, army)) {
         ctx.sound.play("error");
-        ctx.toast("该军团已托管：请先取消托管再下达命令");
+        ctx.toast(t("actions.army.managedBlocked"));
         return true;
     }
 
@@ -389,49 +386,49 @@ export function handleArmyAction(ctx: UIContext, action: string, target: HTMLEle
         if (freshId !== null) {
             ctx.splitChecks.clear();
             ctx.sound.play("recruit");
-            ctx.toast("拆分完成：新军团已进驻相邻空省");
+            ctx.toast(t("actions.army.split.success"));
         } else {
             ctx.sound.play("error");
-            ctx.toast("无法拆分：需未行动、未交战、有空邻省且军团未满额");
+            ctx.toast(t("actions.army.split.fail"));
         }
     } else if (action === "attack") {
-        const site = Number(target.dataset.site);
+        const site = Number(data.site);
         if (ctx.engine.attack(army.id, site)) {
-            ctx.toast("进攻发起：每日结算一轮，直至分出胜负");
+            ctx.toast(t("actions.army.attack.start"));
         } else {
             ctx.sound.play("error");
-            ctx.toast("无法进攻：需相邻、未行动且目标无敌对会战");
+            ctx.toast(t("actions.army.attack.fail"));
         }
     } else if (action === "attack-cancel") {
-        if (ctx.engine.cancelAttack(army.id)) ctx.toast("已停止进攻");
+        if (ctx.engine.cancelAttack(army.id)) ctx.toast(t("actions.army.attack.cancel"));
     } else if (action === "march-cancel") {
-        if (ctx.engine.cancelMarch(army.id)) ctx.toast("已撤销行军命令");
+        if (ctx.engine.cancelMarch(army.id)) ctx.toast(t("actions.army.march.cancel"));
     } else if (action === "wait") {
         ctx.engine.waitArmy(army.id);
         ctx.sound.play("select");
     } else if (action === "disband") {
         ctx.confirm({
-            title: `解散 ${army.name}`,
-            body: `军团解散后所属 ${army.regiments.length} 个团将复员，无法恢复。`,
-            confirmLabel: "解散军团",
+            title: t("actions.army.disband.title", { name: army.name }),
+            body: t("actions.army.disband.body", { count: army.regiments.length }),
+            confirmLabel: t("actions.army.disband.confirm"),
             danger: true,
             onConfirm: () => {
                 if (ctx.engine.disbandArmy(army.id)) {
                     ctx.sound.play("select");
-                    ctx.toast("军团已解散，所属团复员");
+                    ctx.toast(t("actions.army.disband.success"));
                 } else {
                     ctx.sound.play("error");
-                    ctx.toast("交战中的军团无法解散");
+                    ctx.toast(t("actions.army.disband.fail"));
                 }
             },
         });
     } else if (action === "redeploy") {
         if (ctx.engine.beginRedeploy(army.id)) {
             ctx.sound.play("select");
-            ctx.toast("点击绿色省份完成战略转移，Esc 取消");
+            ctx.toast(t("actions.army.redeploy.start"));
         } else {
             ctx.sound.play("error");
-            ctx.toast("该军团本[[turn]]已行动，无法战略转移");
+            ctx.toast(t("actions.army.redeploy.fail"));
         }
     } else {
         return false;

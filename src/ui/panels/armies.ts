@@ -7,14 +7,25 @@ import { AUTO_GLOBAL_LOCK_TIP, orgClass, orgPct, statusPill } from "../common.ts
 import { escapeHtml } from "../text.ts";
 import { panelHead, renderPanel } from "../panel.ts";
 import { tooltipAttrs } from "../tooltip.ts";
+import { t } from "../../i18n/index.ts";
 
-const ARMY_LIST_TIP = `点击军团接管指挥（左侧详情窗下达命令）。\nCtrl+点击可多选，随后在顶部合并条中合并；合并要求各军团未行动、未交战，合计不超过 ${REGIMENT_CAP} 团。\n开启标题右侧的齿轮进入全局托管：面板锁定，AI 代为移动、进攻与合并；关闭后可再用行内状态标签右侧的小齿轮单独托管。\n组织度低于 15 时军团溃退；每日按[[supply]]水平恢复。\n行内标签为编制：兵种与团数。`;
+const ARMY_LIST_TIP = {
+    get body(): string { return t("panels.armies.help", { regimentCap: REGIMENT_CAP }); },
+};
 
-const AUTO_SWITCH_TIP = `开启后，你的军团会像 AI 国家一样在每回合自动移动、进攻，并把附近小军团合并。\n全局托管期间军团面板不可用；点击标题右侧齿轮关闭后，可用状态标签右侧的小齿轮单独托管某支军团。\n关闭托管会立即恢复全部军团的手动指挥。`;
+const AUTO_SWITCH_TIP = {
+    get body(): string { return t("panels.armies.autoHelp"); },
+};
 
-const AUTO_ROW_TIP = `该军团已托管：AI 每回合代为移动、进攻并与附近军团合并。`;
-const AUTO_GEAR_TIP = `${AUTO_ROW_TIP}\n请先取消托管，再选择当前军团进行合并。`;
-const MANUAL_GEAR_TIP = `该军团未托管，由你手动指挥。点击交给 AI 托管。`;
+const AUTO_ROW_TIP = {
+    get body(): string { return t("panels.armies.autoRowTip"); },
+};
+const AUTO_GEAR_TIP = {
+    get body(): string { return `${AUTO_ROW_TIP.body}\n${t("panels.armies.autoGearSuffix")}`; },
+};
+const MANUAL_GEAR_TIP = {
+    get body(): string { return t("panels.armies.manualGearTip"); },
+};
 
 /** Square, centre-symmetric cog so it stays round and spins around its own hub. */
 const GEAR_SVG = `<svg class="gear-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -58,18 +69,18 @@ export class ArmyListPanel {
             // GlobalTooltip overwrites data-tooltip-body from a `title` attribute,
             // so locked/managed rows rely on the custom tooltip attrs alone.
             const rowTip = autoOn
-                ? tooltipAttrs("全局托管中", AUTO_GLOBAL_LOCK_TIP)
+                ? tooltipAttrs(t("panels.armies.globalLock"), AUTO_GLOBAL_LOCK_TIP)
                 : auto
-                    ? tooltipAttrs("该军团已托管", `请先取消托管，再选择当前军团进行合并。\n${AUTO_ROW_TIP}`)
-                    : `title="组织度 ${Math.round(army.org)}/${ORG_MAX} · 点击接管指挥 · Ctrl+点击多选合并"`;
+                    ? tooltipAttrs(t("panels.armies.autoRowTitle"), `${t("panels.armies.autoGearSuffix")}\n${AUTO_ROW_TIP.body}`)
+                    : `title="${t("panels.armies.rowTitle", { org: Math.round(army.org), max: ORG_MAX })}"`;
             const gearTip = autoOn
-                ? tooltipAttrs("全局托管中", AUTO_GLOBAL_LOCK_TIP)
-                : tooltipAttrs(auto ? "托管中" : "未托管", auto ? AUTO_GEAR_TIP : MANUAL_GEAR_TIP);
+                ? tooltipAttrs(t("panels.armies.globalLock"), AUTO_GLOBAL_LOCK_TIP)
+                : tooltipAttrs(t(auto ? "panels.armies.autoManaged" : "panels.armies.manualManaged"), auto ? AUTO_GEAR_TIP.body : MANUAL_GEAR_TIP.body);
             // The gear sits just outside the status pill on its right, inside the army
             // row, as a bare cog icon. It is a span(role=button) because .army-row is
             // itself a <button>; a nested <button> closes the row early in HTML parsing.
             const gear = `<span class="army-auto-gear${auto ? " on" : ""}" data-action="army-auto-toggle" data-army="${army.id}"
-                    role="button" aria-label="${auto ? "取消托管" : "托管"}${escapeHtml(army.name)}"
+                    role="button" aria-label="${t(auto ? "panels.armies.unmanage" : "panels.armies.manage", { name: escapeHtml(army.name) })}"
                     aria-pressed="${auto}" ${gearTip}>${GEAR_SVG}</span>`;
             const partialLock = !autoOn && auto ? " auto-locked" : "";
             return `
@@ -92,27 +103,27 @@ export class ArmyListPanel {
 
         const mergeBar = this.multiSelect.size >= 2
             ? `<div class="merge-bar">
-                    <span>已选 ${this.multiSelect.size} 支军团</span>
-                    <button class="btn btn-sm btn-primary" data-action="merge-selected">合并</button>
-                    <button class="btn btn-sm" data-action="merge-clear">取消</button>
+                    <span>${t("panels.armies.selected", { count: this.multiSelect.size })}</span>
+                    <button class="btn btn-sm btn-primary" data-action="merge-selected">${t("panels.armies.merge")}</button>
+                    <button class="btn btn-sm" data-action="merge-clear">${t("panels.armies.cancel")}</button>
                 </div>`
             : "";
 
         const collapsed = this.el.classList.contains("army-collapsed");
         const autoSwitch = `<button class="auto-manage-gear${autoOn ? " on" : ""}" data-action="auto-manage-toggle"
-            aria-pressed="${autoOn}" aria-label="${autoOn ? "关闭全局托管" : "开启全局托管"}"
-            ${tooltipAttrs("托管军队", AUTO_SWITCH_TIP)}>${GEAR_SVG}</button>`;
+            aria-pressed="${autoOn}" aria-label="${t(autoOn ? "panels.armies.disableGlobal" : "panels.armies.enableGlobal")}"
+            ${tooltipAttrs(t("panels.armies.autoSwitchTitle"), AUTO_SWITCH_TIP.body)}>${GEAR_SVG}</button>`;
         renderPanel(this.el, {
             head: panelHead({
-                title: "军团",
+                title: t("panels.armies.title"),
                 titleExtras: autoSwitch,
-                help: { title: "军团列表", body: ARMY_LIST_TIP },
-                extras: `<span class="objective">${armies.length}/${cap}</span><button class="army-toggle" data-action="army-toggle" aria-expanded="${!collapsed}" aria-label="${collapsed ? "展开军团列表" : "收起军团列表"}">${collapsed ? "▸" : "▾"}</button>`,
+                help: { title: t("panels.armies.listHelpTitle"), body: ARMY_LIST_TIP.body },
+                extras: `<span class="objective">${armies.length}/${cap}</span><button class="army-toggle" data-action="army-toggle" aria-expanded="${!collapsed}" aria-label="${t(collapsed ? "panels.armies.expandList" : "panels.armies.collapseList")}">${collapsed ? "▸" : "▾"}</button>`,
             }),
             bodyClass: `army-body${autoOn ? " auto-locked" : ""}`,
             body: `${mergeBar}
-                ${rows || `<div class="empty-hint">暂无军团。到「部署」页签训练部队，完成后自动编成。</div>`}
-                <p class="micro-hint">点击接管指挥 · Ctrl+点击多选合并${autoOn ? "" : " · ⚙ 可单独托管"}${queued > 0 ? ` · 训练中 ${queued} 个团` : ""}</p>`,
+                ${rows || `<div class="empty-hint">${t("panels.armies.empty")}</div>`}
+                <p class="micro-hint">${t("panels.armies.hint")}${autoOn ? "" : ` · ${t("panels.armies.singleHint")}`}${queued > 0 ? ` · ${t("panels.armies.training", { count: queued })}` : ""}</p>`,
         });
     }
 }

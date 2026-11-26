@@ -1,3 +1,4 @@
+import { t } from "../../i18n/index.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import type { VassalType } from "../types/diplomacy.ts";
 import type { AITendencyId, AITendencyProfile, AITuning, VassalTuning } from "./types.ts";
@@ -13,8 +14,8 @@ import type { AITendencyId, AITendencyProfile, AITuning, VassalTuning } from "./
 export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = {
     pacifist: {
         id: "pacifist",
-        name: "和平主义",
-        blurb: "这个国家专注内政与经济，不主动挑起战争，只有在遭到入侵时才会动员全国。",
+        get name() { return t("game.tendency.pacifist.name"); },
+        get blurb() { return t("game.tendency.pacifist.blurb"); },
         aggression: 1,
         defense: 3,
         expansion: 1,
@@ -23,8 +24,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     defensive: {
         id: "defensive",
-        name: "专注防御",
-        blurb: "这个国家把资源投向边境工事与守备军，不谋求扩张，但会坚决反击任何入侵。",
+        get name() { return t("game.tendency.defensive.name"); },
+        get blurb() { return t("game.tendency.defensive.blurb"); },
         aggression: 1,
         defense: 5,
         expansion: 1,
@@ -33,8 +34,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     bully: {
         id: "bully",
-        name: "恃强凌弱",
-        blurb: "这个国家只对明显弱于自己的邻国动手，面对强国则退让、结盟或拖延。",
+        get name() { return t("game.tendency.bully.name"); },
+        get blurb() { return t("game.tendency.bully.blurb"); },
         aggression: 3,
         defense: 2,
         expansion: 3,
@@ -43,8 +44,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     opportunist: {
         id: "opportunist",
-        name: "机会主义扩张",
-        blurb: "这个国家没有固定的敌人，专挑邻国内乱、战败或经济崩溃时夺取领土。",
+        get name() { return t("game.tendency.opportunist.name"); },
+        get blurb() { return t("game.tendency.opportunist.blurb"); },
         aggression: 3,
         defense: 2,
         expansion: 4,
@@ -53,8 +54,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     hegemon: {
         id: "hegemon",
-        name: "霸权争雄",
-        blurb: "这个国家以区域霸权为目标，积极扩军并压制潜在挑战者，不放过扩张机会。",
+        get name() { return t("game.tendency.hegemon.name"); },
+        get blurb() { return t("game.tendency.hegemon.blurb"); },
         aggression: 4,
         defense: 3,
         expansion: 5,
@@ -63,8 +64,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     trader: {
         id: "trader",
-        name: "贸易立国",
-        blurb: "这个国家专注商路与港口，用军事力量保护贸易线，对封锁商路者抱有强烈敌意。",
+        get name() { return t("game.tendency.trader.name"); },
+        get blurb() { return t("game.tendency.trader.blurb"); },
         aggression: 2,
         defense: 3,
         expansion: 2,
@@ -73,8 +74,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     ideologue: {
         id: "ideologue",
-        name: "意识形态输出",
-        blurb: "这个国家主动干涉他国内政，支持与自己相近的势力，战争目标常是推翻对方政权。",
+        get name() { return t("game.tendency.ideologue.name"); },
+        get blurb() { return t("game.tendency.ideologue.blurb"); },
         aggression: 3,
         defense: 2,
         expansion: 3,
@@ -83,8 +84,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     isolated: {
         id: "isolated",
-        name: "孤立堡垒",
-        blurb: "这个国家不结盟、不扩张、也不干涉他国，只在边境重兵设防，坚持武装中立。",
+        get name() { return t("game.tendency.isolated.name"); },
+        get blurb() { return t("game.tendency.isolated.blurb"); },
         aggression: 1,
         defense: 5,
         expansion: 1,
@@ -93,8 +94,8 @@ export const AI_TENDENCIES: Readonly<Record<AITendencyId, AITendencyProfile>> = 
     },
     militarist: {
         id: "militarist",
-        name: "军国动员",
-        blurb: "这个国家围绕战争运转，偏好先发制人与快速决战，对和平的耐心很低。",
+        get name() { return t("game.tendency.militarist.name"); },
+        get blurb() { return t("game.tendency.militarist.blurb"); },
         aggression: 5,
         defense: 3,
         expansion: 4,
@@ -222,28 +223,28 @@ const TRAIT_PHRASES: ReadonlyArray<{
 }> = [
     {
         axis: "aggression",
-        high: { text: "倾向于主动进攻他国、以战争扩张", tone: "pos" },
-        low: { text: "不愿主动开战，更倾向维持现状", tone: "note" },
+        high: { get text() { return t("game.trait.aggression.high"); }, tone: "pos" },
+        low: { get text() { return t("game.trait.aggression.low"); }, tone: "note" },
     },
     {
         axis: "defense",
-        high: { text: "重视边防与工事，遭到入侵时坚决反击", tone: "pos" },
-        low: { text: "防务投入较少，更依赖机动兵力", tone: "neg" },
+        high: { get text() { return t("game.trait.defense.high"); }, tone: "pos" },
+        low: { get text() { return t("game.trait.defense.low"); }, tone: "neg" },
     },
     {
         axis: "expansion",
-        high: { text: "积极夺取邻国领土、扩大势力范围", tone: "pos" },
-        low: { text: "对扩张领土兴趣不大", tone: "note" },
+        high: { get text() { return t("game.trait.expansion.high"); }, tone: "pos" },
+        low: { get text() { return t("game.trait.expansion.low"); }, tone: "note" },
     },
     {
         axis: "alliance",
-        high: { text: "愿意与他国结盟，并在外交上让步", tone: "pos" },
-        low: { text: "不愿结盟，倾向独自行事", tone: "note" },
+        high: { get text() { return t("game.trait.alliance.high"); }, tone: "pos" },
+        low: { get text() { return t("game.trait.alliance.low"); }, tone: "note" },
     },
     {
         axis: "warTolerance",
-        high: { text: "能承受长期战争与军备竞赛", tone: "pos" },
-        low: { text: "难以忍受长期战争，倾向尽快议和", tone: "neg" },
+        high: { get text() { return t("game.trait.warTolerance.high"); }, tone: "pos" },
+        low: { get text() { return t("game.trait.warTolerance.low"); }, tone: "neg" },
     },
 ];
 

@@ -1,5 +1,5 @@
-import type { Vec2 } from "../terrain/voronoi/index.ts";
-import { drawWrappedLine } from "../terrain/voronoi/index.ts";
+import type { Vec2 } from "../game/terrain/voronoi/index.ts";
+import { drawWrappedLine } from "./terrainDrawing.ts";
 import type { GameState } from "../game/types/state.ts";
 import { NEUTRAL, NEUTRAL_COLOR } from "../game/types/world.ts";
 import { nationDisplayColor } from "../game/access.ts";

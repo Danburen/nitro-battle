@@ -1,5 +1,6 @@
 /** Player proposals are answered at the next turn boundary, never on confirm. */
 
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { decideAllianceInvite, decideJoinRequest } from "./alliance.ts";
 import { decideTrade, TRADE_AGREEMENT_DAYS } from "./trade.ts";
@@ -43,7 +44,9 @@ function decline(core: GameCore, request: DiplomaticRequest): void {
     const targetId = targetOf(request);
     setRequestCooldown(state, request.kind, targetId, REQUEST_COOLDOWN_DAYS);
     if (request.kind === "aid" && state.nations[0]) state.nations[0].lastAidDay = state.day;
-    core.log(`${core.nationChip(targetId)} 拒绝 ${core.nationChip(0)} 的${REQUEST_LABEL[request.kind]}`, "diplo", targetId);
+    core.log(t("game.proposals.decline", {
+        target: core.nationChip(targetId), nation: core.nationChip(0), request: REQUEST_LABEL[request.kind],
+    }), "diplo", targetId);
     core.emit({ type: "state" });
 }
 
@@ -58,7 +61,9 @@ export function resolvePlayerProposals(core: GameCore): void {
         if (!state.nations[0]?.alive || !state.nations[targetId]?.alive) continue;
         const decision = decisionFor(request, core);
         if (decision?.accepts && acceptDiplomaticRequest(core, request)) {
-            core.log(`${core.nationChip(0)} 与 ${core.nationChip(targetId)} 达成${REQUEST_LABEL[request.kind]}`, "diplo", targetId);
+            core.log(t("game.proposals.accepted", {
+                nation: core.nationChip(0), target: core.nationChip(targetId), request: REQUEST_LABEL[request.kind],
+            }), "diplo", targetId);
             continue;
         }
         decline(core, request);

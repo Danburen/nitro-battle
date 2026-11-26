@@ -1,12 +1,13 @@
 import type { GameEngine } from "../../game/engine.ts";
 import { nationDisplayColor } from "../../game/access.ts";
-import { escapeHtml } from "../text.ts";
+import { escapeHtml, setGameHtml } from "../text.ts";
 import { PanelShell, panelHead } from "../panel.ts";
 import type { HelpSpec } from "../panel.ts";
 import { nationFlagHtmlFor } from "../flags.ts";
 import { nationOverviewBody, emptyNationStats, nationStatSteps } from "../nation-info.ts";
 import type { NationStats } from "../nation-info.ts";
 import { runSlices } from "../slices.ts";
+import { t } from "../../i18n/index.ts";
 
 /**
  * Standalone nation overview panel.
@@ -48,11 +49,11 @@ export class NationPanel {
         this.stop();
         this.shell.show();
         const displayColor = nationDisplayColor(this.engine.state, nationId);
-        this.shell.el.innerHTML = `${this.head(nation.name, displayColor)}
+        setGameHtml(this.shell.el, `${this.head(nation.name, displayColor)}
             <div class="panel-body brief-body">
                 <div class="brief-title">${nationFlagHtmlFor(this.engine.state, nation.id, 30)}<span>${escapeHtml(nation.name)}</span></div>
-                <p class="micro-hint">正在统计国家概况…</p>
-            </div>`;
+                <p class="micro-hint">${t("panels.nation.loading")}</p>
+            </div>`);
 
         const stats = emptyNationStats(nationId);
         const token = ++this.token;
@@ -66,11 +67,11 @@ export class NationPanel {
         this.stop();
         this.nationId = null;
         this.shell.show();
-        this.shell.el.innerHTML = `${this.head("中立区域", "#6e7781")}
+        setGameHtml(this.shell.el, `${this.head(t("panels.nation.neutralArea"), "#6e7781")}
             <div class="panel-body brief-body">
-                <div class="brief-title"><span class="nation-swatch" style="--nc:#6e7781"></span>中立区域</div>
-                <p class="micro-hint">这里没有国家控制。点击有颜色的领土查看所属国家。</p>
-            </div>`;
+                <div class="brief-title"><span class="nation-swatch" style="--nc:#6e7781"></span>${t("panels.nation.neutralArea")}</div>
+                <p class="micro-hint">${t("panels.nation.neutralHint")}</p>
+            </div>`);
     }
 
     hide(): void {
@@ -92,7 +93,7 @@ export class NationPanel {
 
     private head(name: string, color: string): string {
         return panelHead({
-            title: "国家详情",
+            title: t("panels.nation.title"),
             help: this.options.help,
             extras: `<span class="owner-pill" style="--pc:${escapeHtml(color)}">${escapeHtml(name)}</span>`,
         });

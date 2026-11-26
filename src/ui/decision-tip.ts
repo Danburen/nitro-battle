@@ -1,14 +1,15 @@
 import type { DecisionFactor, DecisionVerdict, DiplomaticDecision } from "../game/types/decision.ts";
-import { escapeHtml, renderGameText } from "./text.ts";
+import { t } from "../i18n/index.ts";
+import { escapeHtml } from "./text.ts";
 import { rawTooltipAttrs } from "./tooltip.ts";
 
 /** Shared verdict wording; the boolean behind it always comes from the game layer. */
 const VERDICT_TEXT: Record<DecisionVerdict, string> = {
-    sure: "他们会接受",
-    likely: "他们大概率会接受",
-    maybe: "他们可能会接受",
-    unlikely: "他们不太可能接受",
-    refuse: "他们大概率会拒绝",
+    get sure() { return t("misc.decision.sure"); },
+    get likely() { return t("misc.decision.likely"); },
+    get maybe() { return t("misc.decision.maybe"); },
+    get unlikely() { return t("misc.decision.unlikely"); },
+    get refuse() { return t("misc.decision.refuse"); },
 };
 
 export interface TooltipDecision {
@@ -38,5 +39,5 @@ export function decisionBlockHtml(decision: DiplomaticDecision, title?: string):
  */
 export function decisionTooltipAttrs(description: string, decisions: readonly TooltipDecision[]): string {
     const blocks = decisions.map((entry) => decisionBlockHtml(entry.decision, entry.title)).join("");
-    return rawTooltipAttrs(`<div class="tip-reason"><p class="tip-desc">${renderGameText(description)}</p>${blocks}</div>`);
+    return rawTooltipAttrs(`<div class="tip-reason"><p class="tip-desc">${description}</p>${blocks}</div>`);
 }

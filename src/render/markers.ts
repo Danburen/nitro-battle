@@ -1,9 +1,10 @@
-import type { Vec2 } from "../terrain/voronoi/index.ts";
+import type { Vec2 } from "../game/terrain/voronoi/index.ts";
 import type { BuildingKind } from "../game/types/building.ts";
 import type { GameState } from "../game/types/state.ts";
 import { BUILDING_PROFILES } from "../game/types/building.ts";
 import { NEUTRAL_COLOR } from "../game/types/world.ts";
 import { nationDisplayColor } from "../game/access.ts";
+import { t } from "../i18n/index.ts";
 import { PROVINCE_CAPACITY_MIN_ZOOM } from "./constructionOverlay.ts";
 import type { ConstructionOverlay } from "./constructionOverlay.ts";
 import { provinceResourceOutput } from "../game/economy.ts";
@@ -179,7 +180,7 @@ export function drawRegionMarkers(
             rows.push({
                 icon: BUILDING_PROFILES[options.constructionKind!].icon,
                 color: "#e6edf3",
-                text: capacity.used >= capacity.limit ? `${count} 已满` : count,
+                text: capacity.used >= capacity.limit ? t("misc.markers.full", { count }) : count,
             });
         } else if (showCounters) {
             const farms = region.buildings.filter((kind) => kind === "farm").length;

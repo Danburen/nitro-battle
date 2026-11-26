@@ -1,5 +1,7 @@
 /** Unit kinds and their stat tables. No game state, no behaviour. */
 
+import { t } from "../../i18n/index.ts";
+
 export const UnitKind = {
     INFANTRY: 0,
     TANK: 1,
@@ -31,7 +33,7 @@ export interface UnitProfile {
 
 export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
     [UnitKind.INFANTRY]: {
-        name: "步兵",
+        get name() { return t("game.types.unit.infantry.name"); },
         glyph: "✕",
         cost: 100,
         manpowerCost: 100,
@@ -44,10 +46,10 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         mp: 3,
         atk: 4,
         def: 3,
-        desc: "廉价主力，消耗[[garrison]]与巩固战线",
+        get desc() { return t("game.types.unit.infantry.desc"); },
     },
     [UnitKind.TANK]: {
-        name: "坦克",
+        get name() { return t("game.types.unit.tank.name"); },
         glyph: "▭",
         cost: 300,
         manpowerCost: 80,
@@ -60,10 +62,10 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         mp: 5,
         atk: 7,
         def: 5,
-        desc: "高机动突击力量，[[attack]]与[[defense]]均衡",
+        get desc() { return t("game.types.unit.tank.desc"); },
     },
     [UnitKind.ARTILLERY]: {
-        name: "火炮",
+        get name() { return t("game.types.unit.artillery.name"); },
         glyph: "●",
         cost: 250,
         manpowerCost: 60,
@@ -76,7 +78,7 @@ export const UNIT_PROFILES: Readonly<Record<UnitKind, UnitProfile>> = {
         mp: 2,
         atk: 9,
         def: 2,
-        desc: "攻坚火力，对高[[garrison]]省份加成显著，但拖慢军团行军",
+        get desc() { return t("game.types.unit.artillery.desc"); },
     },
 };
 

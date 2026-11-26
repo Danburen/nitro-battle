@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { isAtWar, nationPower, setWar } from "./diplomacy.ts";
 import { tendencyProfileOf } from "./ai/tendencies.ts";
@@ -17,10 +18,10 @@ export const ALLIANCE_MIN_DAY = 8;
 export const ALLIANCE_MAX_MEMBERS = 4;
 
 export const ALLIANCE_HELP_BODY = [
-    "联盟由领袖花费 40 政治点创建阵营，再邀请志同道合的国家加入。",
-    "成员共享通行权，并把彼此的敌人视为共同敌人：任一成员开战或被攻击时，其他成员会加入同一场战争。",
-    "邀约前提是双方有共同敌人，或同属扩张主义/同属防御倾向且外交意愿足够。孤立主义国家不会主动创建联盟，也极少接受邀请。",
-    "玩家拒绝结盟邀请后，[[turn:5]]内不会再次收到邀请，也不能主动申请加入同一联盟。",
+    t("game.alliance.help.create"),
+    t("game.alliance.help.members"),
+    t("game.alliance.help.invite"),
+    t("game.alliance.help.cooldown"),
 ].join("\n");
 
 function living(state: GameState, nation: number): boolean {
@@ -86,7 +87,7 @@ export function createAlliance(core: GameCore, nationId: number): Alliance | nul
         id: state.nextAllianceId++, leader: nationId, members: [nationId], createdDay: state.day,
     };
     state.alliances.push(alliance);
-    core.log(`${core.nationChip(nationId)} 创建联盟阵营（-${ALLIANCE_CREATE_COST} 政治点）`, "diplo", nationId, true, {
+    core.log(t("game.alliance.created", { nation: core.nationChip(nationId), cost: ALLIANCE_CREATE_COST }), "diplo", nationId, true, {
         kind: "global",
         nation: nationId,
     });
@@ -109,7 +110,7 @@ export function joinAlliance(core: GameCore, alliance: Alliance, nationId: numbe
             if (!enemy.alive || enemy.id === nationId || !isAtWar(state, member, enemy.id)) continue;
             if (isAtWar(state, nationId, enemy.id) || isProtectedRelation(state, nationId, enemy.id)) continue;
             setWar(state, nationId, enemy.id, true);
-            core.log(`${core.nationChip(nationId)} 依联盟义务加入对 ${core.nationChip(enemy.id)} 的战争`, "diplo", nationId, true, {
+            core.log(t("game.alliance.joinedWar", { nation: core.nationChip(nationId), enemy: core.nationChip(enemy.id) }), "diplo", nationId, true, {
                 kind: "war",
                 nation: nationId,
             });
@@ -117,7 +118,7 @@ export function joinAlliance(core: GameCore, alliance: Alliance, nationId: numbe
         }
     }
     core.invalidateReach();
-    core.log(`${core.nationChip(nationId)} 加入 ${core.nationChip(alliance.leader)} 的联盟`, "diplo", nationId);
+    core.log(t("game.alliance.joined", { nation: core.nationChip(nationId), leader: core.nationChip(alliance.leader) }), "diplo", nationId);
     core.emit({ type: "state" });
     return true;
 }
@@ -137,7 +138,7 @@ export function leaveAlliance(core: GameCore, nationId: number): boolean {
     }
     setPairCooldown(state, nationId, oldLeader, state.day + ALLIANCE_INVITE_COOLDOWN);
     core.invalidateReach();
-    core.log(`${core.nationChip(nationId)} 退出联盟`, "diplo", nationId);
+    core.log(t("game.alliance.left", { nation: core.nationChip(nationId) }), "diplo", nationId);
     core.emit({ type: "state" });
     return true;
 }
@@ -159,19 +160,19 @@ export function canInviteToAlliance(state: GameState, leader: number, target: nu
 /** The invited nation's willingness; eligibility itself lives in `canInviteToAlliance`. */
 export function decideAllianceInvite(state: GameState, leader: number, target: number): DiplomaticDecision {
     const alliance = allianceOf(state, leader);
-    if (!alliance || alliance.members.length >= ALLIANCE_MAX_MEMBERS) return deny("联盟不存在或已满员");
+    if (!alliance || alliance.members.length >= ALLIANCE_MAX_MEMBERS) return deny(t("game.alliance.decision.noAlliance"));
     const enemy = commonEnemy(state, leader, target);
     if (enemy !== null) {
-        return { accepts: true, factors: [plus(`共同的敌人：${state.nations[enemy].name}`)], verdict: "sure" };
+        return { accepts: true, factors: [plus(t("game.alliance.decision.commonEnemy", { nation: state.nations[enemy].name }))], verdict: "sure" };
     }
     const profile = tendencyProfileOf(state.nations[target].tendency);
     const kin = strategicKin(state, leader, target);
-    const factors: DecisionFactor[] = [minus("没有共同敌人")];
-    factors.push(kin ? plus("战略倾向相近") : minus("战略倾向不相近"));
-    factors.push(profile.alliance >= 3 ? plus("结盟意愿足够") : minus("结盟意愿不足"));
+    const factors: DecisionFactor[] = [minus(t("game.alliance.decision.noCommonEnemy"))];
+    factors.push(kin ? plus(t("game.alliance.decision.kin")) : minus(t("game.alliance.decision.notKin")));
+    factors.push(profile.alliance >= 3 ? plus(t("game.alliance.decision.willing")) : minus(t("game.alliance.decision.unwilling")));
     const powerOk = profile.alliance >= 4 && nationPower(state, leader) >= nationPower(state, target) * 0.8;
     if (profile.alliance >= 4) {
-        factors.push(powerOk ? plus("我方实力达到其预期") : minus("我方实力未达到其预期"));
+        factors.push(powerOk ? plus(t("game.alliance.decision.powerMet")) : minus(t("game.alliance.decision.powerUnmet")));
     }
     const accepts = (kin && profile.alliance >= 3) || powerOk;
     return { accepts, factors, verdict: accepts ? "likely" : (profile.alliance >= 4 ? "unlikely" : "refuse") };
@@ -190,7 +191,7 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
         if (!alliance) return false;
         const request = queuePlayerProposal(state, "alliance", 0, target, { allianceId: alliance.id });
         if (!request) return false;
-        core.log(`我方邀请 ${core.nationChip(target)} 加入联盟，等待答复`, "diplo", 0);
+        core.log(t("game.alliance.invite.playerRequested", { target: core.nationChip(target) }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
@@ -199,7 +200,7 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
         if (!alliance) return false;
         const request = createDiplomaticRequest(state, "alliance", leader, target, { allianceId: alliance.id });
         if (!request) return false;
-        core.log(`${core.nationChip(leader)} 邀请 ${core.nationChip(target)} 加入联盟`, "diplo", leader);
+        core.log(t("game.alliance.invite.requested", { leader: core.nationChip(leader), target: core.nationChip(target) }), "diplo", leader);
         core.emit({ type: "state" });
         return true;
     }
@@ -208,7 +209,7 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
         return alliance ? joinAlliance(core, alliance, target) : false;
     }
     setPairCooldown(state, leader, target, state.day + ALLIANCE_INVITE_COOLDOWN);
-    core.log(`${core.nationChip(target)} 拒绝 ${core.nationChip(leader)} 的结盟邀请`, "diplo", target);
+    core.log(t("game.alliance.invite.rejected", { target: core.nationChip(target), leader: core.nationChip(leader) }), "diplo", target);
     core.emit({ type: "state" });
     return false;
 }
@@ -217,17 +218,17 @@ export function inviteToAlliance(core: GameCore, leader: number, target: number)
 export function decideJoinRequest(state: GameState, leader: number, applicant: number): DiplomaticDecision {
     const enemy = commonEnemy(state, leader, applicant);
     if (enemy !== null) {
-        return { accepts: true, factors: [plus(`共同的敌人：${state.nations[enemy].name}`)], verdict: "sure" };
+        return { accepts: true, factors: [plus(t("game.alliance.decision.commonEnemy", { nation: state.nations[enemy].name }))], verdict: "sure" };
     }
     const leaderProfile = tendencyProfileOf(state.nations[leader].tendency);
     const kin = strategicKin(state, leader, applicant);
-    const factors: DecisionFactor[] = [minus("没有共同敌人")];
-    factors.push(kin ? plus("战略倾向相近") : minus("战略倾向不相近"));
-    factors.push(leaderProfile.alliance >= 3 ? plus("领袖结盟意愿足够") : minus("领袖结盟意愿不足"));
+    const factors: DecisionFactor[] = [minus(t("game.alliance.decision.noCommonEnemy"))];
+    factors.push(kin ? plus(t("game.alliance.decision.kin")) : minus(t("game.alliance.decision.notKin")));
+    factors.push(leaderProfile.alliance >= 3 ? plus(t("game.alliance.join.leaderWilling")) : minus(t("game.alliance.join.leaderUnwilling")));
     const powerOk = leaderProfile.alliance >= 4 &&
         nationPower(state, applicant) >= nationPower(state, leader) * 0.6;
     if (leaderProfile.alliance >= 4) {
-        factors.push(powerOk ? plus("申请方实力达到其预期") : minus("申请方实力未达到其预期"));
+        factors.push(powerOk ? plus(t("game.alliance.join.powerMet")) : minus(t("game.alliance.join.powerUnmet")));
     }
     const accepts = (kin && leaderProfile.alliance >= 3) || powerOk;
     return { accepts, factors, verdict: accepts ? "likely" : (leaderProfile.alliance >= 4 ? "unlikely" : "refuse") };
@@ -246,7 +247,7 @@ export function requestJoinAlliance(core: GameCore, applicant: number, leader: n
         if (requestCooldownDays(state, "alliance", leader) > 0) return false;
         const request = queuePlayerProposal(state, "alliance", leader, 0, { allianceId: alliance.id });
         if (!request) return false;
-        core.log(`我方申请加入 ${core.nationChip(leader)} 的联盟，等待答复`, "diplo", 0);
+        core.log(t("game.alliance.join.playerRequested", { leader: core.nationChip(leader) }), "diplo", 0);
         core.emit({ type: "state" });
         return true;
     }
@@ -255,7 +256,7 @@ export function requestJoinAlliance(core: GameCore, applicant: number, leader: n
     }
     if (decideJoinRequest(state, leader, applicant).accepts) return joinAlliance(core, alliance, applicant);
     setPairCooldown(state, applicant, leader, state.day + ALLIANCE_INVITE_COOLDOWN);
-    core.log(`${core.nationChip(leader)} 拒绝 ${core.nationChip(applicant)} 的入盟申请`, "diplo", leader);
+    core.log(t("game.alliance.join.rejected", { leader: core.nationChip(leader), applicant: core.nationChip(applicant) }), "diplo", leader);
     core.emit({ type: "state" });
     return false;
 }
@@ -304,7 +305,7 @@ export function applyAllianceWar(core: GameCore, aggressor: number, defender: nu
             setWar(state, member, aggressor, true);
             joined.push(member);
             if (!quiet) {
-                core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(aggressor)} 的战争`, "diplo", member, true, {
+                core.log(t("game.alliance.joinedWar", { nation: core.nationChip(member), enemy: core.nationChip(aggressor) }), "diplo", member, true, {
                     kind: "war",
                     nation: member,
                 });
@@ -320,7 +321,7 @@ export function applyAllianceWar(core: GameCore, aggressor: number, defender: nu
             setWar(state, member, defender, true);
             joined.push(member);
             if (!quiet) {
-                core.log(`${core.nationChip(member)} 依联盟义务加入对 ${core.nationChip(defender)} 的战争`, "diplo", member, true, {
+                core.log(t("game.alliance.joinedWar", { nation: core.nationChip(member), enemy: core.nationChip(defender) }), "diplo", member, true, {
                     kind: "war",
                     nation: member,
                 });

@@ -1,5 +1,7 @@
 /** Policy categories, their values, transitions and stat tables. */
 
+import { t } from "../../i18n/index.ts";
+
 export type EconomyPolicy = "balanced" | "market" | "planned";
 export type ConscriptionPolicy = "volunteer" | "service" | "total";
 export type OccupationPolicy = "lenient" | "balanced" | "harsh";
@@ -31,32 +33,62 @@ export interface PolicyModifiers {
 }
 
 export const ECONOMY_POLICIES: Readonly<Record<EconomyPolicy, { name: string; desc: string } & PolicyModifiers>> = {
-    balanced: { name: "平衡", desc: "无修正", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    market: { name: "自由市场", desc: "[[funds:+20%]]，[[industry:-10%]]", fundsMult: 1.2, industryMult: 0.9, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    planned: { name: "国家计划", desc: "[[industry:+20%]]，[[funds:-10%]]", fundsMult: 0.9, industryMult: 1.2, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
+    balanced: {
+        get name() { return t("game.types.policy.economy.balanced.name"); },
+        get desc() { return t("game.types.policy.economy.balanced.desc"); },
+        fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
+    market: {
+        get name() { return t("game.types.policy.economy.market.name"); },
+        get desc() { return t("game.types.policy.economy.market.desc"); },
+        fundsMult: 1.2, industryMult: 0.9, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
+    planned: {
+        get name() { return t("game.types.policy.economy.planned.name"); },
+        get desc() { return t("game.types.policy.economy.planned.desc"); },
+        fundsMult: 0.9, industryMult: 1.2, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
 };
 
 export const CONSCRIPTION_POLICIES: Readonly<Record<ConscriptionPolicy, {
     name: string; desc: string; recruitableShare: number; stabilityTarget: number;
 } & PolicyModifiers>> = {
     volunteer: {
-        name: "志愿兵", desc: "可招募 1%，[[funds:+10%]]", recruitableShare: 0.01, stabilityTarget: 0,
+        get name() { return t("game.types.policy.conscription.volunteer.name"); },
+        get desc() { return t("game.types.policy.conscription.volunteer.desc"); },
+        recruitableShare: 0.01, stabilityTarget: 0,
         fundsMult: 1.1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
     },
     service: {
-        name: "义务兵", desc: "可招募 3%，[[stability:-5]]，[[funds:-5%]]", recruitableShare: 0.03, stabilityTarget: -5,
+        get name() { return t("game.types.policy.conscription.service.name"); },
+        get desc() { return t("game.types.policy.conscription.service.desc"); },
+        recruitableShare: 0.03, stabilityTarget: -5,
         fundsMult: 0.95, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
     },
     total: {
-        name: "全面动员", desc: "可招募 5%，[[stability:-10]]，[[funds:-15%]]，[[occupation]]增长 -20%", recruitableShare: 0.05, stabilityTarget: -10,
+        get name() { return t("game.types.policy.conscription.total.name"); },
+        get desc() { return t("game.types.policy.conscription.total.desc"); },
+        recruitableShare: 0.05, stabilityTarget: -10,
         fundsMult: 0.85, industryMult: 1, manpowerMult: 1, growthMult: 0.8, occupiedIncomeMult: 1, ppModifier: 0,
     },
 };
 
 export const OCCUPATION_POLICIES: Readonly<Record<OccupationPolicy, { name: string; desc: string } & PolicyModifiers>> = {
-    lenient: { name: "宽容", desc: "[[occupation]]增长 +50%，占领省税收 [[funds:-20%]]", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1.5, occupiedIncomeMult: 0.8, ppModifier: 0 },
-    balanced: { name: "均衡", desc: "无修正", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0 },
-    harsh: { name: "严苛", desc: "占领省税收 [[funds:+30%]]，[[occupation]]增长 -50%，[[politics:-1]]/[[turn]]", fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 0.5, occupiedIncomeMult: 1.3, ppModifier: -1 },
+    lenient: {
+        get name() { return t("game.types.policy.occupation.lenient.name"); },
+        get desc() { return t("game.types.policy.occupation.lenient.desc"); },
+        fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1.5, occupiedIncomeMult: 0.8, ppModifier: 0,
+    },
+    balanced: {
+        get name() { return t("game.types.policy.occupation.balanced.name"); },
+        get desc() { return t("game.types.policy.occupation.balanced.desc"); },
+        fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 1, occupiedIncomeMult: 1, ppModifier: 0,
+    },
+    harsh: {
+        get name() { return t("game.types.policy.occupation.harsh.name"); },
+        get desc() { return t("game.types.policy.occupation.harsh.desc"); },
+        fundsMult: 1, industryMult: 1, manpowerMult: 1, growthMult: 0.5, occupiedIncomeMult: 1.3, ppModifier: -1,
+    },
 };
 
 export const DEFAULT_POLICIES: Policies = { economy: "balanced", conscription: "service", occupation: "balanced" };

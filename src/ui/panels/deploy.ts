@@ -3,11 +3,14 @@ import { nationDisplayColor } from "../../game/access.ts";
 import { canTrain } from "../../game/economy.ts";
 import { armyCap, nationArmyCount } from "../../game/rules.ts";
 import { REGIMENT_CAP, UNIT_KINDS, UNIT_PROFILES } from "../../game/types/unit.ts";
-import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
+import { escapeGameText, escapeHtml, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, renderPanel } from "../panel.ts";
+import { t } from "../../i18n/index.ts";
 
-const DEPLOY_TIP = `训练立即扣除[[funds]]/[[manpower]]/[[industry]]，完成后优先补充落点的未满军团（每军团 ${REGIMENT_CAP} 团），否则新建军团；军团满编时自动寻找其他落点。\n\n选中己方首都或城市可指定落点，否则自动优先首都/城市。\n队列中的项目可随时取消，返还半数资源。\n军团数量上限随控制的州增长。`;
+const DEPLOY_TIP = {
+    get body(): string { return t("panels.deploy.help", { regimentCap: REGIMENT_CAP }); },
+};
 
 /** Training & deployment workbench (dock tab 2). */
 export class DeployPanel {
@@ -26,9 +29,9 @@ export class DeployPanel {
         const state = this.engine.state;
         renderPanel(this.el, {
             head: panelHead({
-                title: "部署",
-                help: { title: "训练与部署", body: DEPLOY_TIP },
-                status: `${nationArmyCount(state, 0)}/${armyCap(state, 0)} 军团`,
+                title: t("panels.deploy.title"),
+                help: { title: t("panels.deploy.helpTitle"), body: DEPLOY_TIP.body },
+                status: t("panels.deploy.status", { count: nationArmyCount(state, 0), cap: armyCap(state, 0) }),
             }),
             body: this.trainSectionHtml(),
         });
@@ -36,24 +39,27 @@ export class DeployPanel {
 
     private trainSectionHtml(): string {
         const state = this.engine.state;
-        if (state.winner !== null) return `<div class="empty-hint">战役已结束。</div>`;
+        if (state.winner !== null) return `<div class="empty-hint">${t("panels.deploy.ended")}</div>`;
 
         const player = state.nations[0];
         const playerColor = nationDisplayColor(state, 0);
         const queue = state.deployments.filter((order) => order.nation === 0);
         const selectedSite = state.selected;
         const ownSelected = selectedSite !== null && state.provinces[selectedSite].owner === 0;
-        const targetLabel = ownSelected && selectedSite !== null ? state.provinces[selectedSite].name : "自动";
+        const targetLabel = ownSelected && selectedSite !== null ? state.provinces[selectedSite].name : t("panels.deploy.auto");
 
         const trainRows = UNIT_KINDS.map((kind) => {
             const up = UNIT_PROFILES[kind];
             const affordable = canTrain(state, 0, kind);
-            const costParts = [textToken("funds", up.cost), textToken("manpower", up.manpowerCost)];
-            if (up.industryCost > 0) costParts.push(textToken("industry", up.industryCost));
-            const upkeepParts = [textToken("funds", up.upkeep), textToken("food", up.foodUpkeep)];
-            if (up.strategicUpkeep > 0) upkeepParts.push(textToken("strategic", up.strategicUpkeep));
-            if (up.industryUpkeep > 0) upkeepParts.push(textToken("industry", up.industryUpkeep));
-            const detail = `${up.desc}\n\n造价 ${costParts.join(" · ")}\n每日维护 ${upkeepParts.join(" · ")}/${textToken("turn")}\n训练 ${textToken("turn", up.trainDays)} · 攻${up.atk}/防${up.def}/机动${up.mp}`;
+            const costParts = [game`[[funds:${up.cost}]]`, game`[[manpower:${up.manpowerCost}]]`];
+            if (up.industryCost > 0) costParts.push(game`[[industry:${up.industryCost}]]`);
+            const upkeepParts = [game`[[funds:${up.upkeep}]]`, game`[[food:${up.foodUpkeep}]]`];
+            if (up.strategicUpkeep > 0) upkeepParts.push(game`[[strategic:${up.strategicUpkeep}]]`);
+            if (up.industryUpkeep > 0) upkeepParts.push(game`[[industry:${up.industryUpkeep}]]`);
+            const detail = `${up.desc}\n\n${t("panels.deploy.unitDetail", {
+                cost: costParts.join(" · "), upkeep: upkeepParts.join(" · "),
+                days: up.trainDays, atk: up.atk, def: up.def, mp: up.mp,
+            })}`;
             return `
                 <button class="deploy-kind" data-action="train" data-kind="${kind}" style="--nc:${escapeHtml(playerColor)}" ${tooltipAttrs(escapeGameText(up.name), detail)} ${affordable ? "" : "disabled"}>
                     <span class="unit-glyph small" style="--pc:${escapeHtml(playerColor)}">${escapeHtml(up.glyph)}</span>
@@ -68,14 +74,14 @@ export class DeployPanel {
         const queueRows = queue.map((order) => {
             const up = UNIT_PROFILES[order.kind];
             const status = order.status === "blocked"
-                ? "落点被阻断"
+                ? t("panels.deploy.order.blocked")
                 : order.daysLeft > 0
-                    ? `训练中 · 剩 ${textToken("turn", order.daysLeft)}`
-                    : "待部署";
+                    ? t("panels.deploy.order.training", { days: order.daysLeft })
+                    : t("panels.deploy.order.pending");
             const options = [
-                `<option value="">自动（优先首都/城市）</option>`,
+                `<option value="">${t("panels.deploy.option.auto")}</option>`,
                 ...destinations.map((site) =>
-                    `<option value="${site}"${order.destination === site ? " selected" : ""}>${escapeHtml(state.provinces[site].name)}${state.provinces[site].isCapital ? "（首都）" : ""}</option>`),
+                    `<option value="${site}"${order.destination === site ? " selected" : ""}>${escapeHtml(state.provinces[site].name)}${state.provinces[site].isCapital ? t("panels.deploy.option.capital") : ""}</option>`),
             ];
             if (order.destination !== null && !destinations.includes(order.destination)) {
                 options.push(`<option value="${order.destination}" selected>${escapeHtml(state.provinces[order.destination].name)}</option>`);
@@ -84,29 +90,29 @@ export class DeployPanel {
                 <div class="deploy-order">
                     <div class="deploy-order-head">
                         <span class="deploy-order-name">${escapeHtml(up.glyph)} ${escapeHtml(up.name)}</span>
-                        <button class="deploy-cancel" data-action="train-cancel" data-order="${order.id}" aria-label="取消${escapeHtml(up.name)}训练">×</button>
+                        <button class="deploy-cancel" data-action="train-cancel" data-order="${order.id}" aria-label="${t("panels.deploy.order.cancel", { name: escapeHtml(up.name) })}">×</button>
                     </div>
                     <div class="deploy-order-status${order.status === "blocked" ? " blocked" : ""}">${status}</div>
-                    <select class="deploy-order-dest" data-action="train-target" data-order="${order.id}" aria-label="${escapeHtml(up.name)}部署地点">${options.join("")}</select>
+                    <select class="deploy-order-dest" data-action="train-target" data-order="${order.id}" aria-label="${t("panels.deploy.order.destination", { name: escapeHtml(up.name) })}">${options.join("")}</select>
                 </div>`;
         }).join("");
 
-        return `
+        return game`
             <div class="deploy-section">
-                <div class="deploy-target">部署目标：<b>${escapeHtml(targetLabel)}</b>${ownSelected ? "" : " · 选中己方省份可指定落点"}</div>
+                <div class="deploy-target">${t("panels.deploy.targetLabel")}<b>${escapeHtml(targetLabel)}</b>${ownSelected ? "" : ` · ${t("panels.deploy.targetHint")}`}</div>
                 <div class="deploy-workbench">
                     <div class="deploy-pane">
-                        <div class="deploy-pane-head"><span>队列</span><span>${queue.length}</span></div>
+                        <div class="deploy-pane-head"><span>${t("panels.deploy.queue")}</span><span>${queue.length}</span></div>
                         <div class="deploy-pane-body">
-                            ${queueRows || `<div class="deploy-empty">队列为空<br />点右侧兵种添加</div>`}
+                            ${queueRows || `<div class="deploy-empty">${t("panels.deploy.queueEmpty")}</div>`}
                         </div>
                     </div>
                     <div class="deploy-pane">
-                        <div class="deploy-pane-head"><span>兵种</span><span>${renderGameText(textToken("funds", Math.floor(player.funds)))}</span></div>
+                        <div class="deploy-pane-head"><span>${t("panels.deploy.unitTypes")}</span><span>[[funds:${Math.floor(player.funds)}]]</span></div>
                         <div class="deploy-pane-body">${trainRows}</div>
                     </div>
                 </div>
-                <p class="micro-hint">${renderGameText("点击兵种加入训练队列 · 选中己方首都/城市指定落点 · 取消返还半数资源")}</p>
+                <p class="micro-hint">${t("panels.deploy.hint")}</p>
             </div>`;
     }
 }

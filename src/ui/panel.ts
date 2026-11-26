@@ -1,4 +1,4 @@
-import { escapeHtml, renderGameText } from "./text.ts";
+import { escapeHtml, gameText, setGameHtml } from "./text.ts";
 import { rawTooltipAttrs, tooltipAttrs } from "./tooltip.ts";
 
 /** Shared panel chrome: every panel head carries title, optional [i] help and a right-aligned status. */
@@ -28,13 +28,16 @@ export interface PanelHeadSpec {
 /** Unfinished business marker is left to callers; the button itself is shared. */
 export function helpButton(help: HelpSpec, attrs = ""): string {
     const label = help.label ?? help.title;
-    return `<button type="button" class="intel-help intel-info" aria-label="${escapeHtml(renderGameText(label, "plain"))}" ${attrs} ${tooltipAttrs(help.title, help.body)}>i</button>`;
+    return `<button type="button" 
+                    class="intel-help intel-info" 
+                    aria-label="${escapeHtml(gameText(label, "plain"))}" ${attrs} ${tooltipAttrs(help.title, help.body)}>i
+            </button>`;
 }
 
 /** Same chrome as `helpButton`, but the body is trusted, already-rendered HTML. */
 export function richHelpButton(title: string, bodyHtml: string, label = title, attrs = ""): string {
     const markup = `<div class="tip-reason">${bodyHtml}</div>`;
-    return `<button type="button" class="intel-help intel-info" aria-label="${escapeHtml(renderGameText(label, "plain"))}" ${attrs} ${tooltipAttrs(title, "")} ${rawTooltipAttrs(markup)}>i</button>`;
+    return `<button type="button" class="intel-help intel-info" aria-label="${escapeHtml(gameText(label, "plain"))}" ${attrs} ${tooltipAttrs(title, "")} ${rawTooltipAttrs(markup)}>i</button>`;
 }
 
 export function panelHead(spec: PanelHeadSpec): string {
@@ -59,7 +62,7 @@ export function renderPanel(el: HTMLElement, view: PanelView): void {
     const active = document.activeElement instanceof HTMLElement && el.contains(document.activeElement)
         ? document.activeElement : null;
     const focusValue = active?.getAttribute(focusAttr);
-    el.innerHTML = `${view.head}<div class="panel-body${view.bodyClass ? ` ${view.bodyClass}` : ""}">${view.body}</div>`;
+    setGameHtml(el, `${view.head}<div class="panel-body${view.bodyClass ? ` ${view.bodyClass}` : ""}">${view.body}</div>`);
     const body = el.querySelector<HTMLElement>(".panel-body");
     if (body) body.scrollTop = scrollTop;
     if (focusValue) {
@@ -94,7 +97,7 @@ export class PanelShell {
     }
 
     clear(): void {
-        this.el.innerHTML = "";
+        setGameHtml(this.el, "");
     }
 
     render(view: PanelView): void {

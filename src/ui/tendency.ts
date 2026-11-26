@@ -7,6 +7,7 @@ import type { ResourceVisibilityMode } from "../game/resourceVisibility.ts";
 import type { GameState } from "../game/types/state.ts";
 import type { Nation } from "../game/types/entities.ts";
 import type { TradeResource } from "../game/types/trade.ts";
+import { t } from "../i18n/index.ts";
 import { helpButton } from "./panel.ts";
 import { chipToken, escapeHtml, TEXT_TERMS } from "./text.ts";
 
@@ -24,8 +25,8 @@ const OPPORTUNIST_TENDENCIES: ReadonlySet<AITendencyId> = new Set([
 function vassalBehaviorLine(nation: Nation, state?: GameState): string {
     if (!state || overlordOf(state, nation.id) < 0) return "";
     return !!nation.tendency && OPPORTUNIST_TENDENCIES.has(nation.tendency)
-        ? "该国家会在宗主弱小、进攻方强大时向进攻方求援独立。"
-        : "该国家倾向于与宗主国保持统一战线。";
+        ? t("misc.tendency.vassalOpportunist")
+        : t("misc.tendency.vassalLoyal");
 }
 
 const INTEL_RESOURCES: readonly TradeResource[] = ["funds", "manpower", "industry", "raw", "food", "strategic"];
@@ -40,12 +41,18 @@ function resourceIntelLine(state: GameState, nation: Nation): string {
         names.push(TEXT_TERMS[resource].label);
         groups.set(visibility.mode, names);
     }
-    if (groups.size === 1 && groups.has("exact")) return "资源情报：具体库存与净变化可见。";
+    if (groups.size === 1 && groups.has("exact")) return t("misc.tendency.intelExact");
     const labels: Readonly<Record<ResourceVisibilityMode, string>> = {
-        exact: "可见具体数据", surplus: "有盈余", shortage: "短缺", unknown: "未知",
+        exact: t("misc.tendency.intel.exact"),
+        surplus: t("misc.tendency.intel.surplus"),
+        shortage: t("misc.tendency.intel.shortage"),
+        unknown: t("misc.tendency.intel.unknown"),
     };
-    const parts = [...groups].map(([mode, names]) => `${names.join("、")}${labels[mode]}`);
-    return `资源情报：${parts.join("；")}。`;
+    const parts = [...groups].map(([mode, names]) => t("misc.tendency.intel.group", {
+        names: names.join(t("misc.common.listSeparator")),
+        label: labels[mode],
+    }));
+    return `${t("misc.tendency.intelPrefix")}${parts.join(t("misc.tendency.intelSeparator"))}${t("misc.tendency.intelSuffix")}`;
 }
 
 /**
@@ -64,9 +71,9 @@ export function tendencyBadge(nation: Nation | undefined, state?: GameState): st
     }${intel ? `\n\n${intel}` : ""}`;
     return `<span class="tendency-name">${escapeHtml(profile.name)}</span>${
         helpButton({
-            title: `外交倾向 · ${profile.name}`,
+            title: t("misc.tendency.badgeTitle", { name: profile.name }),
             body,
-            label: "外交倾向说明",
+            label: t("misc.tendency.badgeLabel"),
         })
     }`;
 }

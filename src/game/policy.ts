@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { CONSCRIPTION_POLICIES, ECONOMY_POLICIES, OCCUPATION_POLICIES, POLICY_SWITCH_COST, POLICY_SWITCH_DAYS, POLICY_SWITCH_UPKEEP } from "./types/policy.ts";
 import type { ConscriptionPolicy, EconomyPolicy, OccupationPolicy, PolicyCategory, PolicyModifiers, PolicyTransition } from "./types/policy.ts";
@@ -6,9 +7,9 @@ import type { Nation } from "./types/entities.ts";
 type PolicyOption = PolicyModifiers & { readonly name: string; readonly desc: string };
 
 export const POLICY_LABELS: Readonly<Record<PolicyCategory, string>> = {
-    economy: "经济",
-    conscription: "兵役",
-    occupation: "占领",
+    get economy() { return t("game.policy.economy"); },
+    get conscription() { return t("game.policy.conscription"); },
+    get occupation() { return t("game.policy.occupation"); },
 };
 
 const NO_MODIFIERS: PolicyModifiers = {
@@ -104,7 +105,7 @@ export function startPolicySwitch(core: GameCore, category: PolicyCategory, valu
             upkeepSpent: 0,
         },
     };
-    core.log(`${core.nationChip(0)} 开始切换${POLICY_LABELS[category]}政策`, "system", 0);
+    core.log(t("game.policy.start", { nation: core.nationChip(0), category: POLICY_LABELS[category] }), "system", 0);
     core.emit({ type: "state" });
     return true;
 }
@@ -118,7 +119,7 @@ export function cancelPolicySwitch(core: GameCore, category: PolicyCategory): bo
     const next = { ...nation.policyTransitions };
     delete next[category];
     nation.policyTransitions = next;
-    core.log(`${core.nationChip(0)} 取消切换${POLICY_LABELS[category]}政策（政治点不返还）`, "system", 0);
+    core.log(t("game.policy.cancel", { nation: core.nationChip(0), category: POLICY_LABELS[category] }), "system", 0);
     core.emit({ type: "state" });
     return true;
 }
@@ -140,7 +141,9 @@ export function advancePolicySwitches(core: GameCore): void {
         else if (category === "conscription") nation.policies.conscription = transition.to as ConscriptionPolicy;
         else nation.policies.occupation = transition.to as OccupationPolicy;
         const name = policyOption(category, transition.to)?.name ?? transition.to;
-        core.log(`${core.nationChip(0)} ${POLICY_LABELS[category]}政策生效：${name}`, "system", 0);
+        core.log(t("game.policy.effective", {
+            nation: core.nationChip(0), category: POLICY_LABELS[category], name,
+        }), "system", 0);
         changed = true;
     }
     if (changed) core.emit({ type: "state" });

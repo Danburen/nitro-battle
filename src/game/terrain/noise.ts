@@ -1,4 +1,4 @@
-import { pMod } from "../utils/math.ts";
+import { pMod } from "../../utils/math.ts";
 
 // Eight unit gradients for 2D Perlin noise.
 const GRADIENTS = [

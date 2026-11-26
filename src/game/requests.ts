@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { DiplomaticRequest, DiplomaticRequestKind, VassalType } from "./types/diplomacy.ts";
 import type { TradeKind, TradeTransfer } from "./types/trade.ts";
 import type { GameState } from "./types/state.ts";
@@ -8,12 +9,12 @@ export const DIPLOMATIC_REQUEST_DAYS = 5;
 export const REQUEST_COOLDOWN_DAYS = 5;
 
 export const REQUEST_LABEL: Readonly<Record<DiplomaticRequestKind, string>> = {
-    vassalize: "附庸提议",
-    alliance: "结盟邀请",
-    aid: "求援",
-    upgrade: "契约改善请求",
-    call: "附庸召唤",
-    trade: "贸易提议",
+    get vassalize() { return t("game.requests.vassalize"); },
+    get alliance() { return t("game.requests.alliance"); },
+    get aid() { return t("game.requests.aid"); },
+    get upgrade() { return t("game.requests.upgrade"); },
+    get call() { return t("game.requests.call"); },
+    get trade() { return t("game.requests.trade"); },
 };
 
 const REQUEST_KINDS = ["vassalize", "alliance", "aid", "upgrade", "call", "trade"] as const satisfies readonly DiplomaticRequestKind[];

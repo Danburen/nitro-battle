@@ -1,4 +1,4 @@
-import type { Vec2 } from "../terrain/voronoi/index.ts";
+import type { Vec2 } from "../game/terrain/voronoi/index.ts";
 
 export type MapMode = "province" | "state";
 export type ColorMode = "uniform" | "gradient" | "resource";

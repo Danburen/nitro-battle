@@ -9,10 +9,12 @@ import { vassalsOf } from "../game/access.ts";
 import { VASSAL_HELP_BODY } from "../game/vassal.ts";
 import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS } from "../game/types/policy.ts";
 import { FOOD_SURPLUS_RATIO, MANPOWER_PER_POINT, PP_CAP } from "../game/types/economy.ts";
-import { DAYS_PER_SEASON, SEASONS } from "../game/types/world.ts";
+import { DAYS_PER_SEASON } from "../game/types/world.ts";
+import { t } from "../i18n/index.ts";
+import type { MessageKey } from "../i18n/index.ts";
 import { nationOverviewBody, nationStats } from "./nation-info.ts";
 import { vassalIndependenceIcon, vassalTypeIcon } from "./vassal.ts";
-import { compactNumber, escapeHtml, peopleCount, renderGameText, setGameText, signedCompact, textToken } from "./text.ts";
+import { compactNumber, peopleCount, gameText, setGameText, signedCompact, setGameHtml, game, html, rawHtml } from "./text.ts";
 import type { TextKey } from "./text.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 import { helpButton } from "./panel.ts";
@@ -21,23 +23,30 @@ import { tooltipAttrs } from "./tooltip.ts";
 const SOUND_ON_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 4.5 4.5H2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 .5.5h2.5L8 14.5a.5.5 0 0 0 .8-.4V1.9a.5.5 0 0 0-.8-.4Z"/><path d="M10.5 5a3.5 3.5 0 0 1 0 6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M12.3 3a6 6 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
 const SOUND_OFF_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 4.5 4.5H2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 .5.5h2.5L8 14.5a.5.5 0 0 0 .8-.4V1.9a.5.5 0 0 0-.8-.4Z"/><path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
+const SEASON_KEYS: readonly MessageKey[] = [
+    "ui.season.spring", "ui.season.summer", "ui.season.autumn", "ui.season.winter",
+];
+
 /** Overlord dropdown: one compact row per vassal, icons carry the full contract. */
 function vassalMenuHtml(state: GameState): string {
     const vassals = vassalsOf(state, 0);
-    if (vassals.length === 0) return '<p class="top-vassals-note">当前没有附庸国。</p>';
-    const rows = vassals.map((id) => `
+    if (vassals.length === 0) return html`<p class="top-vassals-note">${t("ui.topbar.vassals.empty")}</p>`;
+    const rows = vassals.map((id) => {
+        const name = state.nations[id].name;
+        return html`
         <button type="button" class="top-vassals-row" role="menuitem" data-action="vassal-goto" data-nation="${id}"
-            ${tooltipAttrs("查看附庸国", `打开外交页并选中 ${state.nations[id].name}`)}>
-            ${nationFlagHtmlFor(state, id, 22)}
-            <span class="top-vassals-row-name">${escapeHtml(state.nations[id].name)}</span>
-            ${vassalTypeIcon(state, id)}
-            <span class="top-vassals-row-ind">独立性</span>
-            ${vassalIndependenceIcon(state, id)}
-        </button>`).join("");
-    return `<div class="top-vassals-head"><b>附庸</b><span class="status-pill ready">${vassals.length} 个附庸</span>
-            ${helpButton({ title: "附庸制度", body: VASSAL_HELP_BODY })}</div>
-        <p class="top-vassals-note">你对所有附庸拥有通行权，并会在它们遭到攻击时履行保护义务。</p>
-        ${rows}`;
+            ${rawHtml(tooltipAttrs(t("ui.topbar.vassals.view"), t("ui.topbar.vassals.openDiplo", { name })))}>
+            ${rawHtml(nationFlagHtmlFor(state, id, 22))}
+            <span class="top-vassals-row-name">${name}</span>
+            ${rawHtml(vassalTypeIcon(state, id))}
+            <span class="top-vassals-row-ind">${t("ui.topbar.vassals.independence")}</span>
+            ${rawHtml(vassalIndependenceIcon(state, id))}
+        </button>`;
+    }).join("");
+    return html`<div class="top-vassals-head"><b>${t("ui.topbar.vassals.head")}</b><span class="status-pill ready">${t("ui.topbar.vassals.count", { count: vassals.length })}</span>
+            ${rawHtml(helpButton({ title: t("ui.topbar.vassals.helpTitle"), body: VASSAL_HELP_BODY }))}</div>
+        <p class="top-vassals-note">${t("ui.topbar.vassals.note")}</p>
+        ${rawHtml(rows)}`;
 }
 
 /** Top resource bar: country name, date, season, resources, end-turn and sound buttons. */
@@ -71,7 +80,7 @@ export class TopBar {
         this.sound = sound;
         this.toast = toast;
         for (const element of [this.resStability, this.resFunds, this.resManpower, this.resIndustry, this.resRaw, this.resFood, this.resStrategic, this.resPp]) {
-            element.innerHTML = "<span></span><i></i>";
+            setGameHtml(element, "<span></span><i></i>");
             element.tabIndex = 0;
         }
         this.setSoundIcon();
@@ -94,7 +103,7 @@ export class TopBar {
         // Only an overlord has vassals to list in the dropdown.
         if (this.vassals.classList.contains("hidden")) return;
         this.vassalsOpen = !this.vassalsOpen;
-        if (this.vassalsOpen) this.vassalsMenu.innerHTML = vassalMenuHtml(this.engine.state);
+        if (this.vassalsOpen) setGameHtml(this.vassalsMenu, vassalMenuHtml(this.engine.state));
         this.syncVassalsMenu();
         this.sound.play("select");
     };
@@ -116,10 +125,10 @@ export class TopBar {
     }
 
     private renderResource(element: HTMLElement, key: TextKey, amount: number, change: string): void {
-        setGameText(element.firstElementChild as HTMLElement, textToken(key, amount));
+        setGameText(element.firstElementChild as HTMLElement, game`[[${key}:${amount}]]`);
         const delta = element.lastElementChild as HTMLElement;
         setGameText(delta, change);
-        const plain = renderGameText(change, "plain");
+        const plain = gameText(change, "plain");
         delta.classList.toggle("neg", plain.startsWith("-"));
         delta.classList.toggle("zero", /^[+-]?0(?:\.0+)?(?:\/.*)?$/.test(plain));
     }
@@ -127,131 +136,149 @@ export class TopBar {
     render(): void {
         const state = this.engine.state;
         const player = state.nations[0];
-        this.countryFlag.innerHTML = nationFlagHtmlFor(state, 0, 22);
-        this.countryLabel.textContent = player.name;
+        setGameHtml(this.countryFlag, nationFlagHtmlFor(state, 0, 22));
+        setGameText(this.countryLabel, player.name, "plain");
         this.countryName.dataset.tooltipTitle = player.name;
         this.countryName.dataset.tooltipHtml = nationOverviewBody(state, nationStats(state, 0));
-        this.countryName.setAttribute("aria-label", `${player.name} · 本国概况`);
+        this.countryName.setAttribute("aria-label", t("ui.topbar.country.ariaLabel", { name: player.name }));
         // Only an overlord keeps the "附庸 N 个附庸" dropdown. A vassal's contract
         // lives in the country hover, and a lone independent shows nothing.
         const vassals = vassalsOf(state, 0);
         this.vassals.classList.toggle("hidden", vassals.length === 0);
-        this.vassalsSummary.textContent = `${vassals.length} 个附庸`;
+        setGameText(this.vassalsSummary, t("ui.topbar.vassals.count", { count: vassals.length }), "plain");
         if (vassals.length === 0 && this.vassalsOpen) this.closeCountryMenu();
-        if (this.vassalsOpen) this.vassalsMenu.innerHTML = vassalMenuHtml(state);
+        if (this.vassalsOpen) setGameHtml(this.vassalsMenu, vassalMenuHtml(state));
         const rates = resourceRates(state, 0);
         const detail = resourceBreakdown(state, 0);
-        const season = SEASONS[state.seasonIndex];
-        setGameText(this.dayPill, `第 ${textToken("turn", state.day)}`);
+        setGameText(this.dayPill, t("ui.topbar.day.label", { day: state.day }));
         this.dayPill.dataset.tooltipTitle = "[[turn]]";
-        this.dayPill.dataset.tooltipBody = `当前为第 ${textToken("turn", state.day)}，${season.name}${state.seasonIndex === 3 ? "（积雪减速）" : ""}。
-每 ${DAYS_PER_SEASON} [[turn]]更替季节；冬季积雪提高[[movement]]成本。
-
-点击「结束[[turn]]」或按 E 推进 ${textToken("turn", 1)}：先结算[[raw]]/[[food]]/[[strategic]]产出与短缺，再更新库存、人口、恢复、施工、行军与会战。`;
+        this.dayPill.dataset.tooltipBody = t("ui.topbar.turn.body", {
+            day: state.day,
+            season: t(SEASON_KEYS[state.seasonIndex] ?? "ui.season.spring"),
+            winterNote: state.seasonIndex === 3 ? t("ui.topbar.turn.winterNote") : "",
+            daysPerSeason: DAYS_PER_SEASON,
+        });
 
         const fmt = (value: number): string => (Math.round(value * 10) / 10).toString();
         const signed = (value: number): string => `${value >= 0 ? "+" : ""}${fmt(value)}`;
-        const policyBonus = (mult: number): string => {
+        const policyPercent = (mult: number): string => {
             const percent = Math.round((mult - 1) * 100);
-            return `政策加成 ${percent > 0 ? "+" : ""}${percent}%`;
+            return `${percent > 0 ? "+" : ""}${percent}%`;
         };
         const net = Math.round(rates.fundsNet);
         const snap = detail.stability;
         const economyFactor = stabilityProduction(player);
         const adminBonus = Math.min(15, 1.5 * snap.admin);
         const occupiedPenalty = Math.min(10, 0.3 * snap.occupiedProvinces);
-        const foodStance = snap.food > 0 ? `盈余 +5` : snap.food < 0 ? `短缺 -10` : "持平 0";
+        const foodStance = snap.food > 0 ? t("ui.topbar.stability.foodSurplus")
+            : snap.food < 0 ? t("ui.topbar.stability.foodShortage")
+            : t("ui.topbar.stability.foodBalance");
         // Only occupied land drags stability; a nation ruling its own cores sees no line.
         const occupiedLine = snap.occupiedProvinces > 0
-            ? `\n[[occupation]] -${occupiedPenalty.toFixed(1)}（${snap.occupiedProvinces} 个非核心省，上限 -10）`
+            ? t("ui.topbar.stability.occupiedLine", {
+                penalty: occupiedPenalty.toFixed(1),
+                count: snap.occupiedProvinces,
+            })
             : "";
         this.renderResource(this.resStability, "stability", Math.round(snap.value), `→${Math.round(snap.target)}`);
         this.resStability.dataset.tooltipTitle = "[[stability]]";
-        this.resStability.dataset.tooltipBody = `当前 [[stability:${Math.round(snap.value)}]] / 100，每日最多变动 1.2，向目标 [[stability:${Math.round(snap.target)}]] 靠拢。
-构成：
-基础 +55
-[[admin]] +${adminBonus.toFixed(1)}（上限 +15）
-战争 -${5 * snap.wars}
-兵役 ${snap.conscription >= 0 ? "+" : ""}${snap.conscription}${occupiedLine}
-[[food]] ${foodStance}
-
-效果：
-[[funds]]/[[industry]]/[[raw]]/[[strategic]]/[[food]] ×${economyFactor.toFixed(2)}
-[[politics]] ×${stabilityPolitics(player).toFixed(2)}
-[[manpower]]补充 ×${stabilityManpower(player).toFixed(2)}
-
-宣战双方下降，议和回升；长期战争、占领区过多与缺粮都会压低目标。`;
+        this.resStability.dataset.tooltipBody = t("ui.topbar.stability.body", {
+            value: Math.round(snap.value),
+            target: Math.round(snap.target),
+            adminBonus: adminBonus.toFixed(1),
+            war: 5 * snap.wars,
+            conscription: `${snap.conscription >= 0 ? "+" : ""}${snap.conscription}`,
+            occupiedLine,
+            foodStance,
+            economyFactor: economyFactor.toFixed(2),
+            politicsFactor: stabilityPolitics(player).toFixed(2),
+            manpowerFactor: stabilityManpower(player).toFixed(2),
+        });
         this.renderResource(this.resFunds, "funds", Math.floor(player.funds), signedCompact(net));
         this.resFunds.dataset.tooltipTitle = "[[funds]]";
-        this.resFunds.dataset.tooltipBody = `省份产值 [[funds:${signed(detail.funds.provinces)}]]/[[turn]]
-[[farm]] [[funds:${signed(detail.funds.farms)}]]/[[turn]]
-[[production]][[factory]] [[funds:${signed(detail.funds.factories)}]]/[[turn]]
-[[infrastructure]]加成 [[funds:${signed(detail.funds.infrastructure)}]]/[[turn]]
-${policyBonus(detail.funds.policyMult)}
-[[stability]]修正 ×${economyFactor.toFixed(2)}
-
-军团维护 [[funds:-${fmt(detail.funds.upkeep)}]]/[[turn]]
-净收入 [[funds:${signed(detail.funds.net)}]]/[[turn]]
-
-城市省份税收全额计入，非城市省份只按两成计入；占领省再按[[occupation]]效率折算，[[occupation]]政策影响占领省税收。`;
+        this.resFunds.dataset.tooltipBody = t("ui.topbar.funds.body", {
+            provinces: signed(detail.funds.provinces),
+            farms: signed(detail.funds.farms),
+            factories: signed(detail.funds.factories),
+            infrastructure: signed(detail.funds.infrastructure),
+            policyBonus: policyPercent(detail.funds.policyMult),
+            stabilityFactor: economyFactor.toFixed(2),
+            upkeep: fmt(detail.funds.upkeep),
+            net: signed(detail.funds.net),
+        });
         const intake = rates.manpower;
         const sharePercent = Math.round(detail.manpower.share * 1000) / 10;
         this.renderResource(this.resManpower, "manpower", Math.floor(player.manpower), signedCompact(intake));
-        this.resManpower.dataset.tooltipTitle = "[[manpower]]储备";
-        this.resManpower.dataset.tooltipBody = `可招募比例 ${sharePercent}%（由兵役政策决定）
-适役人口上限 [[manpower:${Math.round(detail.manpower.cap)}]]（约 ${peopleCount(detail.manpower.cap * MANPOWER_PER_POINT)} 人）
-当前储备 [[manpower:${Math.floor(player.manpower)}]]
-每日补充 [[manpower:${signed(intake)}]]
-[[stability]]修正 ×${stabilityManpower(player).toFixed(2)}
-
-各省人口先按核心（全额）或占领（0.1 × [[occupation]]）折算，再乘可招募比例。
-补充不会超过适役上限；训练与补员消耗储备，稳定度越低补充越慢。`;
+        this.resManpower.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "manpower" });
+        this.resManpower.dataset.tooltipBody = t("ui.topbar.manpower.body", {
+            sharePercent,
+            cap: Math.round(detail.manpower.cap),
+            people: peopleCount(detail.manpower.cap * MANPOWER_PER_POINT),
+            stock: Math.floor(player.manpower),
+            intake: signed(intake),
+            stabilityFactor: stabilityManpower(player).toFixed(2),
+        });
         this.renderResource(this.resIndustry, "industry", Math.floor(player.industry), `+${compactNumber(rates.industryNet)}`);
-        this.resIndustry.dataset.tooltipTitle = "[[industry]]储备";
-        this.resIndustry.dataset.tooltipBody = `每[[turn]]产出 [[industry:${signed(detail.industry.total)}]]
-城市 [[industry:${signed(detail.industry.cities)}]]
-[[production]][[factory]] [[industry:${signed(detail.industry.factories)}]]
-[[infrastructure]]加成 [[industry:${signed(detail.industry.infrastructure)}]]
-${policyBonus(detail.industry.policyMult)}
-[[stability]]修正 ×${economyFactor.toFixed(2)}
-军团维护 [[industry:-${fmt(detail.chain.industryArmyUse)}]]/[[turn]]
-
-上限 [[industry:${Math.round(detail.industry.cap)}]]（随城市数量变化）
-[[production]][[factory]]产量受来源州[[infrastructure]]影响。
-${detail.chain.industryFactor < 1 ? `\n[[raw]]短缺 本日[[industry]]产量 ${Math.round((detail.chain.industryFactor - 1) * 100)}%` : ""}`;
+        this.resIndustry.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "industry" });
+        this.resIndustry.dataset.tooltipBody = t("ui.topbar.industry.body", {
+            total: signed(detail.industry.total),
+            cities: signed(detail.industry.cities),
+            factories: signed(detail.industry.factories),
+            infrastructure: signed(detail.industry.infrastructure),
+            policyBonus: policyPercent(detail.industry.policyMult),
+            stabilityFactor: economyFactor.toFixed(2),
+            upkeep: fmt(detail.chain.industryArmyUse),
+            cap: Math.round(detail.industry.cap),
+            shortageLine: detail.chain.industryFactor < 1
+                ? t("ui.topbar.industry.shortageLine", {
+                    percent: Math.round((detail.chain.industryFactor - 1) * 100),
+                })
+                : "",
+        });
 
         const chain = detail.chain;
         const rawFlow = chain.raw;
         this.renderResource(this.resRaw, "raw", Math.floor(player.raw), signedCompact(rates.raw));
-        this.resRaw.dataset.tooltipTitle = "[[raw]]储备";
-        this.resRaw.dataset.tooltipBody = `[[raw]]矿产出 [[raw:${signed(rawFlow.mines)}]]/[[turn]]
-[[production]][[factory]]消耗 [[raw:-${fmt(rawFlow.factoryUse)}]]/[[turn]]
-净变化 [[raw:${signed(rawFlow.net)}]]/[[turn]]
-矿产受来源省[[infrastructure]]（基础 60%，每级 +10%）与[[occupation]]影响；缺[[food]]时矿产最多 -99%。
-上限 [[raw:${rawFlow.cap}]]。`;
+        this.resRaw.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "raw" });
+        this.resRaw.dataset.tooltipBody = t("ui.topbar.raw.body", {
+            mines: signed(rawFlow.mines),
+            factoryUse: fmt(rawFlow.factoryUse),
+            net: signed(rawFlow.net),
+            cap: rawFlow.cap,
+        });
 
         const foodFlow = chain.food;
         this.renderResource(this.resFood, "food", Math.floor(player.food), signedCompact(rates.food));
-        this.resFood.dataset.tooltipTitle = "[[food]]储备";
-        this.resFood.dataset.tooltipBody = `每[[turn]]产出 [[food:${signed(foodFlow.gross)}]]
-省份 [[food:${signed(foodFlow.provinces)}]]
-[[farm]] [[food:${signed(foodFlow.farms)}]]
-[[stability]]修正 ×${economyFactor.toFixed(2)}
-人口消耗 [[food:-${fmt(foodFlow.consumption - foodFlow.armyUse)}]]
-军团口粮 [[food:-${fmt(foodFlow.armyUse)}]]
-净变化 [[food:${signed(foodFlow.net)}]]/[[turn]]
-${foodFlow.shortage ? "短缺：人口缓慢减少、[[stability]]下降，矿产降低。" : foodFlow.surplus ? `盈余：人口增长 +${Math.round(foodFlow.surplusBonus * 100)}%，[[stability]]目标 +5。` : `粮食充足；人口增长随余粮比例变化，净盈余超过产量的 ${Math.round(FOOD_SURPLUS_RATIO * 100)}% 时额外 +20%。`}
-上限 [[food:${foodFlow.cap}]]。`;
+        this.resFood.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "food" });
+        this.resFood.dataset.tooltipBody = t("ui.topbar.food.body", {
+            gross: signed(foodFlow.gross),
+            provinces: signed(foodFlow.provinces),
+            farms: signed(foodFlow.farms),
+            stabilityFactor: economyFactor.toFixed(2),
+            consumption: fmt(foodFlow.consumption - foodFlow.armyUse),
+            armyUse: fmt(foodFlow.armyUse),
+            net: signed(foodFlow.net),
+            status: foodFlow.shortage
+                ? t("ui.topbar.food.shortage")
+                : foodFlow.surplus
+                    ? t("ui.topbar.food.surplus", { bonus: Math.round(foodFlow.surplusBonus * 100) })
+                    : t("ui.topbar.food.balanced", { ratio: Math.round(FOOD_SURPLUS_RATIO * 100) }),
+            cap: foodFlow.cap,
+        });
 
         const strategicFlow = chain.strategic;
         this.renderResource(this.resStrategic, "strategic", Math.floor(player.strategic), signedCompact(rates.strategic));
-        this.resStrategic.dataset.tooltipTitle = "[[strategic]]储备";
-        this.resStrategic.dataset.tooltipBody = `[[strategic]]矿产出 [[strategic:${signed(strategicFlow.mines)}]]/[[turn]]
-[[production]][[factory]]消耗 [[strategic:-${fmt(strategicFlow.factoryUse)}]]/[[turn]]
-军团维护消耗 [[strategic:-${fmt(strategicFlow.armyUse)}]]/[[turn]]
-净变化 [[strategic:${signed(strategicFlow.net)}]]/[[turn]]
-${strategicFlow.shortage ? "短缺：全军[[organization]]每日下降。" : "储备充足。"}
-上限 [[strategic:${strategicFlow.cap}]]。`;
+        this.resStrategic.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "strategic" });
+        this.resStrategic.dataset.tooltipBody = t("ui.topbar.strategic.body", {
+            mines: signed(strategicFlow.mines),
+            factoryUse: fmt(strategicFlow.factoryUse),
+            armyUse: fmt(strategicFlow.armyUse),
+            net: signed(strategicFlow.net),
+            status: strategicFlow.shortage
+                ? t("ui.topbar.strategic.shortage")
+                : t("ui.topbar.strategic.surplus"),
+            cap: strategicFlow.cap,
+        });
 
         this.renderResource(this.resPp, "politics", Math.floor(player.politicalPower), `+${compactNumber(Math.round(rates.politicalPower))}`);
         const diplomaticUpkeep = state.diplomaticActions
@@ -259,26 +286,36 @@ ${strategicFlow.shortage ? "短缺：全军[[organization]]每日下降。" : "�
             .reduce((sum, action) => sum + DIPLOMATIC_PROFILES[action.kind].upkeep, 0);
         const switchUpkeep = policySwitchUpkeep(player);
         this.resPp.dataset.tooltipTitle = "[[politics]]";
-        this.resPp.dataset.tooltipBody = `每[[turn]] [[politics:+${fmt(detail.political.total)}]]
-基础 [[politics:+${detail.political.base}]]
-[[admin]] [[politics:+${detail.political.admin}]]
-政策修正 [[politics:${detail.political.policy}]]
-[[stability]]修正 ×${detail.political.stability.toFixed(2)}
-${diplomaticUpkeep > 0 ? `外交项目维护 [[politics:-${diplomaticUpkeep}]]/[[turn]]\n` : ""}${switchUpkeep > 0 ? `政策切换维护 [[politics:-${switchUpkeep}]]/[[turn]]\n` : ""}
-上限 [[politics:${PP_CAP}]]。切换政策先付 [[politics:${POLICY_SWITCH_COST}]]，进行中每[[turn]]维护，需 ${textToken("turn", POLICY_SWITCH_DAYS)}完成。`;
+        this.resPp.dataset.tooltipBody = t("ui.topbar.politics.body", {
+            total: fmt(detail.political.total),
+            base: detail.political.base,
+            admin: detail.political.admin,
+            policy: detail.political.policy,
+            stabilityFactor: detail.political.stability.toFixed(2),
+            diploUpkeep: diplomaticUpkeep > 0
+                ? t("ui.topbar.politics.diploUpkeep", { amount: diplomaticUpkeep })
+                : "",
+            switchUpkeep: switchUpkeep > 0
+                ? t("ui.topbar.politics.switchUpkeep", { amount: switchUpkeep })
+                : "",
+            cap: PP_CAP,
+            switchCost: POLICY_SWITCH_COST,
+            switchDays: POLICY_SWITCH_DAYS,
+        });
 
         this.endTurnBtn.disabled = state.winner !== null;
+        this.setSoundIcon();
     }
 
     toggleSound(): void {
         const muted = this.sound.toggle();
         this.setSoundIcon();
-        this.toast(muted ? "音效已关闭" : "音效已开启");
+        this.toast(muted ? t("ui.topbar.sound.off") : t("ui.topbar.sound.on"));
     }
 
     setSoundIcon(): void {
-        this.soundBtn.innerHTML = this.sound.muted ? SOUND_OFF_ICON : SOUND_ON_ICON;
-        this.soundBtn.setAttribute("aria-label", this.sound.muted ? "开启音效" : "关闭音效");
+        setGameHtml(this.soundBtn, this.sound.muted ? SOUND_OFF_ICON : SOUND_ON_ICON);
+        this.soundBtn.setAttribute("aria-label", this.sound.muted ? t("ui.topbar.sound.enable") : t("ui.topbar.sound.disable"));
         this.soundBtn.classList.toggle("muted", this.sound.muted);
     }
 }

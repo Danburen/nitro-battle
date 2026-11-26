@@ -2,15 +2,18 @@ import type { GameEngine } from "../../game/engine.ts";
 import { CLAIM_COST, canCancelStateClaim, hasStateClaim } from "../../game/diplomacy.ts";
 import { nationDisplayColor } from "../../game/access.ts";
 import type { StateRegion } from "../../game/types/entities.ts";
-import { escapeGameText, escapeHtml, renderGameText, textToken } from "../text.ts";
+import { escapeGameText, escapeHtml, setGameHtml, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead } from "../panel.ts";
+import { t } from "../../i18n/index.ts";
 
 export interface ExpansionHooks {
     focus(stateId: number | null): void;
 }
 
-const EXPANSION_TIP = `宣称以州为单位：支付 ${CLAIM_COST} 政治点提出，不改变控制、正式归属或历史核心；宣战借口在「外交」页制造。地图已切换州模式，已宣称州以我方国家颜色覆盖。\n\n点击「管理宣称」进入宣称管理：点击地图上的州标记新增，或标记取消已有宣称；金色闪烁州为可新增目标。按 Esc 弹出确认窗，确认后一次性提交全部变更，取消则留在管理界面。\n\n外交页可凭借口宣战；交战中不可取消相关宣称。`;
+const EXPANSION_TIP = {
+    get body(): string { return t("panels.expansion.help", { cost: CLAIM_COST }); },
+};
 
 /** Expansion tab: stages claim changes in a management mode, then commits them on Esc confirm. */
 export class ExpansionPanel {
@@ -75,38 +78,38 @@ export class ExpansionPanel {
     toggleDraft(stateId: number): { ok: boolean; message: string } {
         const state = this.engine.state;
         const region = state.states[stateId];
-        if (!region) return { ok: false, message: "目标州无效" };
-        if (state.winner !== null) return { ok: false, message: "战役已结束，无法修改宣称" };
+        if (!region) return { ok: false, message: t("panels.expansion.toast.invalid") };
+        if (state.winner !== null) return { ok: false, message: t("panels.expansion.toast.ended") };
         if (this.stagedAdds.has(stateId)) {
             this.stagedAdds.delete(stateId);
             this.render();
-            return { ok: true, message: `已撤销${region.name}的待宣称` };
+            return { ok: true, message: t("panels.expansion.toast.undoAdd", { name: region.name }) };
         }
         if (this.stagedCancels.has(stateId)) {
             this.stagedCancels.delete(stateId);
             this.render();
-            return { ok: true, message: `已保留${region.name}的原有宣称` };
+            return { ok: true, message: t("panels.expansion.toast.undoCancel", { name: region.name }) };
         }
         if (hasStateClaim(state, 0, stateId)) {
             if (!canCancelStateClaim(state, 0, stateId)) {
-                return { ok: false, message: "与该州归属国交战中，无法取消宣称" };
+                return { ok: false, message: t("panels.expansion.toast.warCancel") };
             }
             this.stagedCancels.add(stateId);
             this.render();
-            return { ok: true, message: `已标记取消${region.name}的宣称（确认后返还 ${CLAIM_COST} 政治点）` };
+            return { ok: true, message: t("panels.expansion.toast.markCancel", { name: region.name, cost: CLAIM_COST }) };
         }
         const available = state.nations[0].politicalPower + (this.stagedCancels.size - this.stagedAdds.size) * CLAIM_COST;
-        if (available < CLAIM_COST) return { ok: false, message: `政治点不足 ${CLAIM_COST}，无法新增宣称` };
+        if (available < CLAIM_COST) return { ok: false, message: t("panels.expansion.toast.insufficient", { cost: CLAIM_COST }) };
         const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))];
         if (!owners.some((owner) => owner !== 0 && owner !== -1 && state.nations[owner] !== undefined)) {
-            return { ok: false, message: `${region.name}没有可宣称的他国正式领土` };
+            return { ok: false, message: t("panels.expansion.toast.noForeignLand", { name: region.name }) };
         }
         if (!this.adjacent(region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
-            return { ok: false, message: "无法宣称：不与己方控制区邻接，且无历史核心" };
+            return { ok: false, message: t("panels.expansion.toast.notAdjacent") };
         }
         this.stagedAdds.add(stateId);
         this.render();
-        return { ok: true, message: `已标记宣称${region.name}（确认后支付 ${CLAIM_COST} 政治点）` };
+        return { ok: true, message: t("panels.expansion.toast.markAdd", { name: region.name, cost: CLAIM_COST }) };
     }
 
     focusFromMap(stateId: number): void {
@@ -141,28 +144,28 @@ export class ExpansionPanel {
         const state = this.engine.state;
         const player = state.nations[0];
         const mine = state.claims.filter((claim) => claim.nation === 0);
-        this.el.innerHTML = `
+        setGameHtml(this.el, `
             ${panelHead({
-                title: "扩张",
-                help: { title: "扩张规则", body: EXPANSION_TIP },
+                title: t("panels.expansion.title"),
+                help: { title: t("panels.expansion.helpTitle"), body: EXPANSION_TIP.body },
                 helpAttrs: 'data-exp-focus="objective"',
                 status: this.managing
-                    ? `${this.stagedAdds.size} 待宣称 · ${this.stagedCancels.size} 待取消`
-                    : `${mine.length} 项宣称 · ${renderGameText(textToken("politics", Math.floor(player.politicalPower)))}`,
+                    ? t("panels.expansion.status.manage", { adds: this.stagedAdds.size, cancels: this.stagedCancels.size })
+                    : game`${t("panels.expansion.status.claims", { count: mine.length })} · [[politics:${Math.floor(player.politicalPower)}]]`,
             })}
             <div class="panel-body diplo-body">
-                ${state.winner !== null ? '<p class="diplo-requirement">战役已结束，无法新增宣称。</p>' : ""}
+                ${state.winner !== null ? `<p class="diplo-requirement">${t("panels.expansion.ended")}</p>` : ""}
                 <div class="claim-manage-bar">
-                    <button class="btn ${this.managing ? "btn-outline" : "btn-primary"}" data-action="${this.managing ? "claim-manage-exit" : "claim-manage"}" data-exp-focus="manage">${this.managing ? "退出管理" : "管理宣称"}</button>
-                    <span class="claim-manage-hint">${this.managing ? "点击地图州标记新增 / 取消 · Esc 确认退出" : "进入后可批量新增或取消宣称"}</span>
+                    <button class="btn ${this.managing ? "btn-outline" : "btn-primary"}" data-action="${this.managing ? "claim-manage-exit" : "claim-manage"}" data-exp-focus="manage">${this.managing ? t("panels.expansion.manage.exit") : t("panels.expansion.manage.enter")}</button>
+                    <span class="claim-manage-hint">${this.managing ? t("panels.expansion.manage.hint.exit") : t("panels.expansion.manage.hint.enter")}</span>
                 </div>
                 ${this.focusedState !== null && state.states[this.focusedState] ? this.focusedClaimHtml(state.states[this.focusedState]) : ""}
                 ${this.managing && this.stagedAdds.size
-                    ? `<div class="deploy-queue-head">待新增 · ${this.stagedAdds.size} 项</div>${[...this.stagedAdds].map((id) => this.draftRowHtml(state.states[id])).join("")}`
+                    ? `<div class="deploy-queue-head">${t("panels.expansion.staged.adds", { count: this.stagedAdds.size })}</div>${[...this.stagedAdds].map((id) => this.draftRowHtml(state.states[id])).join("")}`
                     : ""}
-                <div class="deploy-queue-head">我的宣称 · ${mine.length} 项</div>
-                ${mine.length ? mine.map((claim) => this.claimRowHtml(state.states[claim.stateId])).join("") : '<p class="diplo-note">尚未提出任何州宣称；进入「管理宣称」后点击地图上的金色闪烁州即可标记新增。</p>'}
-            </div>`;
+                <div class="deploy-queue-head">${t("panels.expansion.claims.mine", { count: mine.length })}</div>
+                ${mine.length ? mine.map((claim) => this.claimRowHtml(state.states[claim.stateId])).join("") : `<p class="diplo-note">${t("panels.expansion.claims.empty")}</p>`}
+            </div>`);
 
         for (const row of this.el.querySelectorAll<HTMLElement>("[data-action='claim-focus']")) {
             row.onkeydown = (event) => {
@@ -187,25 +190,25 @@ export class ExpansionPanel {
         const stagedCancel = this.stagedCancels.has(region.id);
         const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
             .filter((owner) => owner !== 0);
-        const ownerText = owners.length ? owners.map((owner) => state.nations[owner]?.name ?? "已灭亡国家").join("、") : "无他国正式领土";
+        const ownerText = owners.length ? owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") : t("panels.expansion.owner.none");
         const reason = claim ? ""
-            : stagedAdd ? `已标记待宣称，确认后支付 ${CLAIM_COST} 政治点。`
+            : stagedAdd ? t("panels.expansion.reason.stagedAdd", { cost: CLAIM_COST })
             : this.managing ? this.draftHint(region)
-            : "进入「管理宣称」后点击地图该州即可标记宣称。";
-        const pill = claim ? (stagedCancel ? "待取消" : "已宣称") : stagedAdd ? "待宣称" : "未宣称";
-        const draftLabel = stagedCancel ? "撤销取消" : stagedAdd ? "撤销待宣称" : claim ? "标记取消" : "标记宣称";
+            : t("panels.expansion.reason.prompt");
+        const pill = claim ? (stagedCancel ? t("panels.expansion.pill.cancel") : t("panels.expansion.pill.claimed")) : stagedAdd ? t("panels.expansion.pill.add") : t("panels.expansion.pill.unclaimed");
+        const draftLabel = stagedCancel ? t("panels.expansion.draft.undoCancel") : stagedAdd ? t("panels.expansion.draft.undoAdd") : claim ? t("panels.expansion.draft.markCancel") : t("panels.expansion.draft.markAdd");
         const canStage = stagedCancel || stagedAdd || !claim || canCancelStateClaim(state, 0, region.id);
         return `<div class="claim-focused diplo-card" data-claim-row="${region.id}">
             <div class="diplo-head"><span class="nation-dot" style="--pc:${escapeHtml(claim ? nationDisplayColor(state, 0) : "#8b949e")}"></span><span class="diplo-name">${escapeHtml(region.name)}</span><span class="status-pill ${claim || stagedAdd ? "ready" : "idle"}">${pill}</span></div>
-            <p class="diplo-note">正式归属：${escapeHtml(ownerText)} · ${region.provinces.length} 省 · ${this.adjacent(region) ? "与己方邻接" : "不邻接（需历史核心）"}</p>
+            <p class="diplo-note">${t("panels.expansion.focus.details", { owner: escapeHtml(ownerText), provinces: region.provinces.length, adjacency: this.adjacent(region) ? t("panels.expansion.adjacent") : t("panels.expansion.notAdjacent") })}</p>
             ${reason ? `<p class="diplo-note">${escapeHtml(reason)}</p>` : ""}
             <div class="diplo-button-row">
                 ${this.managing
                     ? `<button class="btn ${claim || stagedCancel ? "btn-outline btn-danger" : "btn-outline"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}" ${canStage ? "" : "disabled"}>${draftLabel}</button>`
                     : claim
                         ? `<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}"
-                            ${tooltipAttrs("取消宣称", escapeGameText(`取消并返还 ${CLAIM_COST} 政治点；与该州归属国交战时不可取消。`))}
-                            ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>取消宣称</button>`
+                            ${tooltipAttrs(t("panels.expansion.action.cancelClaim"), escapeGameText(t("panels.expansion.action.cancelClaimTip", { cost: CLAIM_COST })))}
+                            ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${t("panels.expansion.action.cancelClaim")}</button>`
                         : ""}
                 ${this.locateButton(region)}
             </div>
@@ -218,12 +221,12 @@ export class ExpansionPanel {
         const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
             .filter((owner) => owner !== 0);
         const available = state.nations[0].politicalPower + (this.stagedCancels.size - this.stagedAdds.size) * CLAIM_COST;
-        if (!owners.some((owner) => owner !== -1 && state.nations[owner] !== undefined)) return "无他国正式领土，无需宣称。";
+        if (!owners.some((owner) => owner !== -1 && state.nations[owner] !== undefined)) return t("panels.expansion.hint.noForeignLand");
         if (!this.adjacent(region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
-            return "不与己方控制区邻接，且无历史核心，无法宣称。";
+            return t("panels.expansion.hint.notAdjacent");
         }
-        if (available < CLAIM_COST) return `政治点不足 ${CLAIM_COST}，无法宣称。`;
-        return "点击地图该州即可标记宣称。";
+        if (available < CLAIM_COST) return t("panels.expansion.hint.insufficient", { cost: CLAIM_COST });
+        return t("panels.expansion.hint.clickState");
     }
 
     private claimRowHtml(region: StateRegion | undefined): string {
@@ -231,21 +234,21 @@ export class ExpansionPanel {
         const state = this.engine.state;
         const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
             .filter((owner) => owner !== 0);
-        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? "已灭亡国家").join("、") || "我方";
+        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") || t("panels.expansion.owner.self");
         const focused = this.focusedState === region.id;
         const pending = this.stagedCancels.has(region.id);
         const cancelButton = this.managing
             ? `<button class="btn btn-outline${pending ? "" : " btn-danger"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}"
-                ${canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${pending ? "撤销" : "标记取消"}</button>`
+                ${canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${pending ? t("panels.expansion.draft.undo") : t("panels.expansion.draft.markCancel")}</button>`
             : `<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}"
-                ${tooltipAttrs("取消", escapeGameText(`取消宣称并返还 ${CLAIM_COST} 政治点；交战中不可取消。`))}
-                ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>取消</button>`;
+                ${tooltipAttrs(t("panels.expansion.action.cancel"), escapeGameText(t("panels.expansion.action.cancelTip", { cost: CLAIM_COST })))}
+                ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${t("panels.expansion.action.cancel")}</button>`;
         return `<div class="claim-row${focused ? " focused" : ""}${pending ? " pending" : ""}" data-action="claim-focus" data-state="${region.id}" data-claim-row="${region.id}" data-exp-focus="claim-row-${region.id}" tabindex="0" role="button"
-            ${tooltipAttrs(escapeGameText(region.name), escapeGameText(`正式归属：${ownerText}\n点击聚焦并在地图描边`))}>
+            ${tooltipAttrs(escapeGameText(region.name), escapeGameText(t("panels.expansion.row.tip", { owner: ownerText })))}>
             <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
             <span class="claim-name">${escapeHtml(region.name)}</span>
             <span class="claim-owner">${escapeHtml(ownerText)}</span>
-            <span class="claim-badge">${pending ? "待取消" : "已宣称"}</span>
+            <span class="claim-badge">${pending ? t("panels.expansion.pill.cancel") : t("panels.expansion.pill.claimed")}</span>
             ${cancelButton}${this.locateButton(region)}
         </div>`;
     }
@@ -255,18 +258,18 @@ export class ExpansionPanel {
         const state = this.engine.state;
         const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
             .filter((owner) => owner !== 0);
-        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? "已灭亡国家").join("、") || "我方";
+        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") || t("panels.expansion.owner.self");
         return `<div class="claim-row pending">
             <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
             <span class="claim-name">${escapeHtml(region.name)}</span>
             <span class="claim-owner">${escapeHtml(ownerText)}</span>
-            <span class="claim-badge">待宣称</span>
-            <button class="btn btn-outline" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}">撤销</button>${this.locateButton(region)}
+            <span class="claim-badge">${t("panels.expansion.pill.add")}</span>
+            <button class="btn btn-outline" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}">${t("panels.expansion.draft.undo")}</button>${this.locateButton(region)}
         </div>`;
     }
 
     private locateButton(region: StateRegion): string {
-        return `<button class="btn btn-outline btn-sm" data-action="claim-locate" data-state="${region.id}" data-exp-focus="locate-${region.id}" ${tooltipAttrs("定位", "将地图居中到该州中心")}>定位</button>`;
+        return `<button class="btn btn-outline btn-sm" data-action="claim-locate" data-state="${region.id}" data-exp-focus="locate-${region.id}" ${tooltipAttrs(t("panels.expansion.action.locate"), t("panels.expansion.action.locateTip"))}>${t("panels.expansion.action.locate")}</button>`;
     }
 
     private adjacent(region: StateRegion): boolean {

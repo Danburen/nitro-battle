@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { resolveBattleRound } from "./battle.ts";
 import { claimProvince } from "./conquest.ts";
@@ -45,7 +46,9 @@ export function attack(core: GameCore, armyId: number, target: number): boolean 
     state.battles.push(battle);
     state.stats.battles++;
     core.log(
-        `${core.nationChip(army.nation)} ${army.name} 进攻 ${province.name}`,
+        t("game.combat.attack", {
+            nation: core.nationChip(army.nation), army: army.name, province: province.name,
+        }),
         "combat",
         army.nation,
     );
@@ -69,7 +72,9 @@ export function cancelAttack(core: GameCore, armyId: number): boolean {
     const army = state.armies.get(armyId);
     state.battles.splice(index, 1);
     if (army) {
-        core.log(`${core.nationChip(army.nation)} ${army.name} 停止进攻 ${state.provinces[battle.province].name}`, "combat", army.nation);
+        core.log(t("game.combat.cancelAttack", {
+            nation: core.nationChip(army.nation), army: army.name, province: state.provinces[battle.province].name,
+        }), "combat", army.nation);
     }
     core.invalidateReach();
     core.emit({ type: "state" });
@@ -94,13 +99,17 @@ function retreatDefenderArmy(core: GameCore, defender: Army, from: number): void
         break;
     }
     if (best === null) {
-        core.log(`${core.nationChip(defender.nation)} ${defender.name} 被歼灭 ${state.provinces[from].name}`, "combat", defender.nation);
+        core.log(t("game.combat.annihilated", {
+            nation: core.nationChip(defender.nation), army: defender.name, province: state.provinces[from].name,
+        }), "combat", defender.nation);
         core.removeArmy(defender, true);
         return;
     }
     core.placeArmy(defender, best);
     defender.march = null;
-    core.log(`${core.nationChip(defender.nation)} ${defender.name} 撤出 ${state.provinces[from].name}`, "combat", defender.nation);
+    core.log(t("game.combat.retreat", {
+        nation: core.nationChip(defender.nation), army: defender.name, province: state.provinces[from].name,
+    }), "combat", defender.nation);
 }
 
 export function resolveBattles(core: GameCore): void {
@@ -139,7 +148,9 @@ export function resolveBattles(core: GameCore): void {
             if (attacker.regiments.length === 0) {
                 // Mutual destruction: the province holds, but its garrison is gone.
                 outcome = "repelled";
-                core.log(`${core.nationChip(attacker.nation)} 进攻 ${province.name} 全军覆没`, "combat", attacker.nation);
+                core.log(t("game.combat.wipedOut", {
+                    nation: core.nationChip(attacker.nation), province: province.name,
+                }), "combat", attacker.nation);
                 core.removeArmy(attacker, true);
             } else {
                 core.placeArmy(attacker, battle.province);
@@ -168,7 +179,8 @@ export function resolveBattles(core: GameCore): void {
 
         // A capture already carries this round inside its single event-chain line.
         if (outcome !== "captured") {
-            const suffix = outcome === "repelled" ? " · 进攻击退" : result.defenderBroken ? " · 防线崩溃" : "";
+            const suffix = outcome === "repelled" ? t("game.combat.suffix.repelled")
+                : result.defenderBroken ? t("game.combat.suffix.breach") : "";
             const report: BattleReport = {
                 attacker: attacker.nation,
                 defender: defenderNation,
@@ -181,7 +193,10 @@ export function resolveBattles(core: GameCore): void {
                 outcome: outcome === "broken" ? "repelled" : outcome,
             };
             core.log(
-                `${core.nationChip(attacker.nation)} ${province.name} 会战第 ${battle.rounds} 日 · 攻损${result.attackerLoss}/守损${result.defenderLoss}${suffix}`,
+                t("game.combat.round", {
+                    nation: core.nationChip(attacker.nation), province: province.name, day: battle.rounds,
+                    attackerLoss: result.attackerLoss, defenderLoss: result.defenderLoss, suffix,
+                }),
                 "combat",
                 attacker.nation,
                 false,

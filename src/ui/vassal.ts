@@ -5,7 +5,8 @@ import {
 } from "../game/vassal.ts";
 import type { GameState } from "../game/types/state.ts";
 import type { VassalType } from "../game/types/diplomacy.ts";
-import { chipToken, iconMaskStyle, textToken } from "./text.ts";
+import { t } from "../i18n/index.ts";
+import { chipToken, iconMaskStyle, game } from "./text.ts";
 import { tooltipAttrs } from "./tooltip.ts";
 
 /**
@@ -28,7 +29,11 @@ const INDEPENDENCE_ICON = "vassal-independence";
 function independenceText(state: GameState, nationId: number): string {
     const value = Math.round(independenceOf(state, nationId));
     const cap = independenceCapOf(state, nationId);
-    return `独立性 ${value} / ${cap}（${Math.round(independenceRatioOf(state, nationId) * 100)}%）`;
+    return t("misc.vassal.independenceText", {
+        value,
+        cap,
+        percent: Math.round(independenceRatioOf(state, nationId) * 100),
+    });
 }
 
 /** Tribute as colour-coded, negative resource tokens (plus PP where applicable). */
@@ -40,9 +45,9 @@ function vassalTributeTokens(state: GameState, nationId: number): string {
     const parts: string[] = [];
     if (share > 0) {
         const percent = `-${Math.round(share * 100)}%`;
-        parts.push(textToken("funds", percent), textToken("manpower", percent), textToken("industry", percent));
+        parts.push(game`[[funds:${percent}]]`, game`[[manpower:${percent}]]`, game`[[industry:${percent}]]`);
     }
-    if (profile.tributePP > 0) parts.push(textToken("politics", -profile.tributePP));
+    if (profile.tributePP > 0) parts.push(game`[[politics:${-profile.tributePP}]]`);
     return parts.join(" · ");
 }
 
@@ -52,10 +57,10 @@ function vassalContractBody(state: GameState, nationId: number): string {
     const overlord = overlordOf(state, nationId);
     const lord = chipToken(nationDisplayColor(state, overlord), state.nations[overlord]?.name ?? "?");
     return [
-        `这个国家是 ${lord} 的${VASSAL_PROFILES[type].name}附庸。`,
+        t("misc.vassal.contractLine", { lord, type: VASSAL_PROFILES[type].name }),
         VASSAL_PROFILES[type].blurb,
         independenceText(state, nationId),
-        `贡赋 ${vassalTributeTokens(state, nationId)}`,
+        t("misc.vassal.tribute", { tokens: vassalTributeTokens(state, nationId) }),
     ].join("\n");
 }
 
@@ -63,7 +68,8 @@ function vassalContractBody(state: GameState, nationId: number): string {
 export function vassalTypeIcon(state: GameState, nationId: number): string {
     const type = vassalTypeOf(state, nationId);
     if (!type) return "";
-    return `<span class="vassal-type-mark vassal-type-mark--${type}" aria-label="${VASSAL_PROFILES[type].name}附庸" ${tooltipAttrs(`${VASSAL_PROFILES[type].name}附庸`, vassalContractBody(state, nationId))}>
+    const label = t("misc.vassal.typeLabel", { type: VASSAL_PROFILES[type].name });
+    return `<span class="vassal-type-mark vassal-type-mark--${type}" aria-label="${label}" ${tooltipAttrs(label, vassalContractBody(state, nationId))}>
         <span class="icon-glyph" aria-hidden="true" ${iconMaskStyle(VASSAL_TYPE_ICON[type])}></span>
     </span>`;
 }
@@ -73,7 +79,10 @@ export function vassalIndependenceIcon(state: GameState, nationId: number): stri
     const value = Math.round(independenceOf(state, nationId));
     const cap = independenceCapOf(state, nationId);
     const high = independenceRatioOf(state, nationId) >= HIGH_INDEPENDENCE_RATIO ? " vassal-independence-icon--high" : "";
-    return `<span class="vassal-independence-icon${high}" aria-label="独立性 ${value} / ${cap}" ${tooltipAttrs("独立性", `${independenceText(state, nationId)}。高位（80%）时更易倒戈或起义。`)}>
+    return `<span class="vassal-independence-icon${high}" aria-label="${t("misc.vassal.independence")} ${value} / ${cap}" ${tooltipAttrs(
+        t("misc.vassal.independence"),
+        t("misc.vassal.independenceTip", { value: independenceText(state, nationId), threshold: 80 }),
+    )}>
         <span class="icon-glyph" aria-hidden="true" ${iconMaskStyle(INDEPENDENCE_ICON)}></span>
         <b>${value}/${cap}</b>
     </span>`;

@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { autoFillClaimedBorder, autoMergeManagedArmies, isArmyAutoManaged } from "./auto.ts";
 import { claimedDefenseSites } from "./defense.ts";
@@ -112,7 +113,7 @@ function advanceDay(core: GameCore): void {
     state.terrain.updateWeather(SEASONS[seasonIndex].value);
     state.supplyDirty = true;
     if (seasonChanged) {
-        core.log(`季节更替 ${SEASONS[seasonIndex].name}`, "system", NEUTRAL, false, {
+        core.log(t("game.turn.seasonChange", { season: SEASONS[seasonIndex].name }), "system", NEUTRAL, false, {
             kind: "season",
             season: SEASONS[seasonIndex].name,
         });
@@ -148,7 +149,7 @@ function advanceDay(core: GameCore): void {
             for (const army of state.armies.values()) {
                 if (army.nation === nation.id) army.org = Math.max(0, army.org - UNPAID_UPKEEP_ORG_PENALTY);
             }
-            core.log(`${core.nationChip(nation.id)} 欠饷 全军组织度下降`, "econ", nation.id);
+            core.log(t("game.turn.unpaid", { nation: core.nationChip(nation.id) }), "econ", nation.id);
         }
         nation.manpower += rates.manpower;
         nation.industry += rates.industryNet;
@@ -172,11 +173,11 @@ function advanceDay(core: GameCore): void {
             for (const army of state.armies.values()) {
                 if (army.nation === nation.id) army.org = Math.max(0, army.org - STRATEGIC_SHORTAGE_ORG_PENALTY);
             }
-            core.log(`${core.nationChip(nation.id)} [[strategic]]短缺 全军[[organization]]下降`, "econ", nation.id);
+            core.log(t("game.turn.strategicShortage", { nation: core.nationChip(nation.id) }), "econ", nation.id);
         } else if (chain.food.shortage) {
-            core.log(`${core.nationChip(nation.id)} [[food]]短缺 人口减少`, "econ", nation.id);
+            core.log(t("game.turn.foodShortage", { nation: core.nationChip(nation.id) }), "econ", nation.id);
         } else if (chain.raw.shortage) {
-            core.log(`${core.nationChip(nation.id)} [[raw]]短缺 [[industry]]产出下降`, "econ", nation.id);
+            core.log(t("game.turn.rawShortage", { nation: core.nationChip(nation.id) }), "econ", nation.id);
         }
     }
     tickVassalTribute(core);

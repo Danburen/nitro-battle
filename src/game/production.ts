@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
 import { canBuild, canBuildProvince, canTrain, constructionAssignments, factoryTotals, infrastructureLevel, REINFORCE_COST } from "./economy.ts";
@@ -37,7 +38,7 @@ export function enqueueTrain(core: GameCore, nationId: number, kind: UnitKind, d
         createdDay: state.day,
     });
     core.log(
-        `${core.nationChip(nationId)} 训练 ${profile.name}`,
+        t("game.production.train", { nation: core.nationChip(nationId), unit: profile.name }),
         "econ",
         nationId,
         false,
@@ -64,7 +65,9 @@ export function cancelTrain(core: GameCore, orderId: number): boolean {
     nation.manpower += Math.floor(order.paidManpower * DEPLOY_REFUND);
     nation.industry += Math.floor(order.paidIndustry * DEPLOY_REFUND);
     state.deployments.splice(index, 1);
-    core.log(`${core.nationChip(0)} 取消训练 ${UNIT_PROFILES[order.kind].name}`, "econ", 0);
+    core.log(t("game.production.cancelTrain", {
+        nation: core.nationChip(0), unit: UNIT_PROFILES[order.kind].name,
+    }), "econ", 0);
     core.emit({ type: "state" });
     return true;
 }
@@ -120,7 +123,10 @@ export function processDeployments(core: GameCore): void {
         state.deployments.splice(i, 1);
         state.stats.recruited++;
         core.log(
-            `${core.nationChip(order.nation)} 部署 ${UNIT_PROFILES[order.kind].name} ${state.provinces[site].name}`,
+            t("game.production.deploy", {
+                nation: core.nationChip(order.nation), unit: UNIT_PROFILES[order.kind].name,
+                province: state.provinces[site].name,
+            }),
             "econ",
             order.nation,
             false,
@@ -161,7 +167,9 @@ function createConstruction(core: GameCore, nationId: number, site: number, kind
         remainingPoints: profile.constructionPoints,
         paidFunds: profile.costFunds, paidIndustry: profile.costIndustry,
     });
-    core.log(`${core.nationChip(nationId)} 建造 ${profile.name} ${state.provinces[site].name}`, "econ", nationId, false, {
+    core.log(t("game.production.build", {
+        nation: core.nationChip(nationId), building: profile.name, province: state.provinces[site].name,
+    }), "econ", nationId, false, {
         kind: "production",
         nation: nationId,
         action: "build",
@@ -223,7 +231,9 @@ export function cancelBuild(core: GameCore, orderId: number): boolean {
     nation.funds += refundFunds;
     nation.industry += order.paidIndustry * BUILD_REFUND;
     state.construction.splice(index, 1);
-    core.log(`${core.nationChip(0)} 取消建造 ${BUILDING_PROFILES[order.kind].name}`, "econ", 0);
+    core.log(t("game.production.cancelBuild", {
+        nation: core.nationChip(0), building: BUILDING_PROFILES[order.kind].name,
+    }), "econ", 0);
     core.emit({ type: "state" });
     return true;
 }
@@ -268,7 +278,10 @@ export function processConstruction(core: GameCore): void {
     }
     // Notify only after the entire completion batch is committed.
     for (const order of completed) {
-        core.log(`${core.nationChip(order.nation)} 建成 ${BUILDING_PROFILES[order.kind].name} ${state.provinces[order.site].name}`, "econ", order.nation, false, {
+        core.log(t("game.production.built", {
+            nation: core.nationChip(order.nation), building: BUILDING_PROFILES[order.kind].name,
+            province: state.provinces[order.site].name,
+        }), "econ", order.nation, false, {
             kind: "production",
             nation: order.nation,
             action: "build",

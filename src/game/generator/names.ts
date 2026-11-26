@@ -1,4 +1,4 @@
-import { Biome } from "../../terrain/biome.ts";
+import { Biome } from "../terrain/biome.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 
 /** Terrain families used to pick style-matching suffixes. */

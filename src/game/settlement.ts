@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
 import { checkVictory, transferControl } from "./conquest.ts";
 import { advanceDiplomacy, dropOffers, isAtWar, setWar } from "./diplomacy.ts";
@@ -7,7 +8,7 @@ import { canAnnexVassal, setVassal, VASSAL_PROFILES } from "./vassal.ts";
 import { refreshGarrisonCapacity } from "./battle.ts";
 import { isHostileProvince } from "./rules.ts";
 import { clampResources, resourceRates } from "./economy.ts";
-import { periodicDistance } from "../terrain/voronoi/index.ts";
+import { periodicDistance } from "./terrain/voronoi/index.ts";
 import { MAX_HP, REGIMENT_CAP, UNIT_PROFILES } from "./types/unit.ts";
 import type { GameState } from "./types/state.ts";
 import type { VassalType, War } from "./types/diplomacy.ts";
@@ -82,7 +83,7 @@ function retireLandlessNations(core: GameCore): void {
         for (let i = state.construction.length - 1; i >= 0; i--) {
             if (state.construction[i].nation === nation.id) state.construction.splice(i, 1);
         }
-        core.log(`${core.nationChip(nation.id)} 失去全部正式领土，被吞并`, "system", nation.id, true, {
+        core.log(t("game.settlement.annexed", { nation: core.nationChip(nation.id) }), "system", nation.id, true, {
             kind: "annex",
             nation: nation.id,
         });
@@ -124,7 +125,9 @@ function repatriateArmies(core: GameCore): void {
         if (empty) {
             core.placeArmy(army, empty.site);
             if (state.selectedArmyId === army.id) state.selected = empty.site;
-            core.log(`${core.nationChip(army.nation)} ${army.name} 撤回 ${empty.name}`, "diplo", army.nation);
+            core.log(t("game.settlement.withdraw", {
+                nation: core.nationChip(army.nation), army: army.name, province: empty.name,
+            }), "diplo", army.nation);
             continue;
         }
         for (const province of destinations) {
@@ -143,7 +146,9 @@ function repatriateArmies(core: GameCore): void {
         const manpower = army.regiments.reduce((sum, regiment) =>
             sum + UNIT_PROFILES[regiment.kind].manpowerCost * regiment.hp / MAX_HP, 0);
         state.nations[army.nation].manpower += manpower;
-        core.log(`${core.nationChip(army.nation)} ${army.name} 撤军整编，余部复员`, "diplo", army.nation);
+        core.log(t("game.settlement.demobilized", {
+            nation: core.nationChip(army.nation), army: army.name,
+        }), "diplo", army.nation);
         core.removeArmy(army, false);
     }
     for (const army of state.armies.values()) {
@@ -187,7 +192,9 @@ export function settlePeace(core: GameCore, a: number, b: number): void {
     const capitals = state.provinces.map((province) => province.isCapital);
     endPairWar(core, a, b);
     restorePairTerritory(core, a, b);
-    core.log(`${core.nationChip(a)} 白和平 ${core.nationChip(b)}`, "diplo", a, true, {
+    core.log(t("game.settlement.whitePeace", {
+        a: core.nationChip(a), b: core.nationChip(b),
+    }), "diplo", a, true, {
         kind: "peace",
         nation: a,
     });
@@ -213,7 +220,10 @@ export function enforceWarGoal(
     if (vassalType !== undefined) {
         restorePairTerritory(core, nation, target);
         if (!setVassal(core, target, nation, vassalType)) return false;
-        core.log(`${core.nationChip(nation)} 强迫 ${core.nationChip(target)} 成为${VASSAL_PROFILES[vassalType].name}附庸`, "diplo", nation, true, {
+        core.log(t("game.settlement.forcedVassal", {
+            nation: core.nationChip(nation), target: core.nationChip(target),
+            type: VASSAL_PROFILES[vassalType].name,
+        }), "diplo", nation, true, {
             kind: "peace",
             nation,
         });
@@ -227,8 +237,11 @@ export function enforceWarGoal(
         transferControl(core, site, nation);
     }
     restorePairTerritory(core, nation, target);
-    core.log(war.goal === "annex" ? `${core.nationChip(nation)} 吞并 ${core.nationChip(target)}`
-        : `${core.nationChip(nation)} 夺取 ${state.states[war.stateId!].name}`, "diplo", nation, true, {
+    core.log(war.goal === "annex"
+        ? t("game.settlement.annexNation", { nation: core.nationChip(nation), target: core.nationChip(target) })
+        : t("game.settlement.seizeState", {
+            nation: core.nationChip(nation), state: state.states[war.stateId!].name,
+        }), "diplo", nation, true, {
         kind: "annex",
         nation,
     });
@@ -265,7 +278,9 @@ export function annexVassal(core: GameCore, overlordId: number, vassalId: number
         const request = state.diplomaticRequests[i];
         if (request.from === vassalId || request.to === vassalId) state.diplomaticRequests.splice(i, 1);
     }
-    core.log(`${core.nationChip(overlordId)} 吞并附庸 ${core.nationChip(vassalId)}，其军团编入宗主国`, "diplo", overlordId, true, {
+    core.log(t("game.settlement.annexVassal", {
+        overlord: core.nationChip(overlordId), vassal: core.nationChip(vassalId),
+    }), "diplo", overlordId, true, {
         kind: "annex",
         nation: overlordId,
     });
@@ -279,7 +294,9 @@ export function resolveWarOutcomes(core: GameCore): void {
         if (warGoalProgress(core.state, war).canEnforce) {
             enforceWarGoal(core, war.aggressor, war.defender, prefersOppressiveVassalage(core.state, war) ? "oppressive" : undefined);
         } else if (capitulated(core.state, war.aggressor, war.defender)) {
-            core.log(`${core.nationChip(war.aggressor)} 进攻失败 ${core.nationChip(war.defender)}`, "diplo", war.defender, true, {
+            core.log(t("game.settlement.attackFailed", {
+                aggressor: core.nationChip(war.aggressor), defender: core.nationChip(war.defender),
+            }), "diplo", war.defender, true, {
                 kind: "peace",
                 nation: war.defender,
             });

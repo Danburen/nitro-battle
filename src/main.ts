@@ -2,9 +2,10 @@ import "./style/index.css";
 import { GameEngine } from "./game/engine.ts";
 import type { EngineEvent } from "./game/types/events.ts";
 import type { GameState } from "./game/types/state.ts";
-import type { GameSettings, MapSizeId, TerrainTuning } from "./types/settings.ts";
+import type { GameSettings, TerrainTuning } from "./types/settings.ts";
+import { mapSizeForCells } from "./types/settings.ts";
 import { generateWorld, buildWorld } from "./game/generator/index.ts";
-import { DEFAULT_TERRAIN_PARAMS } from "./terrain/biome.ts";
+import { DEFAULT_TERRAIN_PARAMS } from "./game/terrain/biome.ts";
 import { setPlayerNation } from "./game/player.ts";
 import { MapRenderer } from "./render/renderer.ts";
 import { GameUI } from "./ui/index.ts";
@@ -13,10 +14,17 @@ import { SoundManager } from "./audio/index.ts";
 import type { SoundContext } from "./audio/index.ts";
 import { desktop } from "./desktop.ts";
 import { initGuide } from "./guide.ts";
-import { escapeHtml } from "./ui/text.ts";
+import { t } from "./i18n/index.ts";
+import { escapeHtml, setGameHtml, setGameText } from "./ui/text.ts";
 import { nationFlagHtmlFor } from "./ui/flags.ts";
 import { nationDisplayColor } from "./game/access.ts";
 import { armyAt, isHostileProvince, marchPath } from "./game/rules.ts";
+import { createDebug } from "./debug/bootstrap.ts";
+import { DebugEventLog } from "./debug/services/eventLog.ts";
+import { DebugJournal } from "./debug/services/journal.ts";
+import { mountTerminal } from "./debug/terminal.ts";
+import { readLaunchSettings } from "./debug/commands/world.ts";
+import type { DebugContext } from "./debug/types.ts";
 
 const app = document.querySelector<HTMLDivElement>("#app") as HTMLDivElement;
 mountLayout(app);
@@ -50,6 +58,8 @@ const genPercent = document.querySelector<HTMLElement>("#gen-percent") as HTMLEl
 const pickerOverlay = document.querySelector<HTMLElement>("#nation-picker") as HTMLElement;
 const nationOptions = document.querySelector<HTMLElement>("#nation-options") as HTMLElement;
 const guide = initGuide();
+const debugEvents = new DebugEventLog();
+const debugJournal = new DebugJournal();
 
 let engine: GameEngine | null = null;
 let renderer: MapRenderer | null = null;
@@ -65,14 +75,25 @@ let cellsPreset: number | null = 1500;
 let balanceNations = false;
 let lastSettings: GameSettings = { seed: 0, mapSize: "standard", nationCount: 6, mapCells: 1500 };
 
+const debugContext: DebugContext = {
+    get engine() { return engine; },
+    get renderer() { return renderer; },
+    get ui() { return ui; },
+    events: debugEvents,
+    journal: debugJournal,
+    newGame: startDebugGame,
+    tapSite: handleCellClick,
+    openGuide: () => guide.open(),
+};
+const debug = createDebug(debugContext);
+const launch = readLaunchSettings();
+mountTerminal(debug.bridge, launch !== null);
+Object.defineProperty(window, "__nitro", {
+    get: () => ({ engine, renderer, ui, debug: debug.bridge }),
+});
+
 function randomSeed(): number {
     return Math.floor(Math.random() * 1_000_000);
-}
-
-function mapSizeForCells(cells: number): MapSizeId {
-    if (cells <= 1000) return "small";
-    if (cells <= 1900) return "standard";
-    return "large";
 }
 
 function syncNewGameChoices(): void {
@@ -90,8 +111,8 @@ function syncNewGameChoices(): void {
     }
     nationCustom.classList.toggle("hidden", nationPreset !== null);
     cellsCustom.classList.toggle("hidden", cellsPreset !== null);
-    nationValue.textContent = `${nationPreset ?? nationRange.value} 国`;
-    cellsValue.textContent = `${Number(cellsPreset ?? cellsRange.value).toLocaleString("zh-CN")} 省`;
+    setGameText(nationValue, t("misc.layout.unit.countries", { count: nationPreset ?? nationRange.value }), "plain");
+    setGameText(cellsValue, t("misc.layout.unit.provinces", { count: Number(cellsPreset ?? cellsRange.value).toLocaleString("zh-CN") }), "plain");
 }
 
 function syncBalanceChoice(): void {
@@ -107,7 +128,7 @@ function syncTerrainOutputs(): void {
         const key = input.dataset.terrain;
         const output = newgameOverlay.querySelector<HTMLElement>(`[data-terrain-out="${key}"]`);
         if (!output) continue;
-        output.textContent = Number(input.value).toFixed(Number(input.dataset.digits ?? 2));
+        setGameText(output, Number(input.value).toFixed(Number(input.dataset.digits ?? 2)), "plain");
     }
 }
 
@@ -221,7 +242,7 @@ function handleCellClick(site: number): void {
             if ((hostile || own) && marchPath(state, army, site) !== null) {
                 if (game.orderMarch(army.id, site, hostile)) {
                     sound.play("select");
-                    ui?.toast(hostile ? "远征命令已下达：抵达后自动进攻" : "行军命令已下达");
+                    ui?.toast(t(hostile ? "misc.main.march.attack" : "misc.main.march.order"));
                     return;
                 }
             }
@@ -239,6 +260,8 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
     ui?.destroy();
 
     engine = new GameEngine(state);
+    debugEvents.attach(engine);
+    debugJournal.clear();
     renderer = new MapRenderer(canvas, engine, handleCellClick);
     if (options.briefing) renderer.setMinimapVisible(false);
     ui = new GameUI(engine, sound, {
@@ -303,7 +326,10 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
                 sound.play("attack", soundContext(null, event.aggressor === 0 || event.defender === 0));
                 break;
             case "claim-warning":
-                ui?.toast(`${engine?.state.nations[event.nation]?.name ?? "他国"} 宣称了我国领土「${event.stateName}」，注意防守！`);
+                ui?.toast(t("misc.main.claimWarning", {
+                    nation: engine?.state.nations[event.nation]?.name ?? t("misc.common.otherNation"),
+                    state: event.stateName,
+                }));
                 break;
             case "peace":
                 sound.play("select", soundContext(null, event.a === 0 || event.b === 0));
@@ -326,17 +352,24 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
     genOverlay.classList.add("hidden");
 }
 
+/** Skip every overlay: generate, remap the chosen nation to player 0, and play. */
+function startDebugGame(settings: GameSettings, nation = 0): void {
+    const state = generateWorld(settings);
+    setPlayerNation(state, nation);
+    startGame(state);
+}
+
 /** Generate the world stage by stage behind a progress bar, then offer the generated nations. */
 function beginCampaign(settings: GameSettings): void {
     lastSettings = settings;
     newGameFromStart = false;
     const token = ++generationToken;
     pendingState = null;
-    nationOptions.innerHTML = "";
+    setGameHtml(nationOptions, "");
     startOverlay.classList.add("hidden");
     newgameOverlay.classList.add("hidden");
     pickerOverlay.classList.add("hidden");
-    setGenProgress(0, "准备绘制世界……");
+    setGenProgress(0, t("misc.main.generation.preparing"));
     genOverlay.classList.remove("hidden");
     const started = performance.now();
     const stages = buildWorld(settings);
@@ -346,7 +379,7 @@ function beginCampaign(settings: GameSettings): void {
         const result = stages.next();
         if (result.done) {
             pendingState = result.value;
-            setGenProgress(1, "世界已就绪");
+            setGenProgress(1, t("misc.main.generation.ready"));
             renderNationOptions(result.value);
             const remaining = Math.max(0, 700 - (performance.now() - started));
             window.setTimeout(() => {
@@ -366,17 +399,17 @@ function beginCampaign(settings: GameSettings): void {
 function setGenProgress(ratio: number, label: string): void {
     const percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
     genBar.style.width = `${percent}%`;
-    genPercent.textContent = `${percent}%`;
+    setGameText(genPercent, `${percent}%`, "plain");
     genProgress.setAttribute("aria-valuenow", String(percent));
-    genStatus.textContent = label;
+    setGameText(genStatus, label, "plain");
 }
 
 function renderNationOptions(state: GameState): void {
-    nationOptions.innerHTML = state.nations.map((nation) => `
+    setGameHtml(nationOptions, state.nations.map((nation) => `
         <button class="nation-option" type="button" data-nation="${nation.id}" style="--nc:${escapeHtml(nationDisplayColor(state, nation.id))}">
             ${nationFlagHtmlFor(state, nation.id, 26)}
             <span class="nation-option-name">${escapeHtml(nation.name)}</span>
-        </button>`).join("");
+        </button>`).join(""));
 }
 
 /** Enter the pre-game inspection with a nation selected; the campaign starts only on 开始游戏. */
@@ -462,12 +495,10 @@ document.querySelector<HTMLButtonElement>("#zoom-in")?.addEventListener("click",
 document.querySelector<HTMLButtonElement>("#zoom-out")?.addEventListener("click", () => renderer?.zoomBy(1 / 1.3));
 document.querySelector<HTMLButtonElement>("#zoom-fit")?.addEventListener("click", () => renderer?.fitMap());
 
-// Live map behind the start screen.
-startGame(generateWorld({ seed: randomSeed(), mapSize: "small", nationCount: 4 }));
-startOverlay.classList.remove("hidden");
-
-if (import.meta.env.DEV) {
-    Object.defineProperty(window, "__nitro", {
-        get: () => ({ engine, renderer, ui }),
-    });
+// Live map behind the start screen, unless a debug URL launched a campaign directly.
+if (launch) {
+    startDebugGame(launch.settings, launch.nation);
+} else {
+    startGame(generateWorld({ seed: randomSeed(), mapSize: "small", nationCount: 4 }));
+    startOverlay.classList.remove("hidden");
 }

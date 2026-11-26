@@ -1,4 +1,4 @@
-import { escapeGameText, escapeHtml, setGameText } from "./text.ts";
+import { escapeGameText, escapeHtml, setGameHtml, setGameText } from "./text.ts";
 
 export function tooltipAttrs(title: string, body: string): string {
     return `data-tooltip-title="${escapeHtml(title)}" data-tooltip-body="${escapeHtml(body)}"`;
@@ -148,7 +148,7 @@ export class GlobalTooltip {
         }
         const titleChanged = setGameText(this.titleEl, title);
         const bodyChanged = htmlBody !== undefined
-            ? setGameText(this.bodyEl, htmlBody, "raw")
+            ? setGameHtml(this.bodyEl, htmlBody)
             : setGameText(this.bodyEl, body);
         this.el.hidden = false;
         if (moved || refresh || titleChanged || bodyChanged || this.viewportWidth !== window.innerWidth || this.viewportHeight !== window.innerHeight) {

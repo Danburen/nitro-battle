@@ -1,11 +1,14 @@
-import { cellFillColor, drawBiomes } from "../terrain/biome.ts";
 import {
+    cellFillColor,
+    drawBiomes,
     drawWrappedLine,
     fillWrappedPolygon,
+} from "./terrainDrawing.ts";
+import {
     periodicDelta,
     periodicDistanceSq,
-} from "../terrain/voronoi/index.ts";
-import type { Vec2 } from "../terrain/voronoi/index.ts";
+} from "../game/terrain/voronoi/index.ts";
+import type { Vec2 } from "../game/terrain/voronoi/index.ts";
 import { claimableStateIds, isAtWar, stateSummary } from "../game/diplomacy.ts";
 import { provinceResourceOutput, resourceYieldMultiplier } from "../game/economy.ts";
 import { provincePopulationView } from "../game/stability.ts";
@@ -44,7 +47,8 @@ import type { ColorMode, MapMode, NationHighlight } from "./types.ts";
 export type { MapMode } from "./types.ts";
 import { drawTerrainDecorCell } from "./terrainDecor.ts";
 import { BIOME_ZH, garrisonRelation, ownerName } from "../ui/common.ts";
-import { chipToken, escapeGameText, peopleCount, textToken } from "../ui/text.ts";
+import { chipToken, escapeGameText, peopleCount } from "../ui/text.ts";
+import { t } from "../i18n/index.ts";
 import { MAP_TOOLTIP_DISMISS_EVENT, MAP_TOOLTIP_EVENT } from "../ui/tooltip.ts";
 import type { MapTooltipRequest } from "../ui/tooltip.ts";
 
@@ -673,12 +677,17 @@ export class MapRenderer {
             }
             const chips = (ids: number[]): string => ids.length
                 ? ids.map((id) => chipToken(nationDisplayColor(state, id), state.nations[id].name)).join(" ")
-                : "无";
+                : t("misc.common.none");
             const control = summary.control.length
                 ? summary.control.map((entry) => `${chipToken(nationDisplayColor(state, entry.nation), state.nations[entry.nation].name)} ${entry.percent}%`).join(" / ")
-                : "无";
+                : t("misc.common.none");
             const title = escapeGameText(region.name);
-            const body = `核心：${chips(summary.cores)}\n拥有者：${chips(summary.owners)}\n控制明细：${control}\n持有宣称：${chips(summary.claimants)}`;
+            const body = t("misc.render.stateTooltip", {
+                cores: chips(summary.cores),
+                owners: chips(summary.owners),
+                control,
+                claimants: chips(summary.claimants),
+            });
             pending.title = title;
             pending.body = body;
             this.requestMapTooltip({ action: "show", anchor: this.canvas, x: pending.x, y: pending.y,
@@ -699,12 +708,27 @@ export class MapRenderer {
         const population = provincePopulationView(state, province);
         const fmt = (value: number): string => (Math.round(value * 10) / 10).toFixed(1);
         const resourceLines = [
-            `${textToken("raw")} ${province.deposits.raw} 级 · ${textToken("raw", fmt(output.raw))}/[[turn]]`,
-            `${textToken("strategic")} ${province.deposits.strategic} 级 · ${textToken("strategic", fmt(output.strategic))}/[[turn]]`,
-            `${textToken("food")} ${textToken("food", fmt(output.food + output.farmFood))}/[[turn]]`,
-            `矿产系数：有效[[infrastructure]] ${output.infrastructure} 级 ×${resourceYieldMultiplier(output.infrastructure).toFixed(2)}；[[occupation]] ×${output.occupation.toFixed(2)}`,
+            t("misc.render.resourceDeposit", { id: "raw", level: province.deposits.raw, amount: fmt(output.raw) }),
+            t("misc.render.resourceDeposit", { id: "strategic", level: province.deposits.strategic, amount: fmt(output.strategic) }),
+            t("misc.render.resourceFood", { amount: fmt(output.food + output.farmFood) }),
+            t("misc.render.mineralFactor", {
+                level: output.infrastructure,
+                factor: resourceYieldMultiplier(output.infrastructure).toFixed(2),
+                occupation: output.occupation.toFixed(2),
+            }),
         ].join("\n");
-        const body = `所属州：${escapeGameText(region?.name ?? "未属州")}\n控制国：${escapeGameText(ownerName(state, province.owner))}\n正式归属：${escapeGameText(ownerName(state, province.legalOwner))}\n地形：${escapeGameText(BIOME_ZH[state.terrain.biomeAt(province.site)])}\n${textToken(relation)}驻军 ${Math.round(province.garrison)}/${province.garrisonMax}\n${textToken("manpower")} 全部人口 ${peopleCount(population.people)}（可招募 ${peopleCount(population.eligible)}）\n资源产出：\n${resourceLines}`;
+        const body = t("misc.render.provinceTooltip", {
+            region: escapeGameText(region?.name ?? t("misc.render.unassignedState")),
+            owner: escapeGameText(ownerName(state, province.owner)),
+            legal: escapeGameText(ownerName(state, province.legalOwner)),
+            biome: escapeGameText(BIOME_ZH[state.terrain.biomeAt(province.site)]),
+            relation,
+            garrison: Math.round(province.garrison),
+            max: province.garrisonMax,
+            people: peopleCount(population.people),
+            eligible: peopleCount(population.eligible),
+            lines: resourceLines,
+        });
         // Refresh stationary details without repeated DOM writes or measurements.
         if (title === pending.title && body === pending.body) return;
         pending.title = title;
@@ -774,12 +798,12 @@ export class MapRenderer {
                 this.fx.push({ kind: "combat", province: event.province, start: now, dur: 420, color: "#f85149" });
                 const garrisonLoss = Math.max(0, event.garrisonBefore - event.garrisonAfter);
                 const title = event.outcome === "captured"
-                    ? "防线崩溃"
+                    ? t("misc.digest.outcome.captured")
                     : event.outcome === "repelled"
-                        ? "进攻击退"
+                        ? t("misc.digest.outcome.repelled")
                         : garrisonLoss > 0
-                            ? `驻军 -${garrisonLoss}`
-                            : `守军 -${event.defenderLoss}`;
+                            ? t("misc.render.combat.garrison", { count: garrisonLoss })
+                            : t("misc.render.combat.defenders", { count: event.defenderLoss });
                 this.floats.push({ x: site.x + 12, y: site.y - 20, text: title, color: "#f85149", start: now, dur: 1050 });
                 if (event.attackerLoss > 0) {
                     this.floats.push({ x: site.x - 16, y: site.y - 8, text: `-${event.attackerLoss}`, color: "#d29922", start: now + 120, dur: 950 });
@@ -1347,7 +1371,7 @@ export class MapRenderer {
             ctx.textAlign = "center";
             ctx.lineWidth = 3;
             ctx.strokeStyle = "rgba(13,17,23,0.9)";
-            const label = `激战 ${battle.rounds} 日`;
+            const label = t("misc.render.battleLabel", { rounds: battle.rounds });
             ctx.strokeText(label, target.x, target.y - 24);
             ctx.fillStyle = "#f85149";
             ctx.fillText(label, target.x, target.y - 24);

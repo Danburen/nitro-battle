@@ -1,3 +1,4 @@
+import { t } from "../../i18n/index.ts";
 import { LCGRandom } from "../../utils/LCGRandom.ts";
 import type { GameState } from "../types/state.ts";
 import type { GameSettings } from "../../types/settings.ts";
@@ -23,19 +24,19 @@ export interface WorldBuildStage {
  */
 export function* buildWorld(settings: GameSettings): Generator<WorldBuildStage, GameState, void> {
     const rand = new LCGRandom(settings.seed ^ 0x9e3779b9);
-    yield { label: "绘制大陆与海岸线", progress: 0.08 };
+    yield { label: t("game.generator.stage.terrain"), progress: 0.08 };
     const { graph, terrain, components } = generateMap(settings);
     const mainland = components.reduce((largest, sites) => sites.length > largest.length ? sites : largest, [] as number[]);
-    yield { label: "划分省界与州郡", progress: 0.32 };
+    yield { label: t("game.generator.stage.provinces"), progress: 0.32 };
     const provinces = createProvinces(graph, terrain);
     generateProvinceDeposits(provinces, terrain, settings.seed);
     seedCities(provinces, mainland, rand);
-    yield { label: "建立城市与交通", progress: 0.52 };
+    yield { label: t("game.generator.stage.cities"), progress: 0.52 };
     const names = new NameGenerator(new LCGRandom(settings.seed ^ 0x5eed));
     const states = generateStates(graph, terrain, provinces, components, rand, names, settings);
-    yield { label: "推演列国与疆域", progress: 0.74 };
+    yield { label: t("game.generator.stage.nations"), progress: 0.74 };
     const nations = generateNations(graph, provinces, states, mainland, settings.nationCount, rand, names, settings.seed);
-    yield { label: "部署军团与补给线", progress: 0.9 };
+    yield { label: t("game.generator.stage.armies"), progress: 0.9 };
     const state: GameState = {
         settings,
         graph,

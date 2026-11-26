@@ -12,16 +12,24 @@ import type { Battle } from "../../game/types/organization.ts";
 import type { BuildingKind } from "../../game/types/building.ts";
 import type { Province } from "../../game/types/entities.ts";
 import { BIOME_ZH, ownerColor, ownerName } from "../common.ts";
-import { BIOME_PROFILES } from "../../terrain/biome.ts";
-import { escapeGameText, escapeHtml as escapeText, iconMaskStyle, peopleCount, renderGameText, signClass, textToken } from "../text.ts";
+import { BIOME_PROFILES } from "../../game/terrain/biome.ts";
+import { escapeGameText, escapeHtml as escapeText, iconMaskStyle, peopleCount, gameText, signClass, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { panelHead, PanelShell } from "../panel.ts";
 import { tendencyBadge } from "../tendency.ts";
+import { t } from "../../i18n/index.ts";
 
-const INTEL_TIP = `点击地图查询省份或州。\n省份：地形、城市防御、通行、天气、[[supply]]水平、控制国与正式归属、[[occupation]]进度、驻军军团与省份设施。\n州：州中心、控制范围、[[factory]]/[[farm]]/[[infrastructure]]/[[admin]]建筑容量与增益。\n带 i 或「地区修正」按钮可查看详细修正，建筑图标上悬停显示产量与建造条件。`;
+const INTEL_TIP = {
+    get body(): string { return t("panels.intel.help"); },
+};
 
 function infrastructureEffects(level: number): string {
-    return `产出系数 ×${infrastructureOutputMultiplier(level).toFixed(2)}\n[[construction]]系数 ×${infrastructureBuildMultiplier(level).toFixed(2)}\n[[movement]]成本系数 ×${infrastructureMoveMultiplier(level).toFixed(2)}\n[[supply]]系数 ×${infrastructureSupplyMultiplier(level).toFixed(2)}`;
+    return t("panels.intel.infrastructure.effects", {
+        output: infrastructureOutputMultiplier(level).toFixed(2),
+        construction: infrastructureBuildMultiplier(level).toFixed(2),
+        movement: infrastructureMoveMultiplier(level).toFixed(2),
+        supply: infrastructureSupplyMultiplier(level).toFixed(2),
+    });
 }
 
 export class IntelPanel {
@@ -37,8 +45,8 @@ export class IntelPanel {
         const site = state.selected;
         if (site === null) {
             this.shell.render({
-                head: panelHead({ title: mode === "state" ? "州情报" : "省份", help: { title: "情报面板", body: INTEL_TIP } }),
-                body: `<div class="empty-hint">${renderGameText(`点击地图查看${mode === "state" ? "州" : "省份"}。左上「建造」管理州属[[factory]]、[[farm]]、[[infrastructure]]、[[admin]]与省份[[supply]]中心、[[fort]]；点击军团接管指挥。`)}</div>`,
+                head: panelHead({ title: t(mode === "state" ? "panels.intel.state.title" : "panels.intel.province.title"), help: { title: t("panels.intel.helpTitle"), body: INTEL_TIP.body } }),
+                body: `<div class="empty-hint">${t("panels.intel.empty.hint", { area: t(mode === "state" ? "panels.intel.area.state" : "panels.intel.area.province") })}</div>`,
             });
             return;
         }
@@ -49,13 +57,13 @@ export class IntelPanel {
             const center = state.provinces[region.center];
             this.shell.render({
                 head: panelHead({
-                    title: "州情报",
-                    help: { title: "情报面板", body: INTEL_TIP },
+                    title: t("panels.intel.state.title"),
+                    help: { title: t("panels.intel.helpTitle"), body: INTEL_TIP.body },
                     extras: `<span class="owner-pill" style="--pc:${escapeText(ownerColor(state, center.owner))}">${escapeText(ownerName(state, center.owner))}</span>`,
                 }),
                 body: `
-                    <div class="prov-title">${escapeText(region.name)}<span class="prov-kind">${region.provinces.length} 省</span></div>
-                    <div class="intel-selection"><span>选中省份：${escapeText(province.name)} · 控制国：${escapeText(ownerName(state, province.owner))} · 正式归属：${escapeText(ownerName(state, province.legalOwner))}</span>${this.modifiersHtml(province)}</div>
+                    <div class="prov-title">${escapeText(region.name)}<span class="prov-kind">${t("panels.intel.state.provinceCount", { count: region.provinces.length })}</span></div>
+                    <div class="intel-selection"><span>${t("panels.intel.state.selection", { province: escapeText(province.name), controller: escapeText(ownerName(state, province.owner)), legal: escapeText(ownerName(state, province.legalOwner)) })}</span>${this.modifiersHtml(province)}</div>
                     ${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}`,
             });
             return;
@@ -66,49 +74,49 @@ export class IntelPanel {
         const occupant = armyAt(state, site);
         const color = ownerColor(state, province.owner);
         const battle = this.engine.battleAt(site);
-        const kindLabel = province.isCapital ? "首都" : province.isCity ? "城市" : "省份";
-        const snowText = snow === 2 ? "深雪 ×0.5 速度" : snow === 1 ? "浅雪 ×0.75 速度" : "无积雪";
+        const kindLabel = province.isCapital ? t("panels.intel.kind.capital") : province.isCity ? t("panels.intel.kind.city") : t("panels.intel.area.province");
+        const snowText = snow === 2 ? t("panels.intel.weather.deepSnow") : snow === 1 ? t("panels.intel.weather.lightSnow") : t("panels.intel.weather.none");
         const supply = supplyLevel(state, site);
-        const supplyText = supply >= 0.8 ? "充足" : supply >= 0.5 ? "受限" : "匮乏";
+        const supplyText = supply >= 0.8 ? t("panels.intel.supply.abundant") : supply >= 0.5 ? t("panels.intel.supply.limited") : t("panels.intel.supply.scarce");
         const supplyClass = supply >= 0.8 ? "good" : supply >= 0.5 ? "mid" : "bad";
         const isCore = province.owner !== NEUTRAL && province.coreNation === province.owner;
         const population = provincePopulationView(state, province);
         const occGrowth = occupationGrowth(state, province, province.owner);
         const occHtml = province.owner !== NEUTRAL && !isCore ? `
-            <div class="kv-row"><dt>${renderGameText("[[occupation]]")}</dt><dd>
+            <div class="kv-row"><dt>${"[[occupation]]"}</dt><dd>
                 <div class="garrison-bar occ"><i style="width:${province.occupation}%"></i></div>
-                ${Math.floor(province.occupation)}%<span class="garrison-note ${signClass(String(occGrowth))}">${occGrowth >= 0 ? "+" : ""}${occGrowth.toFixed(0)}/${renderGameText("[[turn]]")}</span>
+                ${Math.floor(province.occupation)}%<span class="garrison-note ${signClass(String(occGrowth))}">${occGrowth >= 0 ? "+" : ""}${occGrowth.toFixed(0)}/${"[[turn]]"}</span>
             </dd></div>` : "";
         const presenceHtml = occupant ? `
             <div class="army-presence" ${tooltipAttrs(escapeGameText(occupant.name), `[[organization]] ${Math.round(occupant.org)}/${ORG_MAX}`)}>
                 <span style="--pc:${escapeText(ownerColor(state, occupant.nation))}">${escapeText(occupant.name)}</span>
-                （${escapeText(ownerName(state, occupant.nation))}）· ${occupant.regiments.length} 团 · ${regimentHp(occupant)} HP
-                ${occupant.nation === 0 ? " · 左上详情窗可指挥" : ""}
+                ${t("panels.intel.presence", { owner: escapeText(ownerName(state, occupant.nation)), regiments: occupant.regiments.length, hp: regimentHp(occupant) })}
+                ${occupant.nation === 0 ? t("panels.intel.presence.commandHint") : ""}
             </div>` : "";
 
         this.shell.render({
             head: panelHead({
-                title: "省份",
-                help: { title: "情报面板", body: INTEL_TIP },
+                title: t("panels.intel.province.title"),
+                help: { title: t("panels.intel.helpTitle"), body: INTEL_TIP.body },
                 extras: `<span class="owner-pill" style="--pc:${escapeText(color)}">${escapeText(ownerName(state, province.owner))}</span>`,
             }),
-            body: `
+            body: game`
                 <div class="prov-title">${escapeText(province.name)}<span class="prov-kind">${kindLabel}</span></div>
                 <div class="tag-row">
                     <span class="tag">${escapeText(BIOME_ZH[biome] ?? profile.name)}</span>
-                    <span class="tag">${renderGameText(`地形/城市[[defense]] ×${provinceDefense(state, province).toFixed(2)}`)}</span>
-                    <span class="tag">产值 ${renderGameText(textToken("funds", `+${Math.round(provinceFundsIncome(province) * 10) / 10}`))}</span><span class="tag">人口 ${peopleCount(population.people)}（可招募 ${peopleCount(population.eligible)}）</span>
-                    <span class="tag supply-${supplyClass}" ${tooltipAttrs("[[supply]]水平", "[[supply]]可超过 100%；战斗与[[organization]]恢复的[[supply]]系数最多按 100% 计算。")}>${renderGameText(`[[supply]] ${Math.round(supply * 100)}% · ${supplyText}`)}</span>
-                    ${province.owner !== NEUTRAL && province.owner !== 0 ? `<span class="tag">${isAtWar(state, 0, province.owner) ? "交战中" : "和平"}</span>` : ""}
+                    <span class="tag">${t("panels.intel.tag.defense", { value: provinceDefense(state, province).toFixed(2) })}</span>
+                    <span class="tag">${t("panels.intel.tag.income", { value: `+${Math.round(provinceFundsIncome(province) * 10) / 10}` })}</span><span class="tag">${t("panels.intel.tag.population", { people: peopleCount(population.people), eligible: peopleCount(population.eligible) })}</span>
+                    <span class="tag supply-${supplyClass}" ${tooltipAttrs(t("panels.intel.supply.levelTitle"), t("panels.intel.supply.tip"))}>${t("panels.intel.supply.value", { percent: Math.round(supply * 100), level: supplyText })}</span>
+                    ${province.owner !== NEUTRAL && province.owner !== 0 ? `<span class="tag">${isAtWar(state, 0, province.owner) ? t("panels.intel.war") : t("panels.intel.peace")}</span>` : ""}
                     ${this.modifiersHtml(province)}
                 </div>
                 <dl class="kv">
-                    <div class="kv-row"><dt>控制国</dt><dd>${escapeText(ownerName(state, province.owner))}</dd></div>
-                    <div class="kv-row"><dt>正式归属</dt><dd>${escapeText(ownerName(state, province.legalOwner))}</dd></div>
-                    ${province.owner > 0 ? `<div class="kv-row"><dt>外交倾向</dt><dd>${tendencyBadge(state.nations[province.owner], state)}</dd></div>` : ""}
+                    <div class="kv-row"><dt>${t("panels.intel.field.controller")}</dt><dd>${escapeText(ownerName(state, province.owner))}</dd></div>
+                    <div class="kv-row"><dt>${t("panels.intel.field.legalOwner")}</dt><dd>${escapeText(ownerName(state, province.legalOwner))}</dd></div>
+                    ${province.owner > 0 ? `<div class="kv-row"><dt>${t("panels.intel.field.tendency")}</dt><dd>${tendencyBadge(state.nations[province.owner], state)}</dd></div>` : ""}
                     ${occHtml}
-                    <div class="kv-row"><dt>通行成本</dt><dd>${state.terrain.passable[site] ? entryCost(state, site).toFixed(2) : "不可通行"}</dd></div>
-                    <div class="kv-row"><dt>天气</dt><dd>${snowText}</dd></div>
+                    <div class="kv-row"><dt>${t("panels.intel.field.entryCost")}</dt><dd>${state.terrain.passable[site] ? entryCost(state, site).toFixed(2) : t("panels.intel.impassable")}</dd></div>
+                    <div class="kv-row"><dt>${t("panels.intel.field.weather")}</dt><dd>${snowText}</dd></div>
                 </dl>
                 ${presenceHtml}${battle ? this.battleHtml(battle) : ""}${this.stateSectionHtml(province)}${this.provinceBuildingsHtml(province)}`,
         });
@@ -118,15 +126,22 @@ export class IntelPanel {
         const state = this.engine.state;
         const region = state.states[province.stateId];
         const infrastructure = infrastructureLevel(state, province.site);
-        const applicability = !region ? "未属州：州[[infrastructure]]不生效，按 0 级。"
-            : state.provinces[region.center].owner !== province.owner ? "与州中心异主：是，州[[infrastructure]]不生效，按 0 级。"
-            : province.owner === NEUTRAL ? "与州中心异主：否；中立省份的州[[infrastructure]]不生效，按 0 级。"
-            : "与州中心异主：否，州[[infrastructure]]生效。";
-        const title = `地区修正 · ${escapeGameText(province.name)}`;
+        const applicability = !region ? t("panels.intel.applicability.noState")
+            : state.provinces[region.center].owner !== province.owner ? t("panels.intel.applicability.differentOwner")
+            : province.owner === NEUTRAL ? t("panels.intel.applicability.neutral")
+            : t("panels.intel.applicability.sameOwner");
+        const title = t("panels.intel.modifiers.title", { name: escapeGameText(province.name) });
         const output = provinceResourceOutput(state, province);
-        const deposits = `矿点：[[raw]] ${province.deposits.raw} 级 · 产出 ${output.raw.toFixed(2)}/[[turn]]；[[strategic]] ${province.deposits.strategic} 级 · 产出 ${output.strategic.toFixed(2)}/[[turn]]；[[food]] 产出 ${(output.food + output.farmFood).toFixed(2)}/[[turn]]。\n有效[[infrastructure]] ${output.infrastructure} 级 → 矿产系数 ×${resourceYieldMultiplier(output.infrastructure).toFixed(2)}；[[occupation]]系数 ×${output.occupation.toFixed(2)}（0 为无矿）。`;
-        const body = `有效州[[infrastructure]]：${infrastructure}/${INFRASTRUCTURE_MAX} 级\n${infrastructureEffects(infrastructure)}\n${applicability}\n${deposits}`;
-        return `<button type="button" class="intel-help intel-modifiers" aria-label="${escapeText(renderGameText(title, "plain"))}" data-focus-key="${escapeText(`province-${province.site}-modifiers`)}" ${tooltipAttrs(title, body)}>地区修正</button>`;
+        const deposits = t("panels.intel.modifiers.deposits", {
+            raw: province.deposits.raw, rawOutput: output.raw.toFixed(2),
+            strategic: province.deposits.strategic, strategicOutput: output.strategic.toFixed(2),
+            foodOutput: (output.food + output.farmFood).toFixed(2),
+            infrastructure: output.infrastructure,
+            yield: resourceYieldMultiplier(output.infrastructure).toFixed(2),
+            occupation: output.occupation.toFixed(2),
+        });
+        const body = t("panels.intel.modifiers.body", { level: infrastructure, max: INFRASTRUCTURE_MAX, effects: infrastructureEffects(infrastructure), applicability, deposits });
+        return `<button type="button" class="intel-help intel-modifiers" aria-label="${escapeText(gameText(title, "plain"))}" data-focus-key="${escapeText(`province-${province.site}-modifiers`)}" ${tooltipAttrs(title, body)}>${t("panels.intel.modifiers.button")}</button>`;
     }
 
     private buildingCardHtml(kind: BuildingKind, built: number, limit: number, pending: number, focusKey: string, detail = ""): string {
@@ -135,9 +150,9 @@ export class IntelPanel {
         const countHtml = pending > 0
             ? `${built}<span class="building-pending">+${pending}</span>/${limit}`
             : `${built}/${limit}`;
-        const title = `${textToken(kind)}${kind === "supply" ? "中心" : ""}`;
-        const body = `已建/上限：${count}\n待建：${pending}\n${profile.desc}\n建造需求：${textToken("construction", profile.constructionPoints)}。${detail ? `\n${detail}` : ""}`;
-        return `<span class="intel-building-card${pending > 0 ? " pending" : ""}" tabindex="0" role="img" aria-label="${escapeText(renderGameText(`${title}：${body}`, "plain"))}" data-focus-key="${escapeText(focusKey)}" ${tooltipAttrs(title, body)}>
+        const title = game`[[${kind}]]${kind === "supply" ? t("panels.intel.building.supplyCenter") : ""}`;
+        const body = t("panels.intel.building.body", { count, pending, desc: profile.desc, points: profile.constructionPoints, detail: detail ? `\n${detail}` : "" });
+        return `<span class="intel-building-card${pending > 0 ? " pending" : ""}" tabindex="0" role="img" aria-label="${escapeText(gameText(`${title}：${body}`, "plain"))}" data-focus-key="${escapeText(focusKey)}" ${tooltipAttrs(title, body)}>
             <span class="building-icon" aria-hidden="true" ${iconMaskStyle(profile.icon)}></span>
             <span class="intel-building-count">${countHtml}</span>
         </span>`;
@@ -149,12 +164,12 @@ export class IntelPanel {
         const buildings = PROVINCE_BUILDING_KINDS.map((kind) => {
             const { built, pending, limit } = provinceBuildingCapacity(state, province, kind);
             const effects = kind === "fort"
-                ? "仅本省：[[garrison]]上限 +50%，非交战每日恢复上限的 15%（普通 10%）；[[garrison]]造成伤害 +25%，[[garrison]]承受伤害 ×0.8。不改变地形/城市[[defense]]倍率。"
-                : "沿己方陆地辐射范围 8：距离 d，u = 1 − d/8；[[supply]]加成 +10u 个百分点、倍率 ×(1 + 0.2u)。重叠中心取最强，不累加。";
+                ? t("panels.intel.fort.effects")
+                : t("panels.intel.supplyZone.effects");
             return this.buildingCardHtml(kind, built, limit, pending, `province-${province.site}-${kind}`, effects);
         }).join("");
         return `<div class="state-section province-facilities">
-            <div class="deploy-head"><span>省份设施 · ${escapeText(province.name)}</span></div>
+            <div class="deploy-head"><span>${t("panels.intel.facilities.title", { name: escapeText(province.name) })}</span></div>
             <div class="intel-building-cards">${buildings}</div>
         </div>`;
     }
@@ -167,22 +182,28 @@ export class IntelPanel {
         const capacity = region.provinces.length;
         const controlled = region.provinces.filter((site) => state.provinces[site].owner === center.owner).length;
         const claimants = [...new Set(state.claims.filter((claim) => claim.stateId === region.id).map((claim) => claim.nation))];
-        const rules = `宣称国：${claimants.length ? claimants.map((nation) => escapeGameText(ownerName(state, nation))).join("、") : "无"}\n州中心控制国：${escapeGameText(ownerName(state, center.owner))}\n州中心正式归属：${escapeGameText(ownerName(state, center.legalOwner))}\n数量为已建/上限，待建也占容量。\n[[factory]]、[[farm]]各自独立上限为州内省份数（${capacity} 座）。\n[[infrastructure]]上限 ${INFRASTRUCTURE_MAX} 级，仅同属州中心控制者的省份生效；异主省份按 0 级倍率。\n[[admin]]每州限 1 座，州中心为核心或[[occupation]] ≥50% 时仅 [[politics:+1]]/[[turn]]，不加快占领整合。`;
+        const rules = t("panels.intel.state.rules", {
+            claimants: claimants.length ? claimants.map((nation) => escapeGameText(ownerName(state, nation))).join("、") : t("panels.intel.none"),
+            controller: escapeGameText(ownerName(state, center.owner)),
+            legal: escapeGameText(ownerName(state, center.legalOwner)),
+            capacity,
+            max: INFRASTRUCTURE_MAX,
+        });
         const buildings = STATE_BUILDING_KINDS.map((kind) => {
             const { built, pending, limit } = stateBuildingCapacity(state, region, kind);
             const detail = kind === "factory" ? `[[production]] ${region.prodFactories} · [[idle]] ${region.factories - region.prodFactories}`
-                : kind === "infrastructure" ? `州级倍率：\n${infrastructureEffects(built)}` : "";
+                : kind === "infrastructure" ? t("panels.intel.state.multiplier", { effects: infrastructureEffects(built) }) : "";
             return this.buildingCardHtml(kind, built, limit, pending, `state-${region.id}-${kind}`, detail);
         }).join("");
         return `<div class="state-section">
-            <div class="deploy-head"><span class="intel-state-heading"><span>州情况</span><span>${escapeText(region.name)}</span></span><button type="button" class="intel-help intel-info" aria-label="州信息与建筑规则" data-focus-key="${escapeText(`state-${region.id}-rules`)}" ${tooltipAttrs("州信息与建筑规则", rules)}>i</button></div>
+            <div class="deploy-head"><span class="intel-state-heading"><span>${t("panels.intel.state.heading")}</span><span>${escapeText(region.name)}</span></span><button type="button" class="intel-help intel-info" aria-label="${t("panels.intel.state.infoTitle")}" data-focus-key="${escapeText(`state-${region.id}-rules`)}" ${tooltipAttrs(t("panels.intel.state.infoTitle"), rules)}>i</button></div>
             <dl class="kv">
-                <div class="kv-row"><dt>州中心</dt><dd>${escapeText(center.name)} · ${escapeText(ownerName(state, center.owner))}</dd></div>
-                <div class="kv-row"><dt>控制范围</dt><dd>${escapeText(`${controlled}/${capacity}`)} 省</dd></div>
-                ${center.owner > 0 ? `<div class="kv-row"><dt>外交倾向</dt><dd>${tendencyBadge(state.nations[center.owner], state)}</dd></div>` : ""}
+                <div class="kv-row"><dt>${t("panels.intel.field.stateCenter")}</dt><dd>${escapeText(center.name)} · ${escapeText(ownerName(state, center.owner))}</dd></div>
+                <div class="kv-row"><dt>${t("panels.intel.field.control")}</dt><dd>${t("panels.intel.state.controlValue", { value: escapeText(`${controlled}/${capacity}`) })}</dd></div>
+                ${center.owner > 0 ? `<div class="kv-row"><dt>${t("panels.intel.field.tendency")}</dt><dd>${tendencyBadge(state.nations[center.owner], state)}</dd></div>` : ""}
             </dl>
             <div class="intel-building-cards">${buildings}</div>
-            ${center.owner === 0 || province.owner === 0 ? '<button class="btn btn-sm" data-action="open-construction">前往建造页</button>' : ""}
+            ${center.owner === 0 || province.owner === 0 ? `<button class="btn btn-sm" data-action="open-construction">${t("panels.intel.state.goConstruction")}</button>` : ""}
         </div>`;
     }
 
@@ -191,14 +212,14 @@ export class IntelPanel {
         const attacker = state.armies.get(battle.attackerId);
         const defender = battle.defenderId !== null ? state.armies.get(battle.defenderId) : null;
         const forecast = attacker ? battleForecast(state, attacker, battle.province) : null;
-        const cancelBtn = attacker && attacker.nation === 0 ? '<button class="btn btn-sm" data-action="attack-cancel">停止进攻</button>' : "";
+        const cancelBtn = attacker && attacker.nation === 0 ? `<button class="btn btn-sm" data-action="attack-cancel">${t("panels.intel.battle.stop")}</button>` : "";
         return `<div class="battle-box">
-            <div class="battle-head">会战进行中 · 第 ${battle.rounds + 1} 轮 ${cancelBtn}</div>
+            <div class="battle-head">${t("panels.intel.battle.heading", { round: battle.rounds + 1, cancel: cancelBtn })}</div>
             <div class="battle-sides">
                 <span style="--pc:${escapeText(ownerColor(state, attacker?.nation ?? NEUTRAL))}">${escapeText(attacker?.name ?? "?")}（${escapeText(ownerName(state, attacker?.nation ?? NEUTRAL))}）</span>
-                <span class="battle-vs">vs</span><span>${defender ? `${escapeText(defender.name)} + 驻军` : "驻军"}（${escapeText(ownerName(state, state.provinces[battle.province].owner))}）</span>
+                <span class="battle-vs">vs</span><span>${defender ? t("panels.intel.battle.withGarrison", { name: escapeText(defender.name) }) : t("panels.intel.battle.garrison")}（${escapeText(ownerName(state, state.provinces[battle.province].owner))}）</span>
             </div>
-            ${forecast ? `<div class="assault-odds">攻 ${Math.round(forecast.attackPower)} / 守 ${Math.round(forecast.defensePower)} · 每日结算一轮</div>` : ""}
+            ${forecast ? `<div class="assault-odds">${t("panels.intel.battle.odds", { attack: Math.round(forecast.attackPower), defense: Math.round(forecast.defensePower) })}</div>` : ""}
         </div>`;
     }
 }

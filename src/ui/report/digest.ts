@@ -1,6 +1,7 @@
 import { NEUTRAL } from "../../game/types/world.ts";
 import type { BattleOutcome, LogEntry } from "../../game/types/log.ts";
 import type { GameState } from "../../game/types/state.ts";
+import { t } from "../../i18n/index.ts";
 
 /**
  * Pure report digest. The floating summary only keeps headline events
@@ -50,9 +51,9 @@ export interface DayBlock {
 }
 
 export const OUTCOME_LABEL: Record<BattleOutcome, string> = {
-    ongoing: "进行中",
-    repelled: "进攻击退",
-    captured: "防线崩溃",
+    get ongoing() { return t("misc.digest.outcome.ongoing"); },
+    get repelled() { return t("misc.digest.outcome.repelled"); },
+    get captured() { return t("misc.digest.outcome.captured"); },
 };
 
 export interface ReportDigest {
@@ -113,7 +114,7 @@ export function buildReportDigest(state: Pick<GameState, "day" | "log">): Report
                         key: base,
                         nation: battle.attacker,
                         defender: battle.defender,
-                        province: event.province ?? "未知省份",
+                        province: event.province ?? t("misc.digest.unknownProvince"),
                         site: event.site ?? -1,
                         rounds: battle.rounds,
                         attackLoss: battle.attackLoss,

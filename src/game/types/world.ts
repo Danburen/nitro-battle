@@ -1,15 +1,17 @@
 /** Calendar, world-wide sentinels and their display data. */
 
+import { t } from "../../i18n/index.ts";
+
 export interface Season {
     readonly name: string;
     readonly value: number;
 }
 
 export const SEASONS: readonly Season[] = [
-    { name: "春季", value: 0.1 },
-    { name: "夏季", value: 0.9 },
-    { name: "秋季", value: 0.2 },
-    { name: "冬季", value: -0.9 },
+    { get name() { return t("game.types.world.spring"); }, value: 0.1 },
+    { get name() { return t("game.types.world.summer"); }, value: 0.9 },
+    { get name() { return t("game.types.world.autumn"); }, value: 0.2 },
+    { get name() { return t("game.types.world.winter"); }, value: -0.9 },
 ];
 
 export const DAYS_PER_SEASON = 8;

@@ -1,0 +1,67 @@
+#debug-terminal {
+    position: fixed;
+    right: 14px;
+    bottom: 14px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    width: min(560px, calc(100vw - 28px));
+    max-height: 45vh;
+    overflow: hidden;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    background: rgba(6, 10, 16, 0.94);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+    color: #d6deeb;
+    font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+#debug-terminal.hidden { display: none; }
+
+.debug-term-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #30363d;
+    background: #121822;
+}
+
+.debug-term-head b { color: #79c0ff; }
+
+.debug-term-head span { color: #8b949e; font-size: 11px; }
+
+.debug-term-log {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.debug-term-line { margin: 0 0 2px; }
+
+.debug-term-line.cmd { color: #79c0ff; }
+
+.debug-term-line.err { color: #ff7b72; }
+
+.debug-term-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-top: 1px solid #30363d;
+}
+
+.debug-term-form > span { color: #3fb950; }
+
+.debug-term-form input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}

@@ -1,4 +1,4 @@
-import { periodicDistance } from "../terrain/voronoi/index.ts";
+import { periodicDistance } from "./terrain/voronoi/index.ts";
 import { hasMilitaryAccess } from "./access.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { infrastructureLevel, infrastructureMoveMultiplier } from "./economy.ts";

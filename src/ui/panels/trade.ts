@@ -13,10 +13,9 @@ import { resourceVisibility, tradeResourceRate } from "../../game/resourceVisibi
 import { requestCooldownDays } from "../../game/requests.ts";
 import type { DiplomaticDecision } from "../../game/types/decision.ts";
 import type { TradeCadence, TradeKind, TradeOffer, TradeResource, TradeTransfer } from "../../game/types/trade.ts";
-import {
-    compactNumber, escapeGameText, escapeHtml, iconMaskStyle, renderGameText, signedCompact, textToken,
-} from "../text.ts";
+import { compactNumber, escapeGameText, escapeHtml, iconMaskStyle, gameText, signedCompact, setGameHtml, game } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
+import type { UIDispatchData } from "../context.ts";
 import { panelHead, richHelpButton } from "../panel.ts";
 import { nationFlagHtmlFor } from "../flags.ts";
 import {
@@ -24,6 +23,7 @@ import {
     resourceNames, tradeResourceLabel, tradeResourceOption, tradeStatusTooltipAttrs,
     tradeStatusTooltipHtml, transferList, visibilityToken,
 } from "../trade.ts";
+import { t } from "../../i18n/index.ts";
 
 export interface TradeHooks {
     toast(message: string): void;
@@ -44,10 +44,10 @@ interface TradeDraft {
 }
 
 const KIND_TIP: Readonly<Record<TradeKind, string>> = {
-    exchange: "双方各出[[industry]]、[[raw]]、[[food]]或[[strategic]]，不得使用[[funds]]、[[manpower]]或[[politics]]。可分别设置每月交割与一次性交付。",
-    purchase: "我方只支付[[funds]]，由对方提供工业、原料、粮食或战略资源。",
-    mercenary: "我方只支付[[funds]]，对方只提供[[manpower]]。",
-    aid: "我方不提供对价，仅请求对方提供工业、原料、粮食或战略资源；不能索要[[funds]]、[[manpower]]或[[politics]]。",
+    get exchange(): string { return t("panels.trade.kindTip.exchange"); },
+    get purchase(): string { return t("panels.trade.kindTip.purchase"); },
+    get mercenary(): string { return t("panels.trade.kindTip.mercenary"); },
+    get aid(): string { return t("panels.trade.kindTip.aid"); },
 };
 
 const KIND_ICON: Readonly<Record<TradeKind, string>> = {
@@ -121,9 +121,9 @@ export class TradePanel {
         this.closeBuilder();
     }
 
-    handleAction(action: string, target: HTMLElement): boolean {
+    handleAction(action: string, data: UIDispatchData): boolean {
         if (action === "trade-target") {
-            const nationId = Number(target.dataset.nation);
+            const nationId = Number(data.nation);
             if (Number.isInteger(nationId)) {
                 this.setTarget(nationId);
                 this.hooks.sound.play("select");
@@ -131,7 +131,7 @@ export class TradePanel {
             return true;
         }
         if (action === "trade-open") {
-            const kind = target.dataset.kind as TradeKind | undefined;
+            const kind = data.kind as TradeKind | undefined;
             if (kind === "exchange" || kind === "purchase" || kind === "mercenary" || kind === "aid") {
                 this.openBuilder(kind);
             }
@@ -158,17 +158,17 @@ export class TradePanel {
         if (signature !== this.viewSignature) this.scrollTop = 0;
         this.viewSignature = signature;
 
-        this.el.innerHTML = `
+        setGameHtml(this.el, `
             ${panelHead({
-                title: "贸易",
-                help: { title: "贸易规则", body: TRADE_HELP_BODY },
-                status: renderGameText(textToken("funds", Math.floor(player.funds))),
+                title: t("panels.trade.title"),
+                help: { title: t("panels.trade.helpTitle"), body: TRADE_HELP_BODY },
+                status: gameText(`[[funds:${Math.floor(player.funds)}]]`),
             })}
             <div class="panel-body trade-body">
                 ${this.treatiesHtml()}
-                <div class="diplo-swatches" role="tablist" aria-label="贸易对象">${this.swatchesHtml()}</div>
-                ${this.target !== null ? this.nationHtml(this.target) : '<p class="diplo-note">没有可交易的国家。</p>'}
-            </div>`;
+                <div class="diplo-swatches" role="tablist" aria-label="${t("panels.trade.targetsLabel")}">${this.swatchesHtml()}</div>
+                ${this.target !== null ? this.nationHtml(this.target) : `<p class="diplo-note">${t("panels.trade.noPartners")}</p>`}
+            </div>`);
 
         for (const tab of this.el.querySelectorAll<HTMLElement>("[data-action='trade-target']")) {
             tab.onkeydown = (event) => {
@@ -208,8 +208,8 @@ export class TradePanel {
             const visibility = resourceVisibility(state, 0, nationId, resource, tradeResourceRate(rates, resource));
             const resourceLabel = resourceNames([resource]);
             const value = visibility.mode === "exact"
-                ? renderGameText(textToken(resource, nation[resource]))
-                : `${renderGameText(textToken(resource))} ${visibilityToken(visibility.mode)}`;
+                ? gameText(game`[[${resource}:${nation[resource]}]]`)
+                : game`[[${resource}]] ${visibilityToken(visibility.mode)}`;
             // Fuzzy mode produces two sibling text spans; collapse them into one
             // accessible node so a11y/DOM-tree readers keep the pair on one line.
             const accessible = visibility.mode === "exact"
@@ -239,7 +239,7 @@ export class TradePanel {
             .filter((agreement) => agreement.from === 0 || agreement.to === 0)
             .sort((a, b) => a.expiresDay - b.expiresDay || a.id - b.id);
         if (!agreements.length) {
-            return `<p class="trade-empty-note">尚未签署贸易条约。选择国家后可发起交换、购买、雇佣兵或援助。</p>`;
+            return `<p class="trade-empty-note">${t("panels.trade.treatiesEmpty")}</p>`;
         }
         const rows = agreements.map((agreement) => {
             const partnerId = agreement.from === 0 ? agreement.to : agreement.from;
@@ -248,21 +248,21 @@ export class TradePanel {
             const outgoing = agreement.from === 0 ? agreement.give : agreement.receive;
             const incoming = agreement.from === 0 ? agreement.receive : agreement.give;
             const remaining = tradeRemainingDays(state, agreement);
-            return `<details class="trade-treaty">
+            return game`<details class="trade-treaty">
                 <summary>
                     ${nationFlagHtmlFor(state, partnerId, 20)}
                     <span class="trade-treaty-name">${escapeHtml(partner.name)}</span>
                     <span class="trade-treaty-kind">${TRADE_KIND_LABEL[agreement.kind]}</span>
-                    <span class="trade-treaty-days">还剩 ${renderGameText(textToken("turn", remaining))}</span>
+                    <span class="trade-treaty-days">${t("panels.trade.treaty.remaining", { remaining })}</span>
                 </summary>
                 <div class="trade-treaty-body">
-                    ${outgoing.length ? `<div class="trade-treaty-side"><span class="trade-side-label">我方提供</span>${transferList(outgoing, "out")}</div>` : ""}
-                    ${incoming.length ? `<div class="trade-treaty-side"><span class="trade-side-label">对方提供</span>${transferList(incoming, "in")}</div>` : ""}
-                    <p class="trade-treaty-note">每月部分${cadenceToken("monthly")}自动交割；固定部分已在签署时交付。</p>
+                    ${outgoing.length ? `<div class="trade-treaty-side"><span class="trade-side-label">${t("panels.trade.side.give")}</span>${transferList(outgoing, "out")}</div>` : ""}
+                    ${incoming.length ? `<div class="trade-treaty-side"><span class="trade-side-label">${t("panels.trade.side.receive")}</span>${transferList(incoming, "in")}</div>` : ""}
+                    <p class="trade-treaty-note">${t("panels.trade.treaty.note", { cadence: cadenceToken("monthly") })}</p>
                 </div>
             </details>`;
         }).join("");
-        return `<div class="trade-treaties"><div class="trade-section-head">已签条约</div>${rows}</div>`;
+        return `<div class="trade-treaties"><div class="trade-section-head">${t("panels.trade.treaties.title")}</div>${rows}</div>`;
     }
 
     private swatchesHtml(): string {
@@ -272,14 +272,14 @@ export class TradePanel {
             const war = nation.alive && isAtWar(state, 0, nation.id);
             const truce = nation.alive && !war && truceDays(state, 0, nation.id) > 0;
             const treaty = nation.alive && this.hasTreaty(nation.id);
-            const status = !nation.alive ? "已灭亡" : war ? "交战中" : "可贸易";
+            const status = !nation.alive ? t("panels.trade.status.dead") : war ? t("panels.trade.status.war") : t("panels.trade.status.open");
             const tip = tradeStatusTooltipAttrs(
                 treaty, tendencyProfileOf(nation.tendency).name, this.hintDecision(nation.id),
-                war ? "交战中：无法签署任何贸易条约。" : status,
+                war ? t("panels.trade.status.warTip") : status,
             );
             const color = nationDisplayColor(state, nation.id);
             return `<button type="button" class="diplo-swatch trade-swatch${selected ? " selected" : ""}${nation.alive ? "" : " dead"}${war ? " war" : ""}${truce ? " truce" : ""}${treaty ? " treaty" : ""}" role="tab" aria-selected="${selected}"
-                aria-label="${escapeHtml(`${nation.name}（${status}）`)}" style="--pc:${escapeHtml(color)}"
+                aria-label="${escapeHtml(`${nation.name}${t("panels.trade.swatch.status", { status })}`)}" style="--pc:${escapeHtml(color)}"
                 data-action="trade-target" data-nation="${nation.id}"
                 ${tooltipAttrs(escapeGameText(nation.name), "")} ${tip}>${nationFlagHtmlFor(state, nation.id, 22)}</button>`;
         }).join("");
@@ -290,12 +290,12 @@ export class TradePanel {
         const nation = state.nations[nationId];
         const rates = resourceRates(state, nationId);
         const politicsVisibility = resourceVisibility(state, 0, nationId, "politics");
-        const politicsTip = tooltipAttrs(`资源情报 · ${politicsVisibility.label}`, politicsVisibility.reason);
+        const politicsTip = tooltipAttrs(t("panels.trade.resource.intel", { label: politicsVisibility.label }), politicsVisibility.reason);
         const rows = RESOURCE_ORDER.map((resource) => {
             const cap = capOf(rates, resource);
             const net = tradeResourceRate(rates, resource);
             const visibility = resourceVisibility(state, 0, nationId, resource, net);
-            const tip = tooltipAttrs(`资源情报 · ${visibility.label}`, visibility.reason);
+            const tip = tooltipAttrs(t("panels.trade.resource.intel", { label: visibility.label }), visibility.reason);
             if (visibility.mode !== "exact") {
                 return `<div class="trade-res-row">
                     <span class="trade-res-name">${tradeResourceLabel(resource)}</span>
@@ -304,21 +304,21 @@ export class TradePanel {
                 </div>`;
             }
             const tone = net > 0.05 ? " pos" : net < -0.05 ? " neg" : "";
-            return `<div class="trade-res-row" ${tip}>
+            return game`<div class="trade-res-row" ${tip}>
                 <span class="trade-res-name">${tradeResourceLabel(resource)}</span>
-                <span class="trade-res-stock">${renderGameText(textToken(resource, nation[resource]))}${cap === null ? "" : ` / ${compactNumber(cap)}`}</span>
-                <span class="trade-res-net${tone}">${renderGameText(textToken(resource, signedCompact(net)))}</span>
+                <span class="trade-res-stock">[[${resource}:${nation[resource]}]]${cap === null ? "" : ` / ${compactNumber(cap)}`}</span>
+                <span class="trade-res-net${tone}">[[${resource}:${signedCompact(net)}]]</span>
             </div>`;
         }).join("");
         return `<div class="trade-res-table">
-            <div class="trade-res-row trade-res-head"><span>资源</span><span>库存</span><span>净变化</span></div>
+            <div class="trade-res-row trade-res-head"><span>${t("panels.trade.resource.col.resource")}</span><span>${t("panels.trade.resource.col.stock")}</span><span>${t("panels.trade.resource.col.net")}</span></div>
             ${rows}
             <div class="trade-res-row trade-res-politics">
-                <span class="trade-res-name"><span class="game-text game-text--politics">政治点</span><span class="resource-icon" aria-hidden="true" ${iconMaskStyle("politics")}></span></span>
+                <span class="trade-res-name"><span class="game-text game-text--politics">${t("panels.trade.resource.politics")}</span><span class="resource-icon" aria-hidden="true" ${iconMaskStyle("politics")}></span></span>
                 <span class="trade-res-stock" ${politicsTip}>${politicsVisibility.mode === "exact"
-                    ? renderGameText(textToken("politics", nation.politicalPower)) : "—"}</span>
+                    ? gameText(`[[politics:${nation.politicalPower}]]`) : "—"}</span>
                 <span class="trade-res-note${politicsVisibility.mode === "exact" ? "" : ` trade-res-net--${politicsVisibility.mode}`}" ${politicsTip}>${politicsVisibility.mode === "exact"
-                    ? "不可交易" : visibilityToken(politicsVisibility.mode)}</span>
+                    ? t("panels.trade.resource.notTradable") : visibilityToken(politicsVisibility.mode)}</span>
             </div>
         </div>`;
     }
@@ -328,10 +328,10 @@ export class TradePanel {
         const nation = state.nations[nationId];
         const atWar = isAtWar(state, 0, nationId);
         const truce = truceDays(state, 0, nationId);
-        const status = !nation.alive ? "已灭亡" : atWar
-            ? `交战 ${renderGameText(textToken("turn", warDuration(state, 0, nationId)))}`
-            : truce > 0 ? `停战 ${renderGameText(textToken("turn", truce))}` : "和平";
-        const blocked = !nation.alive ? "该国已灭亡" : atWar ? "交战中无法贸易" : state.winner !== null ? "战役已结束" : "";
+        const status = !nation.alive ? t("panels.trade.status.dead") : atWar
+            ? t("panels.trade.status.atWar", { days: warDuration(state, 0, nationId) })
+            : truce > 0 ? t("panels.trade.status.truce", { days: truce }) : t("panels.trade.status.peace");
+        const blocked = !nation.alive ? t("panels.trade.blocked.dead") : atWar ? t("panels.trade.blocked.war") : state.winner !== null ? t("panels.trade.blocked.ended") : "";
         const cooldown = requestCooldownDays(state, "trade", nationId);
         const blockedAttr = cooldown > 0 && !blocked ? 'aria-disabled="true"' : blocked ? "disabled" : "";
         const head = `<div class="diplo-head">${nationFlagHtmlFor(state, nationId, 26)}
@@ -340,15 +340,15 @@ export class TradePanel {
         const actions = ([...Object.keys(KIND_TIP) as TradeKind[]]).map((kind) => {
             const reason = cooldown > 0 ? proposalCooldownTip(cooldown) : blocked || KIND_TIP[kind];
             return `<button type="button" class="btn btn-outline trade-action${cooldown > 0 ? " cooldown" : ""}" data-action="trade-open" data-kind="${kind}" ${blockedAttr}
-                ${tooltipAttrs(`${TRADE_KIND_LABEL[kind]}${blockedAttr ? " · 不可用" : ""}`, reason)}>
+                ${tooltipAttrs(`${TRADE_KIND_LABEL[kind]}${blockedAttr ? t("panels.trade.unavailable") : ""}`, reason)}>
                 <span class="icon-glyph" aria-hidden="true" ${iconMaskStyle(KIND_ICON[kind])}></span>${TRADE_KIND_LABEL[kind]}</button>`;
         }).join("");
-        const notes = `<p class="diplo-note">贸易倾向：${escapeHtml(tendencyProfileOf(nation.tendency).name)} · 资源按情报可见性显示；仅贸易型国家、盟友、附庸／宗主与贸易伙伴可见具体数值。条约默认持续 ${renderGameText(textToken("turn", TRADE_AGREEMENT_DAYS))}，提议时可调。</p>`;
+        const notes = game`<p class="diplo-note">${t("panels.trade.nation.note", { tendency: escapeHtml(tendencyProfileOf(nation.tendency).name), days: TRADE_AGREEMENT_DAYS })}</p>`;
         return `<div class="diplo-row trade-card" data-trade-card="${nationId}">
             ${head}
             ${this.resourceTableHtml(nationId)}
             ${notes}
-            <div class="diplo-actions-head">贸易行动</div>
+            <div class="diplo-actions-head">${t("panels.trade.actions.title")}</div>
             <div class="trade-actions">${actions}</div>
         </div>`;
     }
@@ -364,14 +364,14 @@ export class TradePanel {
         }
         if (!this.canTrade(this.target)) {
             this.hooks.sound.play("error");
-            this.hooks.toast("当前无法与该国贸易：交战中、已灭亡或战役已结束");
+            this.hooks.toast(t("panels.trade.toast.cannotTrade"));
             return;
         }
         this.closeBuilder();
         this.draft = { kind, give: [], receive: [], days: TRADE_AGREEMENT_DAYS };
         const scrim = document.createElement("div");
         scrim.className = "diplo-menu-scrim";
-        scrim.innerHTML = `<div class="diplo-menu trade-menu" role="dialog" aria-label="${TRADE_KIND_LABEL[kind]}" tabindex="-1"></div>`;
+        setGameHtml(scrim, `<div class="diplo-menu trade-menu" role="dialog" aria-label="${TRADE_KIND_LABEL[kind]}" tabindex="-1"></div>`);
         this.hud.appendChild(scrim);
         this.scrim = scrim;
         scrim.addEventListener("click", this.onBuilderClick);
@@ -418,22 +418,22 @@ export class TradePanel {
         const days = normalizeTradeDays(draft.days);
         const treaty = this.hasTreaty(targetId);
         const tendency = tendencyProfileOf(target.tendency).name;
-        const statusTip = tradeStatusTooltipHtml(treaty, tendency, decision, "确认后送出，下一回合答复。");
+        const statusTip = tradeStatusTooltipHtml(treaty, tendency, decision, t("panels.trade.confirmHint"));
 
         const duration = issue
-            ? `<span class="trade-builder-issue bad" ${tooltipAttrs("无法提交", issue)}>${escapeHtml(issue)}</span>`
-            : `<div class="trade-duration-control" ${tooltipAttrs("协议持续回合", `每月部分${cadenceLabel("monthly")}自动交割，共 ${days} 回合；固定部分签署时一次交付。`)}>
-                <span>持续</span>
-                <button type="button" data-days-step="-1" aria-label="减少持续回合" ${tooltipAttrs("减少持续回合", `每次减少 ${TRADE_AGREEMENT_DAY_STEP} 回合。`)}>−</button>
-                <b>${renderGameText(textToken("turn", days))} 回合</b>
-                <button type="button" data-days-step="1" aria-label="增加持续回合" ${tooltipAttrs("增加持续回合", `每次增加 ${TRADE_AGREEMENT_DAY_STEP} 回合。`)}>+</button>
+            ? `<span class="trade-builder-issue bad" ${tooltipAttrs(t("panels.trade.cannotSubmit"), issue)}>${escapeHtml(issue)}</span>`
+            : game`<div class="trade-duration-control" ${tooltipAttrs(t("panels.trade.duration.title"), t("panels.trade.duration.tipBody", { cadence: cadenceLabel("monthly"), days }))}>
+                <span>${t("panels.trade.duration.label")}</span>
+                <button type="button" data-days-step="-1" aria-label="${t("panels.trade.duration.decrease")}" ${tooltipAttrs(t("panels.trade.duration.decrease"), t("panels.trade.duration.decreaseTip", { step: TRADE_AGREEMENT_DAY_STEP }))}>−</button>
+                <b>${t("panels.trade.duration.value", { days })}</b>
+                <button type="button" data-days-step="1" aria-label="${t("panels.trade.duration.increase")}" ${tooltipAttrs(t("panels.trade.duration.increase"), t("panels.trade.duration.increaseTip", { step: TRADE_AGREEMENT_DAY_STEP }))}>+</button>
             </div>`;
 
         const header = `<div class="diplo-menu-head">
             <span class="trade-menu-title">${TRADE_KIND_LABEL[draft.kind]} · ${escapeHtml(target.name)}${
-                richHelpButton(`${TRADE_KIND_LABEL[draft.kind]}说明`, statusTip, "条约说明")
+                richHelpButton(t("panels.trade.kind.help", { kind: TRADE_KIND_LABEL[draft.kind] }), statusTip, t("panels.trade.treaty.helpTitle"))
             }</span>
-            <button type="button" class="diplo-menu-x" data-builder-close aria-label="关闭贸易对话框">×</button>
+            <button type="button" class="diplo-menu-x" data-builder-close aria-label="${t("panels.trade.builder.close")}">×</button>
         </div>
         <div class="trade-builder-route">
             ${this.routeSideHtml(0, "give", draft.kind)}
@@ -446,50 +446,50 @@ export class TradePanel {
         </div>`;
         const confirmBlocked = issue ? (cooldown > 0 ? 'aria-disabled="true"' : "disabled") : "";
         const confirmTip = issue
-            ? tooltipAttrs("无法提交", issue)
+            ? tooltipAttrs(t("panels.trade.cannotSubmit"), issue)
             : tradeStatusTooltipAttrs(
-                treaty, tendency, decision, `向 ${targetName} 提议${TRADE_KIND_LABEL[draft.kind]}；确认后送出，下一回合答复。`,
+                treaty, tendency, decision, t("panels.trade.confirmTip", { target: targetName, kind: TRADE_KIND_LABEL[draft.kind] }),
             );
         const foot = `<div class="diplo-menu-foot trade-builder-foot">
             <div class="trade-builder-status">${duration}</div>
             <div class="trade-builder-actions">
-                <button type="button" class="btn" data-builder-close ${tooltipAttrs("取消", "关闭对话框，不提交任何贸易提议。")}>取消</button>
-                <button type="button" class="btn btn-primary${cooldown > 0 ? " cooldown" : ""}" data-builder-confirm ${confirmBlocked} ${confirmTip}>确认</button>
+                <button type="button" class="btn" data-builder-close ${tooltipAttrs(t("panels.trade.cancel"), t("panels.trade.cancelTip"))}>${t("panels.trade.cancel")}</button>
+                <button type="button" class="btn btn-primary${cooldown > 0 ? " cooldown" : ""}" data-builder-confirm ${confirmBlocked} ${confirmTip}>${t("panels.trade.confirm")}</button>
             </div>
         </div>`;
-        card.innerHTML = `${header}${foot}`;
+        setGameHtml(card, `${header}${foot}`);
     }
 
     private sideHtml(side: "give" | "receive"): string {
         const draft = this.draft;
         if (!draft || this.target === null) return "";
         const entries = side === "give" ? draft.give : draft.receive;
-        const label = side === "give" ? "我方提供" : "对方提供";
+        const label = t(side === "give" ? "panels.trade.side.give" : "panels.trade.side.receive");
         const blocks = CADENCES.map((cadence) => {
             const rows = entries.filter((entry) => entry.cadence === cadence);
             const available = tradeResourcesFor(draft.kind, side)
                 .filter((resource) => !rows.some((entry) => entry.resource === resource));
             const options = available.map(tradeResourceOption).join("");
             const controls = `<span class="trade-cadence-add">
-                <select data-trade-pick data-side="${side}" data-cadence="${cadence}" aria-label="选择要添加的资源" ${available.length ? "" : "disabled"}>${options || '<option value="">无可用资源</option>'}</select>
+                <select data-trade-pick data-side="${side}" data-cadence="${cadence}" aria-label="${t("panels.trade.builder.pick")}" ${available.length ? "" : "disabled"}>${options || `<option value="">${t("panels.trade.builder.noResources")}</option>`}</select>
                 <button type="button" class="btn btn-sm" data-builder-add data-side="${side}" data-cadence="${cadence}" ${available.length ? "" : "disabled"}
-                    ${tooltipAttrs("添加资源", `向「${label} · ${cadenceLabel(cadence)}」添加一项资源。`)}>+</button>
+                    ${tooltipAttrs(t("panels.trade.builder.add"), t("panels.trade.builder.addTip", { label, cadence: cadenceLabel(cadence) }))}>+</button>
             </span>`;
             const rowHtml = rows.length ? rows.map((entry) => {
                 const step = stepOf(entry.resource);
-                return `<div class="trade-builder-row">
-                    <span class="trade-builder-token">${renderGameText(textToken(entry.resource, entry.amount))}</span>
+                return game`<div class="trade-builder-row">
+                    <span class="trade-builder-token">[[${entry.resource}:${entry.amount}]]</span>
                     <span class="trade-stepper">
                         <button type="button" data-builder-step data-side="${side}" data-cadence="${cadence}" data-resource="${entry.resource}" data-delta="-1"
-                            aria-label="减少数量" ${tooltipAttrs("减少", `减少 ${compactNumber(step)}。`)}>−</button>
+                            aria-label="${t("panels.trade.stepper.decrease")}" ${tooltipAttrs(t("panels.trade.stepper.decrease"), t("panels.trade.stepper.decreaseTip", { amount: compactNumber(step) }))}>−</button>
                         <b>${compactNumber(entry.amount)}</b>
                         <button type="button" data-builder-step data-side="${side}" data-cadence="${cadence}" data-resource="${entry.resource}" data-delta="1"
-                            aria-label="增加数量" ${tooltipAttrs("增加", `增加 ${compactNumber(step)}。`)}>+</button>
+                            aria-label="${t("panels.trade.stepper.increase")}" ${tooltipAttrs(t("panels.trade.stepper.increase"), t("panels.trade.stepper.increaseTip", { amount: compactNumber(step) }))}>+</button>
                     </span>
                     <button type="button" class="trade-remove" data-builder-remove data-side="${side}" data-cadence="${cadence}" data-resource="${entry.resource}"
-                        aria-label="移除" ${tooltipAttrs("移除", "从本侧移除这项资源。")}>×</button>
+                        aria-label="${t("panels.trade.stepper.remove")}" ${tooltipAttrs(t("panels.trade.stepper.remove"), t("panels.trade.stepper.removeTip"))}>×</button>
                 </div>`;
-            }).join("") : `<p class="trade-builder-empty">尚未添加</p>`;
+            }).join("") : `<p class="trade-builder-empty">${t("panels.trade.builder.empty")}</p>`;
             return `<div class="trade-cadence-block">
                 <div class="trade-cadence-head"><span>${cadenceToken(cadence)}</span>${controls}</div>
                 ${rowHtml}
@@ -603,12 +603,12 @@ export class TradePanel {
         const days = normalizeTradeDays(this.draft.days);
         if (this.engine.proposeTrade(targetId, this.draft.kind, offer.give, offer.receive, days)) {
             this.hooks.sound.play("recruit");
-            this.hooks.toast("提议已送出，下一回合答复");
+            this.hooks.toast(t("panels.trade.toast.sent"));
             this.closeBuilder();
             this.render();
         } else {
             this.hooks.sound.play("error");
-            this.hooks.toast("提议无法送出：条件已发生变化");
+            this.hooks.toast(t("panels.trade.toast.failed"));
             this.fillBuilder();
             this.render();
         }

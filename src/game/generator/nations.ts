@@ -1,5 +1,5 @@
-import { periodicDistance } from "../../terrain/voronoi/index.ts";
-import type { VoronoiGraph } from "../../terrain/voronoi/index.ts";
+import { periodicDistance } from "../terrain/voronoi/index.ts";
+import type { VoronoiGraph } from "../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { DEFAULT_POLICIES } from "../types/policy.ts";
 import { NEUTRAL } from "../types/world.ts";

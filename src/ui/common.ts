@@ -1,29 +1,30 @@
-import { Biome } from "../terrain/biome.ts";
+import { Biome } from "../game/terrain/biome.ts";
 import { NEUTRAL, NEUTRAL_COLOR } from "../game/types/world.ts";
 import { ORG_MAX } from "../game/types/organization.ts";
 import type { Army } from "../game/types/organization.ts";
 import type { GameState } from "../game/types/state.ts";
 import { nationDisplayColor } from "../game/access.ts";
 import { isAtWar } from "../game/diplomacy.ts";
+import { t } from "../i18n/index.ts";
 import type { RelationTone } from "./text.ts";
 
 export const BIOME_ZH: Readonly<Record<number, string>> = {
-    [Biome.OCEAN]: "海洋",
-    [Biome.BEACH]: "海滩",
-    [Biome.DESERT]: "沙漠",
-    [Biome.BARE]: "荒地",
-    [Biome.PLAINS]: "平原",
-    [Biome.FOREST]: "森林",
-    [Biome.MARSH]: "沼泽",
-    [Biome.HILLS]: "丘陵",
-    [Biome.MOUNTAINS]: "山地",
-    [Biome.TUNDRA]: "苔原",
-    [Biome.ICE]: "冰原",
-    [Biome.LAKE]: "湖泊",
+    get [Biome.OCEAN]() { return t("misc.biome.ocean"); },
+    get [Biome.BEACH]() { return t("misc.biome.beach"); },
+    get [Biome.DESERT]() { return t("misc.biome.desert"); },
+    get [Biome.BARE]() { return t("misc.biome.bare"); },
+    get [Biome.PLAINS]() { return t("misc.biome.plains"); },
+    get [Biome.FOREST]() { return t("misc.biome.forest"); },
+    get [Biome.MARSH]() { return t("misc.biome.marsh"); },
+    get [Biome.HILLS]() { return t("misc.biome.hills"); },
+    get [Biome.MOUNTAINS]() { return t("misc.biome.mountains"); },
+    get [Biome.TUNDRA]() { return t("misc.biome.tundra"); },
+    get [Biome.ICE]() { return t("misc.biome.ice"); },
+    get [Biome.LAKE]() { return t("misc.biome.lake"); },
 };
 
 export function ownerName(state: GameState, owner: number): string {
-    return owner === NEUTRAL ? "中立" : state.nations[owner].name;
+    return owner === NEUTRAL ? t("misc.common.neutral") : state.nations[owner].name;
 }
 
 export function ownerColor(state: GameState, owner: number): string {
@@ -45,19 +46,20 @@ export function orgPct(org: number): number {
 }
 
 /** Shown on hover anywhere the army panel is locked by trusteeship. */
-export const AUTO_GLOBAL_LOCK_TIP = "当前已经是全局托管状态，如需手动控制请取消军团面板标题右侧全局托管";
+export const AUTO_GLOBAL_LOCK_TIP = t("misc.common.autoGlobalLockTip");
 
 export function statusPill(state: GameState, army: Army, short: boolean): string {
     const battle = state.battles.some(
         (entry) => entry.attackerId === army.id || entry.defenderId === army.id,
     );
-    if (battle) return `<span class="status-pill war">${short ? "激战" : "激战中"}</span>`;
+    if (battle) return `<span class="status-pill war">${t(short ? "misc.common.battleShort" : "misc.common.battle")}</span>`;
     if (army.march) {
         const target = state.provinces[army.march.target].name;
+        const label = t(army.march.attack ? "misc.common.expedition" : short ? "misc.common.marchShort" : "misc.common.marchLong");
         return short
-            ? `<span class="status-pill idle" title="${army.march.attack ? "远征" : "行军"}→${target}">${army.march.attack ? "远征" : "行军"}→${target}</span>`
-            : `<span class="status-pill idle">${army.march.attack ? "远征" : "行军中"}→${target}</span>`;
+            ? `<span class="status-pill idle" title="${label}→${target}">${label}→${target}</span>`
+            : `<span class="status-pill idle">${label}→${target}</span>`;
     }
-    if (army.acted) return `<span class="status-pill spent">已行动</span>`;
-    return `<span class="status-pill ready">待命</span>`;
+    if (army.acted) return `<span class="status-pill spent">${t("misc.common.acted")}</span>`;
+    return `<span class="status-pill ready">${t("misc.common.ready")}</span>`;
 }
