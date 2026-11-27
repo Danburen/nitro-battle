@@ -44,6 +44,7 @@ export function createProvinces(graph: VoronoiGraph, terrain: BiomeMap): Provinc
             isCapital: false,
             garrison: 0,
             garrisonMax: 0,
+            stance: "auto",
             income: land ? (BIOME_INCOME[biome] ?? 8) : 0,
             defense: land ? (BIOME_DEFENSE[biome] ?? 1) : 0,
             population: 1,

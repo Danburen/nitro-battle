@@ -512,11 +512,11 @@ test("fort local capacity/recovery, accurate forecast and incoming garrison dama
     refreshGarrisonCapacity(state, province);
     assert.equal(province.garrisonMax, Math.round(before * 1.5));
     assert.equal(provinceDefense(state, province), province.defense);
-    assert.equal(garrisonRecoveryRate(province), 0.15);
-    assert.equal(garrisonRecoveryRate(state.provinces[17]), 0.1);
+    assert.equal(garrisonRecoveryRate(province), 0.08);
+    assert.equal(garrisonRecoveryRate(state.provinces[17]), 0.05);
     province.garrison = state.provinces[17].garrison = 0;
     core.endTurn();
-    assert.equal(province.garrison, Math.ceil(province.garrisonMax * 0.15));
+    assert.equal(province.garrison, Math.ceil(province.garrisonMax * 0.08));
     assert.equal(state.provinces[17].garrison, 2);
     const attacker = spawnArmy(state, 0, 15, Array(8).fill(UnitKind.INFANTRY), 100);
     const defender = spawnArmy(state, 1, 16, [UnitKind.INFANTRY], 100);

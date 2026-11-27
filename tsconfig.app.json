@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/tools", "src/tests"]
+  "exclude": ["src/tools", "src/tests", "src/utils/gen-names.ts"]
 }

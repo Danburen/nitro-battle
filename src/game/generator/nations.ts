@@ -373,7 +373,7 @@ function nationsBorder(
  * Only one layer is ever generated: vassals never rule vassals, and a vassal
  * is never promoted to overlord in the same pass.
  */
-function seedWorldVassals(
+export function seedWorldVassals(
     graph: VoronoiGraph,
     provinces: Province[],
     states: readonly StateRegion[],
@@ -516,6 +516,6 @@ export function generateNations(
             tributeRate: 0,
         } satisfies Nation;
     });
-    seedWorldVassals(graph, provinces, states, adjacency, nations, rand, names, tendencies);
+    // Vassal worlds are disabled: occupation is now always direct control.
     return nations;
 }

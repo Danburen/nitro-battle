@@ -301,9 +301,8 @@ export function reinforceArmy(core: GameCore, army: Army): void {
     for (const regiment of army.regiments) {
         if (regiment.hp >= MAX_HP) continue;
         const cost = REINFORCE_COST[regiment.kind];
-        if (nation.funds < cost.funds || nation.manpower < cost.manpower || nation.industry < cost.industry) continue;
+        if (nation.funds < cost.funds || nation.industry < cost.industry) continue;
         nation.funds -= cost.funds;
-        nation.manpower -= cost.manpower;
         nation.industry -= cost.industry;
         regiment.hp++;
     }

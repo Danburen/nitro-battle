@@ -1,7 +1,7 @@
 {
   "actions.army.attack.cancel": "已停止进攻",
   "actions.army.attack.fail": "无法进攻：需相邻、未行动且目标无敌对会战",
-  "actions.army.attack.start": "进攻发起：每日结算一轮，直至分出胜负",
+  "actions.army.attack.start": "进攻发起：每回合结算一轮，直至分出胜负",
   "actions.army.auto.failNotOwned": "无法设置托管：目标不是我方军团",
   "actions.army.auto.managed": "{{name}} 已交由 AI 托管",
   "actions.army.auto.unmanaged": "{{name}} 已取消托管，可手动指挥",
@@ -59,7 +59,7 @@
   "actions.diplomacy.prepare.fail": "无法准备：请检查[[politics]]、宣称、邻接和停战条件；每国仅能计时一项，同一目标不可重复",
   "actions.diplomacy.prepare.invalidKind": "外交准备类型无效，请重新打开外交页",
   "actions.diplomacy.prepare.invalidState": "请先选择符合条件的目标州",
-  "actions.diplomacy.prepare.success": "已开始制造战争借口：每日消耗[[politics]]，就绪后可宣战",
+  "actions.diplomacy.prepare.success": "已开始制造战争借口：每回合消耗[[politics]]，就绪后可宣战",
   "actions.diplomacy.request.accepted": "已接受外交请求",
   "actions.diplomacy.request.fail": "无法处理：请求已失效，或当前条件已不满足",
   "actions.diplomacy.request.invalid": "外交请求无效",
@@ -72,12 +72,12 @@
   "actions.diplomacy.upgrade.success": "契约改善请求已送出，下一回合答复",
   "actions.diplomacy.vassal.annex.fail": "无法吞并：仅能吞并独立性极低且无反叛意图的附庸",
   "actions.diplomacy.vassal.annex.success": "{{nation}} 已被吞并，领土与军团并入我方",
-  "actions.diplomacy.vassal.demand.body": "以压迫型附庸结束：不割让领土，对方上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性不可主动提升。确认后送出，下一回合答复；对方拒绝后 [[turn:{{days}}]]回合内不能再次要求。",
+  "actions.diplomacy.vassal.demand.body": "以压迫型附庸结束：不割让领土，对方上缴 30% [[funds]]/[[industry]] 与每回合 [[politics:3]]，独立性不可主动提升。确认后送出，下一回合答复；对方拒绝后 [[turn:{{days}}]]回合内不能再次要求。",
   "actions.diplomacy.vassal.demand.confirm": "提出要求",
   "actions.diplomacy.vassal.demand.fail": "附庸要求无法送出：需明显弱于我方或无望继续战争",
   "actions.diplomacy.vassal.demand.success": "附庸要求已送出，下一回合答复",
   "actions.diplomacy.vassal.demand.title": "要求 {{nation}} 成为附庸",
-  "actions.diplomacy.vassal.enforce.body": "以战争目标议和，但不割让领土：对方保留国土，上缴 30% [[funds]]/[[industry]] 与每日 [[politics:3]]，独立性极低且不可主动提升。",
+  "actions.diplomacy.vassal.enforce.body": "以战争目标议和，但不割让领土：对方保留国土，上缴 30% [[funds]]/[[industry]] 与每回合 [[politics:3]]，独立性极低且不可主动提升。",
   "actions.diplomacy.vassal.enforce.confirm": "扶为附庸",
   "actions.diplomacy.vassal.enforce.fail": "无法扶为附庸：需我方发起的全面吞并战争且已满足胜利条件",
   "actions.diplomacy.vassal.enforce.success": "{{nation}} 已成为压迫型附庸",
@@ -105,6 +105,6 @@
   "actions.diplomacy.war.goal.success": "已与{{nation}}按战争目标议和，其余临时占领退还",
   "actions.economy.build.cancel.success": "已取消施工并返还半数资源",
   "actions.economy.train.cancel.success": "已取消训练并返还半数资源",
-  "actions.economy.train.fail": "无法训练：资金、人力或工业不足",
-  "actions.economy.train.success": "已加入训练队列"
+  "actions.economy.train.fail": "无法扩军：资金、工业、全国或单省军队上限不足",
+  "actions.economy.train.success": "已在该省份扩军"
 }

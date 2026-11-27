@@ -1,6 +1,5 @@
 import { tendencyHelpBody, tendencyProfileOf } from "../game/ai/tendencies.ts";
-import type { AITendencyId } from "../game/ai/types.ts";
-import { nationDisplayColor, overlordOf } from "../game/access.ts";
+import { nationDisplayColor } from "../game/access.ts";
 import { resourceRates } from "../game/economy.ts";
 import { resourceVisibility, tradeResourceRate } from "../game/resourceVisibility.ts";
 import type { ResourceVisibilityMode } from "../game/resourceVisibility.ts";
@@ -10,24 +9,6 @@ import type { TradeResource } from "../game/types/trade.ts";
 import { t } from "../i18n/index.ts";
 import { helpButton } from "./panel.ts";
 import { chipToken, escapeHtml, TEXT_TERMS } from "./text.ts";
-
-/** Temperaments that would trade a weak overlord for a strong attacker. */
-const OPPORTUNIST_TENDENCIES: ReadonlySet<AITendencyId> = new Set([
-    "bully", "opportunist", "hegemon", "militarist",
-]);
-
-/**
- * Vassal loyalty reads as one stance derived from temperament. Printing both
- * "stays loyal" and "seeks independence" would contradict itself, so an
- * opportunistic nation gets only the flip line and everyone else only the
- * united-front line. Contract mechanics stay on the contract badge instead.
- */
-function vassalBehaviorLine(nation: Nation, state?: GameState): string {
-    if (!state || overlordOf(state, nation.id) < 0) return "";
-    return !!nation.tendency && OPPORTUNIST_TENDENCIES.has(nation.tendency)
-        ? t("misc.tendency.vassalOpportunist")
-        : t("misc.tendency.vassalLoyal");
-}
 
 const INTEL_RESOURCES: readonly TradeResource[] = ["funds", "manpower", "industry", "raw", "food", "strategic"];
 
@@ -57,18 +38,17 @@ function resourceIntelLine(state: GameState, nation: Nation): string {
 
 /**
  * Name plus a (i) tooltip: the nation card first, then a plain-language blurb
- * and the strongest traits as green `+` / red `-` lines. Vassals append one
- * loyalty line, and the nation card shares the trade panel's resource-intel rules.
+ * and the strongest traits as green `+` / red `-` lines. The nation card shares
+ * the trade panel's resource-intel rules.
  */
 export function tendencyBadge(nation: Nation | undefined, state?: GameState): string {
     if (!nation) return "";
     const profile = tendencyProfileOf(nation.tendency);
-    const behavior = vassalBehaviorLine(nation, state);
     const intel = state ? resourceIntelLine(state, nation) : "";
     const color = state ? nationDisplayColor(state, nation.id) : nation.color;
     const body = `${chipToken(color, nation.name)}\n\n${tendencyHelpBody(profile)}${
-        behavior ? `\n\n${behavior}` : ""
-    }${intel ? `\n\n${intel}` : ""}`;
+        intel ? `\n\n${intel}` : ""
+    }`;
     return `<span class="tendency-name">${escapeHtml(profile.name)}</span>${
         helpButton({
             title: t("misc.tendency.badgeTitle", { name: profile.name }),

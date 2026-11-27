@@ -1,7 +1,7 @@
 /** National stability: drift toward a war/occupation/food target, and its economic effects. */
 import { conscriptionProfile } from "./policy.ts";
 import {
-    OCCUPIED_POP_FACTOR, POPULATION_PER_POINT,
+    ARMY_UNITS_PER_POP, OCCUPIED_POP_FACTOR, POPULATION_PER_POINT,
     STABILITY_ADMIN_BONUS, STABILITY_ADMIN_CAP, STABILITY_BASE, STABILITY_FOOD_SHORTAGE,
     STABILITY_FOOD_SURPLUS, STABILITY_OCCUPIED_CAP, STABILITY_OCCUPIED_PENALTY,
     STABILITY_POLITICS_BASE, STABILITY_POLITICS_RANGE, STABILITY_PRODUCTION_BASE,
@@ -79,13 +79,13 @@ export function populationIdentity(province: Province, nationId: number): number
     return OCCUPIED_POP_FACTOR * province.occupation / 100;
 }
 
-/** Province hover/detail: people and the recruit pool they contribute, already in people. */
-export function provincePopulationView(state: GameState, province: Province): { people: number; eligible: number } {
+/** Province hover/detail: raw people plus the army units its population supports. */
+export function provincePopulationView(state: GameState, province: Province): { people: number; units: number } {
     const nation = state.nations[province.owner];
     const share = nation ? conscriptionProfile(nation, state.day).share : 0;
     const identity = populationIdentity(province, province.owner);
     return {
         people: province.population * POPULATION_PER_POINT,
-        eligible: province.population * identity * share * POPULATION_PER_POINT,
+        units: Math.max(0, Math.floor(province.population * identity * share * ARMY_UNITS_PER_POP)),
     };
 }

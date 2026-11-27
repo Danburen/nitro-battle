@@ -3,7 +3,8 @@ import { battleForecast } from "../battle.ts";
 import { claimedDefenseSites } from "../defense.ts";
 import { canBuild, canBuildProvince, canTrain, economicValue, factoryTotals, resourceRates } from "../economy.ts";
 import { supplyLevel } from "../supply.ts";
-import { armyAt, armyCap, attackTargets, isHostileProvince, nationArmyCount, reachable } from "../rules.ts";
+import { armyAt, attackTargets, isHostileProvince, reachable } from "../rules.ts";
+import { armyUnitCap, nationUnitCount } from "../provinceArmy.ts";
 import { BUILDING_PROFILES } from "../types/building.ts";
 import { REGIMENT_CAP, UNIT_PROFILES, UnitKind } from "../types/unit.ts";
 import type { Army } from "../types/organization.ts";
@@ -227,10 +228,15 @@ export class StandardAI implements AIController {
         const reach = reachable(state, army);
         const current = army.province;
         const currentScore = this.targetScore(frontDistance, claimDistance, current);
+        const currentFront = frontDistance[current];
         // Defensive nations pull back onto threatened cities harder; aggressive ones advance sooner.
         const holdBonus = 8 + Math.max(0, profile.defense - 3) * 4 - Math.max(0, profile.aggression - 3) * 2;
         let best: number | null = null;
         let bestScore = currentScore;
+        // Claim guards tie on score, which used to pin reserves deep inside a rival's
+        // claimed state. War fronts still outrank that tie: step closer to the enemy.
+        let bestFront: number | null = null;
+        let bestFrontDistance = currentFront > 0 ? currentFront : Infinity;
 
         for (const [site, cost] of reach.cost) {
             const objective = this.targetScore(frontDistance, claimDistance, site);
@@ -238,6 +244,10 @@ export class StandardAI implements AIController {
             const occupant = armyAt(state, site);
             if (occupant && occupant.regiments.length + army.regiments.length > REGIMENT_CAP) continue;
 
+            if (frontDistance[site] >= 0 && frontDistance[site] < bestFrontDistance) {
+                bestFrontDistance = frontDistance[site];
+                bestFront = site;
+            }
             let score = objective + cost * 0.2 + (occupant ? 3 : 0);
             // Defend rich ground: fall back onto a threatened city or capital.
             const province = state.provinces[site];
@@ -248,7 +258,8 @@ export class StandardAI implements AIController {
             }
         }
 
-        return best;
+        if (best !== null) return best;
+        return currentFront !== 1 && currentFront !== 0 ? bestFront : null;
     }
 
     private threatened(state: GameState, site: number): boolean {
@@ -320,10 +331,7 @@ export class StandardAI implements AIController {
 
     private pickTrains(state: GameState, frontDistance: Int32Array, profile: AITendencyProfile): AIAction[] {
         const nation = state.nations[this.nationId];
-        const hasRoom = nationArmyCount(state, this.nationId) < armyCap(state, this.nationId) ||
-            [...state.armies.values()].some(
-                (army) => army.nation === this.nationId && army.regiments.length < REGIMENT_CAP,
-            );
+        const hasRoom = nationUnitCount(state, this.nationId) < armyUnitCap(state, this.nationId);
         if (!hasRoom) return [];
 
         const rates = resourceRates(state, this.nationId);

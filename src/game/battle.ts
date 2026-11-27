@@ -9,8 +9,8 @@ import type { GameState } from "./types/state.ts";
 import type { Province } from "./types/entities.ts";
 
 /** Share of a province's maximum garrison restored each day. */
-export const GARRISON_RECOVERY_RATE = 0.1;
-export const FORT_GARRISON_RECOVERY_RATE = 0.15;
+export const GARRISON_RECOVERY_RATE = 0.05;
+export const FORT_GARRISON_RECOVERY_RATE = 0.08;
 export const FORT_GARRISON_CAPACITY_MULTIPLIER = 1.5;
 export const FORT_GARRISON_DAMAGE_MULTIPLIER = 1.25;
 export const FORT_GARRISON_INCOMING_MULTIPLIER = 0.8;

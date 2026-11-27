@@ -2,8 +2,10 @@ import { MAP_SIZES, NATION_COUNT_MAX } from "../types/settings.ts";
 import { DEFAULT_TERRAIN_PARAMS } from "../game/terrain/biome.ts";
 import { t } from "../i18n/index.ts";
 import type { MessageKey } from "../i18n/index.ts";
-import { iconMaskStyle, setGameHtml } from "./text.ts";
+import { iconMaskStyle, html, setGameHtml } from "./text.ts";
 import { tooltipAttrs } from "./tooltip.ts";
+import { trustedParts } from "./view.ts";
+import type { UiView } from "./view.ts";
 
 /** Preset line-ups; anything else goes through the custom slider. */
 const NATION_COUNT_PRESETS = [2, 3, 5, 6, 10] as const;
@@ -13,7 +15,14 @@ const DEFAULT_MAP_CELLS = MAP_SIZES.standard.cells;
 const MAP_CELLS_MIN = 600;
 const MAP_CELLS_MAX = 3000;
 
-const BALANCE_TIP = t("misc.layout.balanceTip");
+/** Resolved at call time so a locale switch is visible on the next mount. */
+function balanceTip(): string {
+    return t("misc.layout.balanceTip");
+}
+
+export function defaultHint(): string {
+    return t("misc.layout.defaultHint");
+}
 
 interface TerrainSlider {
     readonly key: "seaLevel" | "basePeriod" | "elevationExponent" | "moistureContrast" | "freqMultiplier";
@@ -32,24 +41,27 @@ const TERRAIN_SLIDERS: readonly TerrainSlider[] = [
     { key: "freqMultiplier", label: "misc.layout.terrain.freqMultiplier", min: 1.5, max: 3, step: 0.1, digits: 1 },
 ];
 
-function terrainRows(): string {
-    return TERRAIN_SLIDERS.map((slider) => {
-        const value = DEFAULT_TERRAIN_PARAMS[slider.key];
-        return `<div class="field slider-field">
-            <label for="terrain-${slider.key}">${t(slider.label)} <b data-terrain-out="${slider.key}">${value.toFixed(slider.digits)}</b></label>
+/** One slider row; the dynamic label key is resolved before the template. */
+function terrainSliderView(slider: TerrainSlider): UiView {
+    const label = t(slider.label);
+    const value = DEFAULT_TERRAIN_PARAMS[slider.key];
+    return { html: html`<div class="field slider-field">
+            <label for="terrain-${slider.key}">${label} <b data-terrain-out="${slider.key}">${value.toFixed(slider.digits)}</b></label>
             <input id="terrain-${slider.key}" type="range" data-terrain="${slider.key}" data-digits="${slider.digits}" min="${slider.min}" max="${slider.max}" step="${slider.step}" value="${value}" disabled />
-        </div>`;
-    }).join("");
+        </div>` };
 }
 
-export const DEFAULT_HINT = t("misc.layout.defaultHint");
+function terrainRowsView(): UiView {
+    const rows = TERRAIN_SLIDERS.map((slider) => terrainSliderView(slider).html).join("");
+    return { html: html`${trustedParts({ rows }).rows}` };
+}
 
 /** Static HUD / overlay skeleton; all dynamic content is rendered by ui modules. */
 export function mountLayout(app: HTMLElement): void {
     setGameHtml(app, `
     <div class="game-shell">
         <canvas id="game-canvas"></canvas>
-        <div class="hint" id="hint">${DEFAULT_HINT}</div>
+        <div class="hint" id="hint">${defaultHint()}</div>
         <div id="toast" class="toast" role="status"></div>
         <div id="global-tooltip" class="global-tooltip" role="tooltip" hidden><strong></strong><div class="tooltip-body"></div></div>
 
@@ -60,12 +72,6 @@ export function mountLayout(app: HTMLElement): void {
                         <span class="top-country-flag" id="top-country-flag"></span>
                         <span class="top-country-label" id="top-country-label"></span>
                     </span>
-                    <div class="top-vassals hidden" id="top-vassals">
-                        <button type="button" class="top-vassals-trigger" id="top-vassals-trigger" aria-expanded="false" aria-controls="top-vassals-menu">
-                            <span class="top-vassals-label">${t("misc.layout.topbar.vassals")}</span><span id="top-vassals-summary"></span><span class="top-vassals-caret" aria-hidden="true">▾</span>
-                        </button>
-                        <div class="top-vassals-menu hidden" id="top-vassals-menu" role="menu"></div>
-                    </div>
                 </div>
                 <span class="pill" id="day-pill">${t("misc.layout.dayPill")}</span>
                 <div class="top-resources">
@@ -153,7 +159,7 @@ export function mountLayout(app: HTMLElement): void {
             </div>
 
             <div class="hud-corner hud-tr">
-                <section class="panel dock-panel" id="army-panel"></section>
+                <section class="panel dock-panel hidden" id="army-panel"></section>
             </div>
 
             <div class="hud-corner hud-bl">
@@ -185,6 +191,10 @@ export function mountLayout(app: HTMLElement): void {
         </div>
     </div>
     <div class="overlay" id="start-overlay">
+        <select id="language-select" class="start-locale" aria-label="${t("misc.layout.locale.label")}">
+            <option value="zh-CN">简体中文</option>
+            <option value="en-US">English</option>
+        </select>
         <div class="start-card">
             <div class="start-strip"></div>
             <div class="start-inner">
@@ -279,7 +289,7 @@ export function mountLayout(app: HTMLElement): void {
                     </div>
                     <div class="field">
                         <span class="field-label">${t("misc.layout.newgame.balance")}
-                            <button type="button" class="intel-help intel-info" aria-label="${t("misc.layout.newgame.balanceHelp")}" ${tooltipAttrs(t("misc.layout.newgame.balance"), BALANCE_TIP)}>i</button>
+                            <button type="button" class="intel-help intel-info" aria-label="${t("misc.layout.newgame.balanceHelp")}" ${tooltipAttrs(t("misc.layout.newgame.balance"), balanceTip())}>i</button>
                         </span>
                         <span class="settings-control settings-seg-group" role="group" aria-label="${t("misc.layout.newgame.balance")}">
                             <button type="button" class="settings-seg" data-balance="on" aria-pressed="false">${t("misc.common.on")}</button>
@@ -296,7 +306,7 @@ export function mountLayout(app: HTMLElement): void {
                                 <button type="button" class="settings-seg" data-terrain-mode="custom" aria-pressed="false">${t("misc.layout.newgame.custom")}</button>
                             </span>
                         </div>
-                        ${terrainRows()}
+                        ${terrainRowsView().html}
                         <p class="settings-note">${t("misc.layout.newgame.terrainNote")}</p>
                     </details>
                 </div>

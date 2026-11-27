@@ -1,24 +1,19 @@
 import type { GameEngine } from "../game/engine.ts";
 import type { SoundManager } from "../audio/index.ts";
-import type { GameState } from "../game/types/state.ts";
 import { resourceBreakdown, resourceRates } from "../game/economy.ts";
+import { armyUnitCap, nationUnitCount } from "../game/provinceArmy.ts";
 import { DIPLOMATIC_PROFILES } from "../game/diplomacy.ts";
 import { policySwitchUpkeep } from "../game/policy.ts";
 import { stabilityManpower, stabilityPolitics, stabilityProduction } from "../game/stability.ts";
-import { vassalsOf } from "../game/access.ts";
-import { VASSAL_HELP_BODY } from "../game/vassal.ts";
 import { POLICY_SWITCH_COST, POLICY_SWITCH_DAYS } from "../game/types/policy.ts";
-import { FOOD_SURPLUS_RATIO, MANPOWER_PER_POINT, PP_CAP } from "../game/types/economy.ts";
+import { FOOD_SURPLUS_RATIO, POPULATION_PER_POINT, PP_CAP } from "../game/types/economy.ts";
 import { DAYS_PER_SEASON } from "../game/types/world.ts";
 import { t } from "../i18n/index.ts";
 import type { MessageKey } from "../i18n/index.ts";
 import { nationOverviewBody, nationStats } from "./nation-info.ts";
-import { vassalIndependenceIcon, vassalTypeIcon } from "./vassal.ts";
-import { compactNumber, peopleCount, gameText, setGameText, signedCompact, setGameHtml, game, html, rawHtml } from "./text.ts";
+import { compactNumber, peopleCount, gameText, setGameText, signedCompact, setGameHtml, game } from "./text.ts";
 import type { TextKey } from "./text.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
-import { helpButton } from "./panel.ts";
-import { tooltipAttrs } from "./tooltip.ts";
 
 const SOUND_ON_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 4.5 4.5H2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 .5.5h2.5L8 14.5a.5.5 0 0 0 .8-.4V1.9a.5.5 0 0 0-.8-.4Z"/><path d="M10.5 5a3.5 3.5 0 0 1 0 6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M12.3 3a6 6 0 0 1 0 10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
 const SOUND_OFF_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5 4.5 4.5H2a.5.5 0 0 0-.5.5v6a.5.5 0 0 0 .5.5h2.5L8 14.5a.5.5 0 0 0 .8-.4V1.9a.5.5 0 0 0-.8-.4Z"/><path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
@@ -26,28 +21,6 @@ const SOUND_OFF_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="cu
 const SEASON_KEYS: readonly MessageKey[] = [
     "ui.season.spring", "ui.season.summer", "ui.season.autumn", "ui.season.winter",
 ];
-
-/** Overlord dropdown: one compact row per vassal, icons carry the full contract. */
-function vassalMenuHtml(state: GameState): string {
-    const vassals = vassalsOf(state, 0);
-    if (vassals.length === 0) return html`<p class="top-vassals-note">${t("ui.topbar.vassals.empty")}</p>`;
-    const rows = vassals.map((id) => {
-        const name = state.nations[id].name;
-        return html`
-        <button type="button" class="top-vassals-row" role="menuitem" data-action="vassal-goto" data-nation="${id}"
-            ${rawHtml(tooltipAttrs(t("ui.topbar.vassals.view"), t("ui.topbar.vassals.openDiplo", { name })))}>
-            ${rawHtml(nationFlagHtmlFor(state, id, 22))}
-            <span class="top-vassals-row-name">${name}</span>
-            ${rawHtml(vassalTypeIcon(state, id))}
-            <span class="top-vassals-row-ind">${t("ui.topbar.vassals.independence")}</span>
-            ${rawHtml(vassalIndependenceIcon(state, id))}
-        </button>`;
-    }).join("");
-    return html`<div class="top-vassals-head"><b>${t("ui.topbar.vassals.head")}</b><span class="status-pill ready">${t("ui.topbar.vassals.count", { count: vassals.length })}</span>
-            ${rawHtml(helpButton({ title: t("ui.topbar.vassals.helpTitle"), body: VASSAL_HELP_BODY }))}</div>
-        <p class="top-vassals-note">${t("ui.topbar.vassals.note")}</p>
-        ${rawHtml(rows)}`;
-}
 
 /** Top resource bar: country name, date, season, resources, end-turn and sound buttons. */
 export class TopBar {
@@ -68,11 +41,6 @@ export class TopBar {
     private readonly countryName = document.querySelector<HTMLElement>("#top-country-name") as HTMLElement;
     private readonly countryFlag = document.querySelector<HTMLElement>("#top-country-flag") as HTMLElement;
     private readonly countryLabel = document.querySelector<HTMLElement>("#top-country-label") as HTMLElement;
-    private readonly vassals = document.querySelector<HTMLElement>("#top-vassals") as HTMLElement;
-    private readonly vassalsTrigger = document.querySelector<HTMLButtonElement>("#top-vassals-trigger") as HTMLButtonElement;
-    private readonly vassalsSummary = document.querySelector<HTMLElement>("#top-vassals-summary") as HTMLElement;
-    private readonly vassalsMenu = document.querySelector<HTMLElement>("#top-vassals-menu") as HTMLElement;
-    private vassalsOpen = false;
     private readonly resizeObserver: ResizeObserver;
 
     constructor(engine: GameEngine, sound: SoundManager, toast: (text: string) => void) {
@@ -84,8 +52,6 @@ export class TopBar {
             element.tabIndex = 0;
         }
         this.setSoundIcon();
-        this.vassalsTrigger.addEventListener("click", this.onVassalsToggle);
-        document.addEventListener("pointerdown", this.onVassalsOutside, true);
         const bar = document.querySelector<HTMLElement>(".top-bar")!;
         this.resizeObserver = new ResizeObserver(() => {
             document.querySelector<HTMLElement>("#hud")!.style.setProperty("--hud-top", `${Math.ceil(bar.getBoundingClientRect().height) + 10}px`);
@@ -95,33 +61,6 @@ export class TopBar {
 
     destroy(): void {
         this.resizeObserver.disconnect();
-        this.vassalsTrigger.removeEventListener("click", this.onVassalsToggle);
-        document.removeEventListener("pointerdown", this.onVassalsOutside, true);
-    }
-
-    private readonly onVassalsToggle = (): void => {
-        // Only an overlord has vassals to list in the dropdown.
-        if (this.vassals.classList.contains("hidden")) return;
-        this.vassalsOpen = !this.vassalsOpen;
-        if (this.vassalsOpen) setGameHtml(this.vassalsMenu, vassalMenuHtml(this.engine.state));
-        this.syncVassalsMenu();
-        this.sound.play("select");
-    };
-
-    private readonly onVassalsOutside = (event: PointerEvent): void => {
-        if (this.vassalsOpen && !this.vassals.contains(event.target as Node)) this.closeCountryMenu();
-    };
-
-    private syncVassalsMenu(): void {
-        this.vassals.classList.toggle("open", this.vassalsOpen);
-        this.vassalsMenu.classList.toggle("hidden", !this.vassalsOpen);
-        this.vassalsTrigger.setAttribute("aria-expanded", String(this.vassalsOpen));
-    }
-
-    closeCountryMenu(): void {
-        if (!this.vassalsOpen) return;
-        this.vassalsOpen = false;
-        this.syncVassalsMenu();
     }
 
     private renderResource(element: HTMLElement, key: TextKey, amount: number, change: string): void {
@@ -141,13 +80,6 @@ export class TopBar {
         this.countryName.dataset.tooltipTitle = player.name;
         this.countryName.dataset.tooltipHtml = nationOverviewBody(state, nationStats(state, 0));
         this.countryName.setAttribute("aria-label", t("ui.topbar.country.ariaLabel", { name: player.name }));
-        // Only an overlord keeps the "附庸 N 个附庸" dropdown. A vassal's contract
-        // lives in the country hover, and a lone independent shows nothing.
-        const vassals = vassalsOf(state, 0);
-        this.vassals.classList.toggle("hidden", vassals.length === 0);
-        setGameText(this.vassalsSummary, t("ui.topbar.vassals.count", { count: vassals.length }), "plain");
-        if (vassals.length === 0 && this.vassalsOpen) this.closeCountryMenu();
-        if (this.vassalsOpen) setGameHtml(this.vassalsMenu, vassalMenuHtml(state));
         const rates = resourceRates(state, 0);
         const detail = resourceBreakdown(state, 0);
         setGameText(this.dayPill, t("ui.topbar.day.label", { day: state.day }));
@@ -206,17 +138,16 @@ export class TopBar {
             upkeep: fmt(detail.funds.upkeep),
             net: signed(detail.funds.net),
         });
-        const intake = rates.manpower;
+        const units = nationUnitCount(state, 0);
+        const unitCap = armyUnitCap(state, 0);
         const sharePercent = Math.round(detail.manpower.share * 1000) / 10;
-        this.renderResource(this.resManpower, "manpower", Math.floor(player.manpower), signedCompact(intake));
-        this.resManpower.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "manpower" });
+        this.renderResource(this.resManpower, "armyUnits", units, `/ ${unitCap}`);
+        this.resManpower.dataset.tooltipTitle = "[[armyUnits]]";
         this.resManpower.dataset.tooltipBody = t("ui.topbar.manpower.body", {
+            units,
+            cap: unitCap,
             sharePercent,
-            cap: Math.round(detail.manpower.cap),
-            people: peopleCount(detail.manpower.cap * MANPOWER_PER_POINT),
-            stock: Math.floor(player.manpower),
-            intake: signed(intake),
-            stabilityFactor: stabilityManpower(player).toFixed(2),
+            people: peopleCount(detail.manpower.population * POPULATION_PER_POINT),
         });
         this.renderResource(this.resIndustry, "industry", Math.floor(player.industry), `+${compactNumber(rates.industryNet)}`);
         this.resIndustry.dataset.tooltipTitle = t("ui.topbar.tip.reserve", { token: "industry" });

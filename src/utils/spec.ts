@@ -47,6 +47,7 @@ export const TEXT_TERMS = {
     funds: { label: "财政", tone: "funds", icon: "funds", compare: "atLeast" },
     fund: { label: "财政", tone: "funds", icon: "funds", compare: "atLeast" },
     manpower: { label: "人力", tone: "manpower", icon: "manpower", compare: "atLeast" },
+    armyUnits: { label: "军队单位", tone: "manpower", icon: "manpower", compare: "atLeast" },
     industry: { label: "工业", tone: "industry", icon: "industry", compare: "atLeast" },
     raw: { label: "原料", tone: "raw", icon: "raw", compare: "atLeast" },
     food: { label: "粮食", tone: "food", icon: "food", compare: "atLeast" },

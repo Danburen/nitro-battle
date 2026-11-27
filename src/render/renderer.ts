@@ -121,6 +121,7 @@ export class MapRenderer {
     private colorLevel = "";
     private iconLoadVersion = -1;
     private hover: number | null = null;
+    private dropSite: number | null = null;
     private tooltipHover: {
         site: number;
         key: number;
@@ -490,15 +491,15 @@ export class MapRenderer {
         return best;
     }
 
-    private hitTestCounter(sx: number, sy: number): CounterHit | null {
-        if (this.currentMapMode !== "province") return null;
-        for (let i = this.counterHits.length - 1; i >= 0; i--) {
-            const hit = this.counterHits[i];
-            if (sx >= hit.x - 2 && sx <= hit.x + hit.w + 2 && sy >= hit.y - 2 && sy <= hit.y + hit.h + 2) {
-                return hit;
-            }
-        }
-        return null;
+    /** Drag-and-drop preview: ring the province that will receive the regiment. */
+    public setDropSite(site: number | null): void {
+        this.dropSite = site !== null && site >= 0 ? site : null;
+    }
+
+    /** Map province under a client-space point; -1 when outside the map. */
+    public siteAtClient(clientX: number, clientY: number): number {
+        const rect = this.canvas.getBoundingClientRect();
+        return this.hitTest(clientX - rect.left, clientY - rect.top);
     }
 
     private handlePointerDown = (event: PointerEvent): void => {
@@ -571,13 +572,7 @@ export class MapRenderer {
             } else if (this.constructionActive) {
                 this.onCellClick(this.hitTest(sx, sy));
             } else {
-                const modeBusy = this.engine.state.redeployArmyId !== null;
-                const hit = modeBusy ? null : this.hitTestCounter(sx, sy);
-                if (hit && hit.nation === 0) {
-                    this.engine.selectArmy(hit.armyId);
-                } else {
-                    this.onCellClick(this.hitTest(sx, sy));
-                }
+                this.onCellClick(this.hitTest(sx, sy));
             }
         }
         this.pointerDown = null;
@@ -726,7 +721,7 @@ export class MapRenderer {
             garrison: Math.round(province.garrison),
             max: province.garrisonMax,
             people: peopleCount(population.people),
-            eligible: peopleCount(population.eligible),
+            units: population.units,
             lines: resourceLines,
         });
         // Refresh stationary details without repeated DOM writes or measurements.
@@ -1239,7 +1234,9 @@ export class MapRenderer {
             const sameState = this.currentMapMode === "state" && this.hover !== null && selected !== null
                 && state.provinces[this.hover].stateId >= 0
                 && state.provinces[this.hover].stateId === state.provinces[selected].stateId;
-            if (this.hover !== null && this.hover !== selected && !sameState) {
+            if (this.dropSite !== null && state.provinces[this.dropSite].owner === 0) {
+                this.highlightSite(ctx, this.dropSite, true);
+            } else if (this.hover !== null && this.hover !== selected && !sameState) {
                 this.highlightSite(ctx, this.hover, false);
             }
             if (selected !== null) this.highlightSite(ctx, selected, true);
@@ -1481,10 +1478,13 @@ export class MapRenderer {
         }
 
         const color = nationDisplayColor(state, army.nation);
-        const w = 40 * scale;
-        const h = 28 * scale;
+        // A single badge that grows with its regiment count, capped so large stacks stay readable.
         const count = army.regiments.length;
-        const selected = state.selectedArmyId === army.id;
+        const growth = 1 + Math.min(0.5, Math.max(0, count - 1) * 0.08);
+        const w = 30 * growth * scale;
+        const h = 20 * growth * scale;
+        const topY = y - h / 2;
+        const selected = state.selectedArmyId === army.id || state.selected === army.province;
 
         ctx.save();
         ctx.globalAlpha = army.acted && !fighting ? 0.55 : 1;
@@ -1493,14 +1493,14 @@ export class MapRenderer {
             ctx.strokeStyle = "#e6edf3";
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.roundRect(x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 6, 7);
+            ctx.roundRect(x - w / 2 - 3, topY - 3, w + 6, h + 6, 8);
             ctx.stroke();
         }
         if (fighting) {
             ctx.strokeStyle = `rgba(248, 81, 73, ${0.5 + 0.5 * Math.abs(Math.sin(now / 200))})`;
             ctx.lineWidth = 2.4;
             ctx.beginPath();
-            ctx.roundRect(x - w / 2 - 1.5, y - h / 2 - 1.5, w + 3, h + 3, 6);
+            ctx.roundRect(x - w / 2 - 1.5, topY - 1.5, w + 3, h + 3, 7);
             ctx.stroke();
         }
 
@@ -1508,7 +1508,7 @@ export class MapRenderer {
         ctx.strokeStyle = "rgba(13, 17, 23, 0.92)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(x - w / 2, y - h / 2, w, h, 5);
+        ctx.roundRect(x - w / 2, topY, w, h, 5);
         ctx.fill();
         ctx.stroke();
 
@@ -1517,13 +1517,13 @@ export class MapRenderer {
             ctx.strokeStyle = "rgba(230, 237, 243, 0.85)";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.arc(x + w / 2 - 1, y - h / 2 - 1, 8, 0, Math.PI * 2);
+            ctx.arc(x + w / 2 - 1, topY + 1, 8, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
             ctx.fillStyle = "#e6edf3";
             ctx.font = "700 9px system-ui, sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText(`×${count}`, x + w / 2 - 1, y - h / 2 + 2.2);
+            ctx.fillText(`×${count}`, x + w / 2 - 1, topY + 4.2);
         }
 
         // Dominant regiment kind as the counter symbol.
@@ -1545,7 +1545,7 @@ export class MapRenderer {
         ctx.fillStyle = "#ffffff";
         ctx.lineWidth = 2.2;
         ctx.lineCap = "round";
-        const gy = y - 4;
+        const gy = y - 1;
         if (dominant === 0) {
             ctx.beginPath();
             ctx.moveTo(x - 7, gy - 5);
@@ -1563,17 +1563,21 @@ export class MapRenderer {
             ctx.fill();
         }
 
-        const orgRatio = Math.max(0, Math.min(1, army.org / 100));
-        ctx.fillStyle = "rgba(13, 17, 23, 0.65)";
-        ctx.fillRect(x - w / 2 + 4, y + h / 2 - 11, w - 8, 2.5);
-        ctx.fillStyle = "#58a6ff";
-        ctx.fillRect(x - w / 2 + 4, y + h / 2 - 11, (w - 8) * orgRatio, 2.5);
-
+        // HP is always visible; organisation only belongs to the selected province/army.
         const hpRatio = count > 0 ? hpTotal / count / MAX_HP : 0;
+        const barX = x - w / 2 + 4;
+        const barW = w - 8;
+        if (selected) {
+            const orgRatio = Math.max(0, Math.min(1, army.org / 100));
+            ctx.fillStyle = "rgba(13, 17, 23, 0.65)";
+            ctx.fillRect(barX, y + h / 2 - 11, barW, 2.5);
+            ctx.fillStyle = "#58a6ff";
+            ctx.fillRect(barX, y + h / 2 - 11, barW * orgRatio, 2.5);
+        }
         ctx.fillStyle = "rgba(13, 17, 23, 0.65)";
-        ctx.fillRect(x - w / 2 + 4, y + h / 2 - 6.5, w - 8, 3.5);
+        ctx.fillRect(barX, y + h / 2 - 6.5, barW, 3.5);
         ctx.fillStyle = hpRatio > 0.6 ? "#3fb950" : hpRatio > 0.3 ? "#d29922" : "#f85149";
-        ctx.fillRect(x - w / 2 + 4, y + h / 2 - 6.5, (w - 8) * hpRatio, 3.5);
+        ctx.fillRect(barX, y + h / 2 - 6.5, barW * hpRatio, 3.5);
 
         const screenX = this.viewW / 2 + (x + ox - this.camera.x) * this.camera.zoom;
         const screenY = this.viewH / 2 + (y + oy - this.camera.y) * this.camera.zoom;

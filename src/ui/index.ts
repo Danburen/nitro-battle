@@ -396,7 +396,6 @@ export class GameUI implements UIContext {
                     { label: t("misc.index.legend.claimed"), overlay: nationDisplayColor(state, 0) },
                     { label: t("misc.index.legend.focus"), ring: true },
                 ],
-                note: t("misc.index.legend.claimsNote"),
             });
             return;
         }
@@ -434,7 +433,6 @@ export class GameUI implements UIContext {
                     },
                     { label: t("misc.index.legend.foodOrNone"), icons: [{ name: "food", color: RESOURCE_MAP_COLORS.food }] },
                 ],
-                note: t("misc.index.legend.resourceNote"),
             });
             return;
         }
@@ -856,7 +854,6 @@ export class GameUI implements UIContext {
             cooldown: target.classList.contains("cooldown"),
             cooldownTooltip: target.dataset.tooltipBody ?? null,
             selectedState: select && select.value !== "" ? Number(select.value) : null,
-            vassalType: target.closest("details")?.querySelector<HTMLInputElement>("input[type='radio']:checked")?.value,
         });
     }
 
@@ -965,16 +962,6 @@ export class GameUI implements UIContext {
             if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
                 this.openPanel("trade");
                 this.trade.setTarget(nationId);
-                this.sound.play("select");
-            }
-            return true;
-        }
-        if (action === "vassal-goto") {
-            const nationId = Number(data.nation);
-            if (Number.isInteger(nationId) && this.engine.state.nations[nationId] && !this.engine.state.nations[nationId].isPlayer) {
-                this.topbar.closeCountryMenu();
-                this.openPanel("diplomacy");
-                this.diplomacy.setTarget(nationId);
                 this.sound.play("select");
             }
             return true;

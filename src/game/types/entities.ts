@@ -59,6 +59,9 @@ export interface ProvinceDeposits {
     strategic: number;
 }
 
+/** Provincial army posture: auto attacks when stronger, defend never starts a fight. */
+export type ProvinceStance = "auto" | "defend" | "attack";
+
 export interface Province {
     readonly site: number;
     name: string;
@@ -69,6 +72,8 @@ export interface Province {
     isCapital: boolean;
     garrison: number;
     garrisonMax: number;
+    /** Posture of this province's field troops; omitted fixtures default to auto. */
+    stance?: ProvinceStance;
     income: number;
     defense: number;
     /** 1–6; feeds manpower income and caps. */

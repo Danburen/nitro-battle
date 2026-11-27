@@ -5,6 +5,7 @@ import { periodicDistance } from "../terrain/voronoi/index.ts";
 import type { LCGRandom } from "../../utils/LCGRandom.ts";
 import { spawnArmy } from "../armies.ts";
 import { garrisonCapacity } from "../battle.ts";
+import { armyUnitCap } from "../provinceArmy.ts";
 import { computeSupply } from "../supply.ts";
 import { NEUTRAL } from "../types/world.ts";
 import { VASSAL_PROFILES } from "../vassal.ts";
@@ -16,7 +17,7 @@ import { compensateStartingNations, ensureStartingResourceDeposits } from "./bal
 const POP_BIOMES = new Set<number>([Biome.PLAINS, Biome.FOREST, Biome.HILLS, Biome.BEACH]);
 
 export function initializeWorld(state: GameState, rand: LCGRandom): void {
-    const { graph, terrain, provinces, states, nations } = state;
+    const { terrain, provinces, states, nations } = state;
     for (const region of states) {
         const capital = provinces[region.center].isCapital;
         region.factories = Math.min(region.provinces.length, capital ? 2 : 1);
@@ -46,12 +47,20 @@ export function initializeWorld(state: GameState, rand: LCGRandom): void {
         province.garrison = province.garrisonMax;
     }
     for (const nation of nations) {
-        spawnArmy(state, nation.id, nation.capital, [UnitKind.INFANTRY, UnitKind.INFANTRY, UnitKind.INFANTRY, UnitKind.TANK], START_ORG);
+        const cap = armyUnitCap(state, nation.id);
+        let units = 0;
+        const spawn = (site: number, kinds: readonly UnitKind[]): boolean => {
+            if (units + kinds.length > cap) return false;
+            spawnArmy(state, nation.id, site, [...kinds], START_ORG);
+            units += kinds.length;
+            return true;
+        };
+        spawn(nation.capital, [UnitKind.INFANTRY, UnitKind.INFANTRY, UnitKind.INFANTRY, UnitKind.TANK]);
         const cities = provinces.filter((province) => province.owner === nation.id && province.isCity && !province.isCapital)
-            .sort((a, b) => periodicDistance(graph.sites[a.site], graph.sites[nation.capital], graph.domain)
-                - periodicDistance(graph.sites[b.site], graph.sites[nation.capital], graph.domain));
+            .sort((a, b) => periodicDistance(state.graph.sites[a.site], state.graph.sites[nation.capital], state.graph.domain)
+                - periodicDistance(state.graph.sites[b.site], state.graph.sites[nation.capital], state.graph.domain));
         for (const city of cities.slice(0, 2)) {
-            spawnArmy(state, nation.id, city.site, [UnitKind.INFANTRY, UnitKind.INFANTRY], START_ORG);
+            if (!spawn(city.site, [UnitKind.INFANTRY, UnitKind.INFANTRY])) spawn(city.site, [UnitKind.INFANTRY]);
         }
     }
     state.supply = computeSupply(state);

@@ -1,13 +1,14 @@
 import type { GameEngine } from "../../game/engine.ts";
+import type { GameState } from "../../game/types/state.ts";
 import { nationDisplayColor } from "../../game/access.ts";
-import { escapeHtml, setGameHtml } from "../text.ts";
+import { html, rawHtml } from "../text.ts";
 import { PanelShell, panelHead } from "../panel.ts";
-import type { HelpSpec } from "../panel.ts";
+import type { HelpSpec, PanelView } from "../panel.ts";
 import { nationFlagHtmlFor } from "../flags.ts";
 import { nationOverviewBody, emptyNationStats, nationStatSteps } from "../nation-info.ts";
 import type { NationStats } from "../nation-info.ts";
 import { runSlices } from "../slices.ts";
-import { t } from "../../i18n/index.ts";
+import { scopedTexts } from "../view.ts";
 
 /**
  * Standalone nation overview panel.
@@ -21,6 +22,75 @@ import { t } from "../../i18n/index.ts";
 export interface NationPanelOptions {
     readonly help: HelpSpec;
     readonly footer?: string;
+}
+
+function nationTexts() {
+    return scopedTexts("panels.nation.", {
+        title: ["title"],
+        loading: ["loading"],
+        neutralArea: ["neutralArea"],
+        neutralHint: ["neutralHint"],
+    });
+}
+type NationTexts = ReturnType<typeof nationTexts>;
+
+function nationHead(name: string, color: string, text: NationTexts, options: NationPanelOptions): string {
+    return panelHead({
+        title: text.title,
+        help: options.help,
+        extras: html`<span class="owner-pill" style="--pc:${color}">${name}</span>`,
+    });
+}
+
+export interface NationLoadingViewContext {
+    readonly state: GameState;
+    readonly nationId: number;
+    readonly name: string;
+    readonly color: string;
+    readonly options: NationPanelOptions;
+}
+
+/** Pure view builder for the initial loading state. */
+export function nationLoadingView(ctx: NationLoadingViewContext): PanelView {
+    const text = nationTexts();
+    return {
+        head: nationHead(ctx.name, ctx.color, text, ctx.options),
+        bodyClass: "brief-body",
+        body: html`<div class="brief-title">${rawHtml(nationFlagHtmlFor(ctx.state, ctx.nationId, 30))}<span>${ctx.name}</span></div>
+            <p class="micro-hint">${text.loading}</p>`,
+    };
+}
+
+/** Pure view builder for the neutral-area state. */
+export function nationNeutralView(options: NationPanelOptions): PanelView {
+    const text = nationTexts();
+    return {
+        head: nationHead(text.neutralArea, "#6e7781", text, options),
+        bodyClass: "brief-body",
+        body: html`<div class="brief-title"><span class="nation-swatch" style="--nc:#6e7781"></span>${text.neutralArea}</div>
+            <p class="micro-hint">${text.neutralHint}</p>`,
+    };
+}
+
+export interface NationStatsViewContext {
+    readonly state: GameState;
+    readonly stats: NationStats;
+    readonly color: string;
+    readonly options: NationPanelOptions;
+}
+
+/** Pure view builder for fully gathered nation statistics. */
+export function nationStatsView(ctx: NationStatsViewContext): PanelView {
+    const text = nationTexts();
+    const nation = ctx.state.nations[ctx.stats.nationId];
+    const footer = ctx.options.footer ? html`<p class="micro-hint">${ctx.options.footer}</p>` : "";
+    return {
+        head: nationHead(nation.name, ctx.color, text, ctx.options),
+        bodyClass: "brief-body",
+        body: html`<div class="brief-title">${rawHtml(nationFlagHtmlFor(ctx.state, nation.id, 30))}<span>${nation.name}</span></div>
+            ${rawHtml(nationOverviewBody(ctx.state, ctx.stats))}
+            ${rawHtml(footer)}`,
+    };
 }
 
 export class NationPanel {
@@ -43,21 +113,20 @@ export class NationPanel {
 
     /** Open the panel and start gathering this nation's statistics. */
     show(nationId: number): void {
-        const nation = this.engine.state.nations[nationId];
+        const state = this.engine.state;
+        const nation = state.nations[nationId];
         if (!nation) return;
         this.nationId = nationId;
         this.stop();
         this.shell.show();
-        const displayColor = nationDisplayColor(this.engine.state, nationId);
-        setGameHtml(this.shell.el, `${this.head(nation.name, displayColor)}
-            <div class="panel-body brief-body">
-                <div class="brief-title">${nationFlagHtmlFor(this.engine.state, nation.id, 30)}<span>${escapeHtml(nation.name)}</span></div>
-                <p class="micro-hint">${t("panels.nation.loading")}</p>
-            </div>`);
+        this.shell.render(nationLoadingView({
+            state, nationId, name: nation.name,
+            color: nationDisplayColor(state, nationId), options: this.options,
+        }));
 
         const stats = emptyNationStats(nationId);
         const token = ++this.token;
-        this.cancel = runSlices(nationStatSteps(this.engine.state, stats), () => {
+        this.cancel = runSlices(nationStatSteps(state, stats), () => {
             if (token !== this.token) return;
             this.renderStats(stats);
         });
@@ -67,11 +136,7 @@ export class NationPanel {
         this.stop();
         this.nationId = null;
         this.shell.show();
-        setGameHtml(this.shell.el, `${this.head(t("panels.nation.neutralArea"), "#6e7781")}
-            <div class="panel-body brief-body">
-                <div class="brief-title"><span class="nation-swatch" style="--nc:#6e7781"></span>${t("panels.nation.neutralArea")}</div>
-                <p class="micro-hint">${t("panels.nation.neutralHint")}</p>
-            </div>`);
+        this.shell.render(nationNeutralView(this.options));
     }
 
     hide(): void {
@@ -91,24 +156,12 @@ export class NationPanel {
         this.cancel = null;
     }
 
-    private head(name: string, color: string): string {
-        return panelHead({
-            title: t("panels.nation.title"),
-            help: this.options.help,
-            extras: `<span class="owner-pill" style="--pc:${escapeHtml(color)}">${escapeHtml(name)}</span>`,
-        });
-    }
-
     private renderStats(stats: NationStats): void {
-        const nation = this.engine.state.nations[stats.nationId];
+        const state = this.engine.state;
+        const nation = state.nations[stats.nationId];
         if (!nation) return;
-        const displayColor = nationDisplayColor(this.engine.state, stats.nationId);
-        this.shell.render({
-            head: this.head(nation.name, displayColor),
-            body: `
-                <div class="brief-title">${nationFlagHtmlFor(this.engine.state, nation.id, 30)}<span>${escapeHtml(nation.name)}</span></div>
-                ${nationOverviewBody(this.engine.state, stats)}
-                ${this.options.footer ? `<p class="micro-hint">${escapeHtml(this.options.footer)}</p>` : ""}`,
-        });
+        this.shell.render(nationStatsView({
+            state, stats, color: nationDisplayColor(state, stats.nationId), options: this.options,
+        }));
     }
 }

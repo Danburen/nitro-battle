@@ -652,7 +652,7 @@ export function canTrain(state: GameState, nationId: number, kind: UnitKind): bo
     const nation = state.nations[nationId];
     if (!nation?.alive) return false;
     const profile = UNIT_PROFILES[kind];
-    return nation.funds >= profile.cost && nation.manpower >= profile.manpowerCost && nation.industry >= profile.industryCost;
+    return nation.funds >= profile.cost && nation.industry >= profile.industryCost;
 }
 
 export const REINFORCE_COST: Readonly<Record<UnitKind, { funds: number; manpower: number; industry: number }>> = {

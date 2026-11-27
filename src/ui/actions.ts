@@ -1,12 +1,11 @@
 import type { UIContext, UIDispatchData, UIDispatchOptions } from "./context.ts";
 import { isArmyAutoManaged } from "../game/auto.ts";
-import { AUTO_GLOBAL_LOCK_TIP } from "./common.ts";
+import { autoGlobalLockTip } from "./common.ts";
 import { CLAIM_COST } from "../game/diplomacy.ts";
 import { ALLIANCE_CREATE_COST } from "../game/alliance.ts";
-import { VASSAL_PROFILES, validVassalType } from "../game/vassal.ts";
 import { REQUEST_COOLDOWN_DAYS, requestCooldownDays } from "../game/requests.ts";
 import { REGIMENT_CAP } from "../game/types/unit.ts";
-import type { DiplomaticRequestKind, VassalType } from "../game/types/diplomacy.ts";
+import type { DiplomaticRequestKind } from "../game/types/diplomacy.ts";
 import { t } from "../i18n/index.ts";
 import { proposalCooldownTip } from "./trade.ts";
 
@@ -14,16 +13,34 @@ import { proposalCooldownTip } from "./trade.ts";
 export function handleEconomyAction(ctx: UIContext, action: string, data: UIDispatchData): boolean {
     const state = ctx.engine.state;
 
-    if (action === "train") {
-        const kind = Number(data.kind) as 0 | 1 | 2;
+    if (action === "province-stance") {
         const site = state.selected;
-        const destination = site !== null && state.provinces[site].owner === 0 ? site : null;
-        if (ctx.engine.queueTrain(kind, destination)) {
-            ctx.sound.play("recruit");
-            ctx.toast(t("actions.economy.train.success"));
-        } else {
+        const stance = data.stance;
+        if (site === null || (stance !== "auto" && stance !== "defend" && stance !== "attack")) return true;
+        if (ctx.engine.setProvinceStance(site, stance)) ctx.sound.play("select");
+        else ctx.sound.play("error");
+        return true;
+    }
+
+    if (action === "clear-province-troops") {
+        const site = state.selected;
+        if (site === null || !ctx.engine.clearProvinceTroops(site)) {
             ctx.sound.play("error");
             ctx.toast(t("actions.economy.train.fail"));
+        } else {
+            ctx.sound.play("select");
+        }
+        return true;
+    }
+
+    if (action === "disband-regiment") {
+        const site = state.selected;
+        const kind = Number(data.kind);
+        if (site === null || (kind !== 0 && kind !== 1 && kind !== 2) || !ctx.engine.disbandRegiment(site, kind)) {
+            ctx.sound.play("error");
+            ctx.toast(t("actions.economy.train.fail"));
+        } else {
+            ctx.sound.play("select");
         }
         return true;
     }
@@ -56,9 +73,8 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, data: UIDi
     if (![
         "claim-state", "claim-cancel", "claim-locate", "prepare-diplomacy", "cancel-diplomacy", "declare", "enforce-war-goal",
         "propose-peace", "accept-peace", "reject-peace",
-        "respond-request", "vassal-request", "vassal-demand", "tribute-rate",
-        "release-vassal", "vassal-type-open", "annex-vassal", "request-aid", "request-upgrade", "create-alliance", "invite-alliance", "join-alliance",
-        "leave-alliance", "enforce-vassal",
+        "respond-request", "create-alliance", "invite-alliance", "join-alliance",
+        "leave-alliance",
     ].includes(action)) return false;
 
     const state = ctx.engine.state;
@@ -137,81 +153,6 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, data: UIDi
             ctx.sound.play("select");
             ctx.toast(accept ? t("actions.diplomacy.request.accepted") : t("actions.diplomacy.request.rejected"));
         } else fail(t("actions.diplomacy.request.fail"));
-    } else if (action === "vassal-request") {
-        const picked = options.vassalType ?? "cooperative";
-        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.request.invalidTarget"));
-        else if (ctx.engine.requestVassalization(nationId, picked)) ctx.toast(t("actions.diplomacy.vassal.request.success"));
-        else proposalFail("vassalize", nationId, t("actions.diplomacy.vassal.request.fail"));
-    } else if (action === "vassal-demand") {
-        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
-        else ctx.confirm({
-            title: t("actions.diplomacy.vassal.demand.title", { nation: nationName }),
-            body: t("actions.diplomacy.vassal.demand.body", { days: REQUEST_COOLDOWN_DAYS }),
-            confirmLabel: t("actions.diplomacy.vassal.demand.confirm"),
-            danger: true,
-            onConfirm: () => {
-                if (ctx.engine.demandVassalization(nationId)) ctx.toast(t("actions.diplomacy.vassal.demand.success"));
-                else proposalFail("vassalize", nationId, t("actions.diplomacy.vassal.demand.fail"));
-            },
-        });
-    } else if (action === "tribute-rate") {
-        const delta = Number(data.delta);
-        if (!Number.isFinite(delta)) fail(t("actions.diplomacy.tribute.invalid"));
-        else if (ctx.engine.adjustTributeRate(delta)) ctx.toast(t("actions.diplomacy.tribute.success"));
-        else fail(t("actions.diplomacy.tribute.fail"));
-    } else if (action === "release-vassal") {
-        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
-        else ctx.confirm({
-            title: t("actions.diplomacy.vassal.release.title", { nation: nationName }),
-            body: t("actions.diplomacy.vassal.release.body"),
-            confirmLabel: t("actions.diplomacy.vassal.release.confirm"),
-            onConfirm: () => {
-                if (ctx.engine.releaseVassal(nationId)) ctx.toast(t("actions.diplomacy.vassal.release.success", { nation: nationName }));
-                else {
-                    ctx.sound.play("error");
-                    ctx.toast(t("actions.diplomacy.vassal.release.fail"));
-                }
-            },
-        });
-    } else if (action === "vassal-type-open") {
-        const current = data.type ?? "";
-        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
-        else if (!validVassalType(current)) fail(t("actions.diplomacy.vassal.type.invalidCurrent"));
-        else ctx.confirm({
-            title: t("actions.diplomacy.vassal.type.title", { nation: nationName }),
-            body: t("actions.diplomacy.vassal.type.body"),
-            confirmLabel: t("actions.diplomacy.vassal.type.confirm"),
-            choices: (Object.keys(VASSAL_PROFILES) as VassalType[]).map((value) => ({
-                value,
-                label: VASSAL_PROFILES[value].name,
-                hint: VASSAL_PROFILES[value].blurb,
-            })),
-            choice: current,
-            onConfirm: (value) => {
-                const picked = value ?? "";
-                if (!validVassalType(picked)) {
-                    fail(t("actions.diplomacy.vassal.type.invalidPicked"));
-                    return;
-                }
-                if (picked === current) return;
-                if (ctx.engine.changeVassalType(nationId, picked)) {
-                    ctx.sound.play("select");
-                    ctx.toast(t("actions.diplomacy.vassal.type.success", { nation: nationName, type: VASSAL_PROFILES[picked].name }));
-                } else {
-                    ctx.sound.play("error");
-                    ctx.toast(t("actions.diplomacy.vassal.type.fail"));
-                }
-            },
-        });
-    } else if (action === "annex-vassal") {
-        if (ctx.engine.annexVassal(nationId)) ctx.toast(t("actions.diplomacy.vassal.annex.success", { nation: nationName }));
-        else fail(t("actions.diplomacy.vassal.annex.fail"));
-    } else if (action === "request-aid") {
-        if (ctx.engine.requestForeignAid(nationId)) ctx.toast(t("actions.diplomacy.aid.success"));
-        else proposalFail("aid", nationId, t("actions.diplomacy.aid.fail"));
-    } else if (action === "request-upgrade") {
-        if (ctx.engine.requestVassalUpgrade()) ctx.toast(t("actions.diplomacy.upgrade.success"));
-        else proposalFail("upgrade", state.nations[0]?.overlord ?? -1, t("actions.diplomacy.upgrade.fail"));
     } else if (action === "create-alliance") {
         ctx.confirm({
             title: t("actions.diplomacy.alliance.create.title"),
@@ -248,21 +189,6 @@ export function handleDiplomacyAction(ctx: UIContext, action: string, data: UIDi
                 }
             },
         });
-    } else if (action === "enforce-vassal") {
-        if (!Number.isInteger(nationId)) fail(t("actions.diplomacy.vassal.invalidTarget"));
-        else ctx.confirm({
-            title: t("actions.diplomacy.vassal.enforce.title", { nation: nationName }),
-            body: t("actions.diplomacy.vassal.enforce.body"),
-            confirmLabel: t("actions.diplomacy.vassal.enforce.confirm"),
-            danger: true,
-            onConfirm: () => {
-                if (ctx.engine.enforceWarGoal(nationId, "oppressive")) ctx.toast(t("actions.diplomacy.vassal.enforce.success", { nation: nationName }));
-                else {
-                    ctx.sound.play("error");
-                    ctx.toast(t("actions.diplomacy.vassal.enforce.fail"));
-                }
-            },
-        });
     } else {
         const hadOffer = state.peaceOffers.includes(nationId);
         ctx.engine.respondPeace(nationId, false);
@@ -290,7 +216,7 @@ export function handleArmyAction(ctx: UIContext, action: string, data: UIDispatc
     if (action === "army-auto-toggle") {
         if (ctx.engine.state.autoManageArmies === true) {
             ctx.sound.play("error");
-            ctx.toast(AUTO_GLOBAL_LOCK_TIP);
+            ctx.toast(autoGlobalLockTip());
             return true;
         }
         const armyId = Number(data.army);
@@ -312,7 +238,7 @@ export function handleArmyAction(ctx: UIContext, action: string, data: UIDispatc
     if (action === "select-army") {
         if (ctx.engine.state.autoManageArmies === true) {
             ctx.sound.play("error");
-            ctx.toast(AUTO_GLOBAL_LOCK_TIP);
+            ctx.toast(autoGlobalLockTip());
             return true;
         }
         const armyId = Number(data.army);

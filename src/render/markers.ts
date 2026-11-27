@@ -48,8 +48,10 @@ export function drawProvinceMarkers(
     if (province.isCity && options.mapMode === "province") {
         drawCityMarker(ctx, center, province.isCapital, width, height);
     }
-    if (province.buildings.length === 0) return;
-    const label = province.buildings.map((kind) => BUILDING_PROFILES[kind].glyph).join(" ");
+    // Forts are shown in the construction/intel panels only; keep the map label lean.
+    const glyphs = province.buildings.filter((kind) => kind !== "fort").map((kind) => BUILDING_PROFILES[kind].glyph);
+    if (glyphs.length === 0) return;
+    const label = glyphs.join(" ");
     ctx.save();
     ctx.font = "600 11px system-ui, sans-serif";
     ctx.textAlign = "center";

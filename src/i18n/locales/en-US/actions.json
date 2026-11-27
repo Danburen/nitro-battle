@@ -1,7 +1,7 @@
 {
   "actions.army.attack.cancel": "Attack stopped",
   "actions.army.attack.fail": "Cannot attack: requires adjacency, the army must not have acted, and the target must not be in a hostile battle",
-  "actions.army.attack.start": "Attack launched: one round is resolved each day until a winner emerges",
+  "actions.army.attack.start": "Attack launched: one round is resolved each turn until a winner emerges",
   "actions.army.auto.failNotOwned": "Cannot set automation: the target is not one of our armies",
   "actions.army.auto.managed": "{{name}} placed under AI control",
   "actions.army.auto.unmanaged": "{{name}} is back under manual command",
@@ -59,7 +59,7 @@
   "actions.diplomacy.prepare.fail": "Cannot prepare: check [[politics]], claims, adjacency and truce terms; only one project per nation and no duplicates for the same target",
   "actions.diplomacy.prepare.invalidKind": "Invalid diplomatic preparation type; reopen the diplomacy page",
   "actions.diplomacy.prepare.invalidState": "Select an eligible target state first",
-  "actions.diplomacy.prepare.success": "War goal preparation started: costs [[politics]] every day; declare war once it is ready",
+  "actions.diplomacy.prepare.success": "War goal preparation started: costs [[politics]] every turn; declare war once it is ready",
   "actions.diplomacy.request.accepted": "Diplomatic request accepted",
   "actions.diplomacy.request.fail": "Cannot respond: the request has expired or conditions are no longer met",
   "actions.diplomacy.request.invalid": "Invalid diplomatic request",
@@ -72,12 +72,12 @@
   "actions.diplomacy.upgrade.success": "Contract upgrade request sent; you will get an answer next turn",
   "actions.diplomacy.vassal.annex.fail": "Cannot annex: only vassals with very low independence and no rebel intent can be annexed",
   "actions.diplomacy.vassal.annex.success": "{{nation}} annexed; its territory and armies are now ours",
-  "actions.diplomacy.vassal.demand.body": "Settle as an oppressive vassal: no land is ceded; the target pays 30% of [[funds]]/[[industry]] and [[politics:3]] per day, and cannot raise independence on its own. The demand is sent on confirmation and answered next turn; after a rejection you cannot demand again for [[turn:{{days}}]].",
+  "actions.diplomacy.vassal.demand.body": "Settle as an oppressive vassal: no land is ceded; the target pays 30% of [[funds]]/[[industry]] and [[politics:3]] per turn, and cannot raise independence on its own. The demand is sent on confirmation and answered next turn; after a rejection you cannot demand again for [[turn:{{days}}]].",
   "actions.diplomacy.vassal.demand.confirm": "Make demand",
   "actions.diplomacy.vassal.demand.fail": "Cannot send the vassal demand: the target must be clearly weaker than us or have no hope of continuing the war",
   "actions.diplomacy.vassal.demand.success": "Vassal demand sent; you will get an answer next turn",
   "actions.diplomacy.vassal.demand.title": "Demand that {{nation}} become a vassal",
-  "actions.diplomacy.vassal.enforce.body": "Make peace on war-goal terms without ceding land: the target keeps its territory, pays 30% of [[funds]]/[[industry]] and [[politics:3]] per day, and has very low independence it cannot raise on its own.",
+  "actions.diplomacy.vassal.enforce.body": "Make peace on war-goal terms without ceding land: the target keeps its territory, pays 30% of [[funds]]/[[industry]] and [[politics:3]] per turn, and has very low independence it cannot raise on its own.",
   "actions.diplomacy.vassal.enforce.confirm": "Install as vassal",
   "actions.diplomacy.vassal.enforce.fail": "Cannot install as vassal: requires a total annexation war we started with its victory conditions met",
   "actions.diplomacy.vassal.enforce.success": "{{nation}} is now an oppressive vassal",
@@ -105,6 +105,6 @@
   "actions.diplomacy.war.goal.success": "Peace with {{nation}} on war-goal terms; other temporary occupations are returned",
   "actions.economy.build.cancel.success": "Construction cancelled; half the resources were refunded",
   "actions.economy.train.cancel.success": "Training cancelled; half the resources were refunded",
-  "actions.economy.train.fail": "Cannot train: insufficient funds, manpower, or industry",
-  "actions.economy.train.success": "Added to the training queue"
+  "actions.economy.train.fail": "Cannot recruit: not enough funds, industry, national or provincial army cap",
+  "actions.economy.train.success": "Regiment raised in this province"
 }

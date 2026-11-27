@@ -14,6 +14,8 @@ export const PP_CAP = 100;
 export const POPULATION_PER_POINT = 10000;
 /** One manpower unit (training cost, stock, intake) stands for this many people. */
 export const MANPOWER_PER_POINT = 100;
+/** Field-troop units each population point supports under full mobilization. */
+export const ARMY_UNITS_PER_POP = 8;
 /** Eligible manpower units per population point at a 100% recruitment share. */
 export const ELIGIBLE_PER_POP = 100;
 /** Occupied population counts this fraction of its share (scaled by occupation). */

@@ -260,6 +260,21 @@
     line-height: 1.2;
 }
 
+.start-locale {
+    position: absolute;
+    top: calc(14px * var(--site-space, 1));
+    right: calc(14px * var(--site-space, 1));
+    z-index: 1;
+    max-width: calc(120px * var(--site-space, 1));
+    background: var(--site-surface);
+    color: var(--site-muted);
+    border: 1px solid var(--site-border);
+    border-radius: calc(var(--site-radius) * 0.6);
+    padding: calc(2px * var(--site-space, 1)) calc(5px * var(--site-space, 1));
+    font-size: calc(11px * var(--site-type, 1));
+    cursor: pointer;
+}
+
 .start-sub {
     margin: 2px 0 0;
     font-size: calc(12px * var(--site-type, 1));

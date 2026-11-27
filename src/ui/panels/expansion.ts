@@ -1,26 +1,218 @@
 import type { GameEngine } from "../../game/engine.ts";
+import type { GameState } from "../../game/types/state.ts";
 import { CLAIM_COST, canCancelStateClaim, hasStateClaim } from "../../game/diplomacy.ts";
 import { nationDisplayColor } from "../../game/access.ts";
 import type { StateRegion } from "../../game/types/entities.ts";
-import { escapeGameText, escapeHtml, setGameHtml, game } from "../text.ts";
+import { escapeGameText, game, html, rawHtml } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
-import { panelHead } from "../panel.ts";
+import { panelHead, PanelShell } from "../panel.ts";
+import type { PanelView } from "../panel.ts";
+import { gameHtml, scopedTexts } from "../view.ts";
 import { t } from "../../i18n/index.ts";
 
 export interface ExpansionHooks {
     focus(stateId: number | null): void;
 }
 
-const EXPANSION_TIP = {
-    get body(): string { return t("panels.expansion.help", { cost: CLAIM_COST }); },
-};
+function expansionTexts() {
+    const s = scopedTexts("panels.expansion.", {
+        title: ["title"],
+        helpTitle: ["helpTitle"],
+        ended: ["ended"],
+        manageEnter: ["manage.enter"],
+        manageExit: ["manage.exit"],
+        manageHintEnter: ["manage.hint.enter"],
+        manageHintExit: ["manage.hint.exit"],
+        ownerDead: ["owner.dead"],
+        ownerNone: ["owner.none"],
+        ownerSelf: ["owner.self"],
+        reasonPrompt: ["reason.prompt"],
+        pillCancel: ["pill.cancel"],
+        pillClaimed: ["pill.claimed"],
+        pillAdd: ["pill.add"],
+        pillUnclaimed: ["pill.unclaimed"],
+        draftUndoCancel: ["draft.undoCancel"],
+        draftUndoAdd: ["draft.undoAdd"],
+        draftMarkCancel: ["draft.markCancel"],
+        draftMarkAdd: ["draft.markAdd"],
+        draftUndo: ["draft.undo"],
+        adjacent: ["adjacent"],
+        notAdjacent: ["notAdjacent"],
+        actionCancelClaim: ["action.cancelClaim"],
+        actionCancel: ["action.cancel"],
+        actionLocate: ["action.locate"],
+        actionLocateTip: ["action.locateTip"],
+        hintNoForeignLand: ["hint.noForeignLand"],
+        hintNotAdjacent: ["hint.notAdjacent"],
+        hintClickState: ["hint.clickState"],
+    });
+    return {
+        ...s,
+        help: () => t("panels.expansion.help", { cost: CLAIM_COST }),
+        statusManage: (adds: number, cancels: number) => t("panels.expansion.status.manage", { adds, cancels }),
+        statusClaims: (count: number) => t("panels.expansion.status.claims", { count }),
+        stagedAdds: (count: number) => t("panels.expansion.staged.adds", { count }),
+        claimsMine: (count: number) => t("panels.expansion.claims.mine", { count }),
+        claimsEmpty: () => t("panels.expansion.claims.empty"),
+        reasonStagedAdd: () => t("panels.expansion.reason.stagedAdd", { cost: CLAIM_COST }),
+        focusDetails: (params: { owner: string; provinces: number; adjacency: string }) =>
+            t("panels.expansion.focus.details", params),
+        cancelClaimTip: () => t("panels.expansion.action.cancelClaimTip", { cost: CLAIM_COST }),
+        cancelTip: () => t("panels.expansion.action.cancelTip", { cost: CLAIM_COST }),
+        rowTip: (owner: string) => t("panels.expansion.row.tip", { owner }),
+        hintInsufficient: () => t("panels.expansion.hint.insufficient", { cost: CLAIM_COST }),
+    };
+}
+type ExpansionTexts = ReturnType<typeof expansionTexts>;
+
+function adjacent(state: GameState, region: StateRegion): boolean {
+    return region.provinces.some((site) =>
+        state.graph.adjacency[site].some((edge) => state.provinces[edge.site].owner === 0));
+}
+
+function draftHint(state: GameState, region: StateRegion, ctx: ExpansionViewContext, text: ExpansionTexts): string {
+    const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
+        .filter((owner) => owner !== 0);
+    const available = state.nations[0].politicalPower + (ctx.stagedCancels.size - ctx.stagedAdds.size) * CLAIM_COST;
+    if (!owners.some((owner) => owner !== -1 && state.nations[owner] !== undefined)) return text.hintNoForeignLand;
+    if (!adjacent(state, region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
+        return text.hintNotAdjacent;
+    }
+    if (available < CLAIM_COST) return text.hintInsufficient();
+    return text.hintClickState;
+}
+
+function locateButton(region: StateRegion, text: ExpansionTexts): string {
+    return html`<button class="btn btn-outline btn-sm" data-action="claim-locate" data-state="${region.id}" data-exp-focus="locate-${region.id}" ${rawHtml(tooltipAttrs(text.actionLocate, text.actionLocateTip))}>${text.actionLocate}</button>`;
+}
+
+function focusedClaimHtml(state: GameState, region: StateRegion, ctx: ExpansionViewContext, text: ExpansionTexts): string {
+    const claim = state.claims.find((entry) => entry.nation === 0 && entry.stateId === region.id);
+    const stagedAdd = ctx.stagedAdds.has(region.id);
+    const stagedCancel = ctx.stagedCancels.has(region.id);
+    const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
+        .filter((owner) => owner !== 0);
+    const ownerText = owners.length
+        ? owners.map((owner) => state.nations[owner]?.name ?? text.ownerDead).join("、")
+        : text.ownerNone;
+    const reason = claim ? ""
+        : stagedAdd ? text.reasonStagedAdd()
+            : ctx.managing ? draftHint(state, region, ctx, text)
+                : text.reasonPrompt;
+    const pill = claim ? (stagedCancel ? text.pillCancel : text.pillClaimed)
+        : stagedAdd ? text.pillAdd : text.pillUnclaimed;
+    const draftLabel = stagedCancel ? text.draftUndoCancel : stagedAdd ? text.draftUndoAdd
+        : claim ? text.draftMarkCancel : text.draftMarkAdd;
+    const canStage = stagedCancel || stagedAdd || !claim || canCancelStateClaim(state, 0, region.id);
+    const draftButton = ctx.managing
+        ? html`<button class="btn ${claim || stagedCancel ? "btn-outline btn-danger" : "btn-outline"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}" ${rawHtml(canStage ? "" : " disabled")}>${draftLabel}</button>`
+        : claim ? html`<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}" ${rawHtml(tooltipAttrs(text.actionCancelClaim, escapeGameText(text.cancelClaimTip())))} ${rawHtml(state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : " disabled")}>${text.actionCancelClaim}</button>`
+            : "";
+    const reasonRow = reason ? html`<p class="diplo-note">${reason}</p>` : "";
+    return html`<div class="claim-focused diplo-card" data-claim-row="${region.id}">
+        <div class="diplo-head"><span class="nation-dot" style="--pc:${claim ? nationDisplayColor(state, 0) : "#8b949e"}"></span><span class="diplo-name">${region.name}</span><span class="status-pill ${claim || stagedAdd ? "ready" : "idle"}">${pill}</span></div>
+        <p class="diplo-note">${text.focusDetails({
+            owner: escapeGameText(ownerText),
+            provinces: region.provinces.length,
+            adjacency: adjacent(state, region) ? text.adjacent : text.notAdjacent,
+        })}</p>
+        ${rawHtml(reasonRow)}
+        <div class="diplo-button-row">
+            ${rawHtml(draftButton)}
+            ${rawHtml(locateButton(region, text))}
+        </div>
+    </div>`;
+}
+
+function claimRowHtml(state: GameState, region: StateRegion | undefined, ctx: ExpansionViewContext, text: ExpansionTexts): string {
+    if (!region) return "";
+    const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
+        .filter((owner) => owner !== 0);
+    const ownerText = owners.map((owner) => state.nations[owner]?.name ?? text.ownerDead).join("、") || text.ownerSelf;
+    const focused = ctx.focusedState === region.id;
+    const pending = ctx.stagedCancels.has(region.id);
+    const cancelButton = ctx.managing
+        ? html`<button class="btn btn-outline${pending ? "" : " btn-danger"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}" ${rawHtml(canCancelStateClaim(state, 0, region.id) ? "" : " disabled")}>${pending ? text.draftUndo : text.draftMarkCancel}</button>`
+        : html`<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}" ${rawHtml(tooltipAttrs(text.actionCancel, escapeGameText(text.cancelTip())))} ${rawHtml(state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : " disabled")}>${text.actionCancel}</button>`;
+    return html`<div class="claim-row${focused ? " focused" : ""}${pending ? " pending" : ""}" data-action="claim-focus" data-state="${region.id}" data-claim-row="${region.id}" data-exp-focus="claim-row-${region.id}" tabindex="0" role="button" ${rawHtml(tooltipAttrs(escapeGameText(region.name), escapeGameText(text.rowTip(ownerText))))}>
+        <span class="nation-dot" style="--pc:${nationDisplayColor(state, 0)}"></span>
+        <span class="claim-name">${region.name}</span>
+        <span class="claim-owner">${ownerText}</span>
+        <span class="claim-badge">${pending ? text.pillCancel : text.pillClaimed}</span>
+        ${rawHtml(cancelButton)}${rawHtml(locateButton(region, text))}
+    </div>`;
+}
+
+function draftRowHtml(state: GameState, region: StateRegion | undefined, text: ExpansionTexts): string {
+    if (!region) return "";
+    const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
+        .filter((owner) => owner !== 0);
+    const ownerText = owners.map((owner) => state.nations[owner]?.name ?? text.ownerDead).join("、") || text.ownerSelf;
+    return html`<div class="claim-row pending">
+        <span class="nation-dot" style="--pc:${nationDisplayColor(state, 0)}"></span>
+        <span class="claim-name">${region.name}</span>
+        <span class="claim-owner">${ownerText}</span>
+        <span class="claim-badge">${text.pillAdd}</span>
+        <button class="btn btn-outline" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}">${text.draftUndo}</button>${rawHtml(locateButton(region, text))}
+    </div>`;
+}
+
+export interface ExpansionViewContext {
+    readonly state: GameState;
+    readonly managing: boolean;
+    readonly stagedAdds: ReadonlySet<number>;
+    readonly stagedCancels: ReadonlySet<number>;
+    readonly focusedState: number | null;
+}
+
+/** Pure view builder: claim list plus staged management rows. */
+export function expansionView(ctx: ExpansionViewContext): PanelView {
+    const { state, managing, stagedAdds, stagedCancels, focusedState } = ctx;
+    const text = expansionTexts();
+    const player = state.nations[0];
+    const mine = state.claims.filter((claim) => claim.nation === 0);
+    const status = managing
+        ? text.statusManage(stagedAdds.size, stagedCancels.size)
+        : gameHtml(game`${text.statusClaims(mine.length)} · [[politics:${Math.floor(player.politicalPower)}]]`);
+    const ended = state.winner !== null ? html`<p class="diplo-requirement">${text.ended}</p>` : "";
+    const manageButton = html`<button class="btn ${managing ? "btn-outline" : "btn-primary"}" data-action="${managing ? "claim-manage-exit" : "claim-manage"}" data-exp-focus="manage">${managing ? text.manageExit : text.manageEnter}</button>`;
+    const focused = focusedState !== null && state.states[focusedState]
+        ? focusedClaimHtml(state, state.states[focusedState], ctx, text) : "";
+    const staged = managing && stagedAdds.size
+        ? [html`<div class="deploy-queue-head">${text.stagedAdds(stagedAdds.size)}</div>`,
+            ...[...stagedAdds].map((id) => draftRowHtml(state, state.states[id], text))].join("")
+        : "";
+    const claims = mine.length
+        ? mine.map((claim) => claimRowHtml(state, state.states[claim.stateId], ctx, text)).join("")
+        : html`<p class="diplo-note">${text.claimsEmpty()}</p>`;
+
+    return {
+        head: panelHead({
+            title: text.title,
+            help: { title: text.helpTitle, body: text.help() },
+            helpAttrs: 'data-exp-focus="objective"',
+            status,
+        }),
+        bodyClass: "diplo-body",
+        focusAttr: "data-exp-focus",
+        body: html`${rawHtml(ended)}
+            <div class="claim-manage-bar">
+                ${rawHtml(manageButton)}
+                <span class="claim-manage-hint">${managing ? text.manageHintExit : text.manageHintEnter}</span>
+            </div>
+            ${rawHtml(focused)}
+            ${rawHtml(staged)}
+            <div class="deploy-queue-head">${text.claimsMine(mine.length)}</div>
+            ${rawHtml(claims)}`,
+    };
+}
 
 /** Expansion tab: stages claim changes in a management mode, then commits them on Esc confirm. */
 export class ExpansionPanel {
     private readonly engine: GameEngine;
     private readonly hooks: ExpansionHooks;
-    private readonly el = document.querySelector<HTMLElement>("#expansion-panel") as HTMLElement;
-    private scrollTop = 0;
+    private readonly shell = new PanelShell(document.querySelector<HTMLElement>("#expansion-panel") as HTMLElement);
+    private readonly el = this.shell.el;
     private focusedState: number | null = null;
     private managing = false;
     private readonly stagedAdds = new Set<number>();
@@ -29,6 +221,7 @@ export class ExpansionPanel {
     constructor(engine: GameEngine, hooks: ExpansionHooks) {
         this.engine = engine;
         this.hooks = hooks;
+        this.el.addEventListener("keydown", this.onClaimRowKeyDown);
     }
 
     isManaging(): boolean {
@@ -104,7 +297,7 @@ export class ExpansionPanel {
         if (!owners.some((owner) => owner !== 0 && owner !== -1 && state.nations[owner] !== undefined)) {
             return { ok: false, message: t("panels.expansion.toast.noForeignLand", { name: region.name }) };
         }
-        if (!this.adjacent(region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
+        if (!adjacent(state, region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
             return { ok: false, message: t("panels.expansion.toast.notAdjacent") };
         }
         this.stagedAdds.add(stateId);
@@ -128,153 +321,26 @@ export class ExpansionPanel {
     }
 
     setHidden(hidden: boolean): void {
-        const body = this.el.querySelector<HTMLElement>(".diplo-body");
-        if (hidden && body && body.clientHeight > 0) this.scrollTop = body.scrollTop;
-        this.el.classList.toggle("hidden", hidden);
-        if (!hidden && body) body.scrollTop = this.scrollTop;
+        if (hidden) this.shell.hide();
+        else this.shell.show();
     }
 
     render(): void {
-        const oldBody = this.el.querySelector<HTMLElement>(".diplo-body");
-        if (oldBody && oldBody.clientHeight > 0) this.scrollTop = oldBody.scrollTop;
-        const active = document.activeElement instanceof HTMLElement && this.el.contains(document.activeElement)
-            ? document.activeElement : null;
-        const focusKey = active?.dataset.expFocus;
-
-        const state = this.engine.state;
-        const player = state.nations[0];
-        const mine = state.claims.filter((claim) => claim.nation === 0);
-        setGameHtml(this.el, `
-            ${panelHead({
-                title: t("panels.expansion.title"),
-                help: { title: t("panels.expansion.helpTitle"), body: EXPANSION_TIP.body },
-                helpAttrs: 'data-exp-focus="objective"',
-                status: this.managing
-                    ? t("panels.expansion.status.manage", { adds: this.stagedAdds.size, cancels: this.stagedCancels.size })
-                    : game`${t("panels.expansion.status.claims", { count: mine.length })} · [[politics:${Math.floor(player.politicalPower)}]]`,
-            })}
-            <div class="panel-body diplo-body">
-                ${state.winner !== null ? `<p class="diplo-requirement">${t("panels.expansion.ended")}</p>` : ""}
-                <div class="claim-manage-bar">
-                    <button class="btn ${this.managing ? "btn-outline" : "btn-primary"}" data-action="${this.managing ? "claim-manage-exit" : "claim-manage"}" data-exp-focus="manage">${this.managing ? t("panels.expansion.manage.exit") : t("panels.expansion.manage.enter")}</button>
-                    <span class="claim-manage-hint">${this.managing ? t("panels.expansion.manage.hint.exit") : t("panels.expansion.manage.hint.enter")}</span>
-                </div>
-                ${this.focusedState !== null && state.states[this.focusedState] ? this.focusedClaimHtml(state.states[this.focusedState]) : ""}
-                ${this.managing && this.stagedAdds.size
-                    ? `<div class="deploy-queue-head">${t("panels.expansion.staged.adds", { count: this.stagedAdds.size })}</div>${[...this.stagedAdds].map((id) => this.draftRowHtml(state.states[id])).join("")}`
-                    : ""}
-                <div class="deploy-queue-head">${t("panels.expansion.claims.mine", { count: mine.length })}</div>
-                ${mine.length ? mine.map((claim) => this.claimRowHtml(state.states[claim.stateId])).join("") : `<p class="diplo-note">${t("panels.expansion.claims.empty")}</p>`}
-            </div>`);
-
-        for (const row of this.el.querySelectorAll<HTMLElement>("[data-action='claim-focus']")) {
-            row.onkeydown = (event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                event.stopPropagation();
-                this.focusFromMap(Number(row.dataset.state));
-            };
-        }
-        if (active) {
-            const next = [...this.el.querySelectorAll<HTMLElement>("[data-exp-focus]")]
-                .find((element) => element.dataset.expFocus === focusKey && !element.matches(":disabled"));
-            next?.focus({ preventScroll: true });
-        }
-        this.el.querySelector<HTMLElement>(".diplo-body")!.scrollTop = this.scrollTop;
+        this.shell.render(expansionView({
+            state: this.engine.state,
+            managing: this.managing,
+            stagedAdds: this.stagedAdds,
+            stagedCancels: this.stagedCancels,
+            focusedState: this.focusedState,
+        }));
     }
 
-    private focusedClaimHtml(region: StateRegion): string {
-        const state = this.engine.state;
-        const claim = state.claims.find((entry) => entry.nation === 0 && entry.stateId === region.id);
-        const stagedAdd = this.stagedAdds.has(region.id);
-        const stagedCancel = this.stagedCancels.has(region.id);
-        const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
-            .filter((owner) => owner !== 0);
-        const ownerText = owners.length ? owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") : t("panels.expansion.owner.none");
-        const reason = claim ? ""
-            : stagedAdd ? t("panels.expansion.reason.stagedAdd", { cost: CLAIM_COST })
-            : this.managing ? this.draftHint(region)
-            : t("panels.expansion.reason.prompt");
-        const pill = claim ? (stagedCancel ? t("panels.expansion.pill.cancel") : t("panels.expansion.pill.claimed")) : stagedAdd ? t("panels.expansion.pill.add") : t("panels.expansion.pill.unclaimed");
-        const draftLabel = stagedCancel ? t("panels.expansion.draft.undoCancel") : stagedAdd ? t("panels.expansion.draft.undoAdd") : claim ? t("panels.expansion.draft.markCancel") : t("panels.expansion.draft.markAdd");
-        const canStage = stagedCancel || stagedAdd || !claim || canCancelStateClaim(state, 0, region.id);
-        return `<div class="claim-focused diplo-card" data-claim-row="${region.id}">
-            <div class="diplo-head"><span class="nation-dot" style="--pc:${escapeHtml(claim ? nationDisplayColor(state, 0) : "#8b949e")}"></span><span class="diplo-name">${escapeHtml(region.name)}</span><span class="status-pill ${claim || stagedAdd ? "ready" : "idle"}">${pill}</span></div>
-            <p class="diplo-note">${t("panels.expansion.focus.details", { owner: escapeHtml(ownerText), provinces: region.provinces.length, adjacency: this.adjacent(region) ? t("panels.expansion.adjacent") : t("panels.expansion.notAdjacent") })}</p>
-            ${reason ? `<p class="diplo-note">${escapeHtml(reason)}</p>` : ""}
-            <div class="diplo-button-row">
-                ${this.managing
-                    ? `<button class="btn ${claim || stagedCancel ? "btn-outline btn-danger" : "btn-outline"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}" ${canStage ? "" : "disabled"}>${draftLabel}</button>`
-                    : claim
-                        ? `<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}"
-                            ${tooltipAttrs(t("panels.expansion.action.cancelClaim"), escapeGameText(t("panels.expansion.action.cancelClaimTip", { cost: CLAIM_COST })))}
-                            ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${t("panels.expansion.action.cancelClaim")}</button>`
-                        : ""}
-                ${this.locateButton(region)}
-            </div>
-        </div>`;
-    }
-
-    /** Why a fresh claim cannot be staged right now (management mode). */
-    private draftHint(region: StateRegion): string {
-        const state = this.engine.state;
-        const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
-            .filter((owner) => owner !== 0);
-        const available = state.nations[0].politicalPower + (this.stagedCancels.size - this.stagedAdds.size) * CLAIM_COST;
-        if (!owners.some((owner) => owner !== -1 && state.nations[owner] !== undefined)) return t("panels.expansion.hint.noForeignLand");
-        if (!this.adjacent(region) && !region.provinces.some((site) => state.provinces[site].coreNation === 0)) {
-            return t("panels.expansion.hint.notAdjacent");
-        }
-        if (available < CLAIM_COST) return t("panels.expansion.hint.insufficient", { cost: CLAIM_COST });
-        return t("panels.expansion.hint.clickState");
-    }
-
-    private claimRowHtml(region: StateRegion | undefined): string {
-        if (!region) return "";
-        const state = this.engine.state;
-        const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
-            .filter((owner) => owner !== 0);
-        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") || t("panels.expansion.owner.self");
-        const focused = this.focusedState === region.id;
-        const pending = this.stagedCancels.has(region.id);
-        const cancelButton = this.managing
-            ? `<button class="btn btn-outline${pending ? "" : " btn-danger"}" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}"
-                ${canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${pending ? t("panels.expansion.draft.undo") : t("panels.expansion.draft.markCancel")}</button>`
-            : `<button class="btn btn-outline btn-danger" data-action="claim-cancel" data-nation="0" data-state="${region.id}" data-exp-focus="cancel-${region.id}"
-                ${tooltipAttrs(t("panels.expansion.action.cancel"), escapeGameText(t("panels.expansion.action.cancelTip", { cost: CLAIM_COST })))}
-                ${state.winner === null && canCancelStateClaim(state, 0, region.id) ? "" : "disabled"}>${t("panels.expansion.action.cancel")}</button>`;
-        return `<div class="claim-row${focused ? " focused" : ""}${pending ? " pending" : ""}" data-action="claim-focus" data-state="${region.id}" data-claim-row="${region.id}" data-exp-focus="claim-row-${region.id}" tabindex="0" role="button"
-            ${tooltipAttrs(escapeGameText(region.name), escapeGameText(t("panels.expansion.row.tip", { owner: ownerText })))}>
-            <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
-            <span class="claim-name">${escapeHtml(region.name)}</span>
-            <span class="claim-owner">${escapeHtml(ownerText)}</span>
-            <span class="claim-badge">${pending ? t("panels.expansion.pill.cancel") : t("panels.expansion.pill.claimed")}</span>
-            ${cancelButton}${this.locateButton(region)}
-        </div>`;
-    }
-
-    private draftRowHtml(region: StateRegion | undefined): string {
-        if (!region) return "";
-        const state = this.engine.state;
-        const owners = [...new Set(region.provinces.map((site) => state.provinces[site].legalOwner))]
-            .filter((owner) => owner !== 0);
-        const ownerText = owners.map((owner) => state.nations[owner]?.name ?? t("panels.expansion.owner.dead")).join("、") || t("panels.expansion.owner.self");
-        return `<div class="claim-row pending">
-            <span class="nation-dot" style="--pc:${escapeHtml(nationDisplayColor(state, 0))}"></span>
-            <span class="claim-name">${escapeHtml(region.name)}</span>
-            <span class="claim-owner">${escapeHtml(ownerText)}</span>
-            <span class="claim-badge">${t("panels.expansion.pill.add")}</span>
-            <button class="btn btn-outline" data-action="claim-draft" data-state="${region.id}" data-exp-focus="draft-${region.id}">${t("panels.expansion.draft.undo")}</button>${this.locateButton(region)}
-        </div>`;
-    }
-
-    private locateButton(region: StateRegion): string {
-        return `<button class="btn btn-outline btn-sm" data-action="claim-locate" data-state="${region.id}" data-exp-focus="locate-${region.id}" ${tooltipAttrs(t("panels.expansion.action.locate"), t("panels.expansion.action.locateTip"))}>${t("panels.expansion.action.locate")}</button>`;
-    }
-
-    private adjacent(region: StateRegion): boolean {
-        const state = this.engine.state;
-        return region.provinces.some((site) =>
-            state.graph.adjacency[site].some((edge) => state.provinces[edge.site].owner === 0));
-    }
+    private readonly onClaimRowKeyDown = (event: KeyboardEvent): void => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const row = (event.target as HTMLElement).closest<HTMLElement>("[data-action='claim-focus']");
+        if (!row) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.focusFromMap(Number(row.dataset.state));
+    };
 }

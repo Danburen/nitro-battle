@@ -14,6 +14,7 @@ import {
     waitArmy,
 } from "./armies.ts";
 import { attack, cancelAttack } from "./combat.ts";
+import { clearProvinceTroops as clearProvinceTroopsOf, disbandRegiment, recruitRegiment, setProvinceStance as setProvinceStanceOf } from "./provinceArmy.ts";
 import { cancelDiplomaticAction, claimState, cancelClaim, prepareDiplomaticAction, proposePeace, respondPeace, startWar } from "./diplomacy.ts";
 import { annexVassal as annexVassalOf, enforceWarGoal } from "./settlement.ts";
 import {
@@ -46,6 +47,7 @@ import {
 } from "./production.ts";
 import { endTurn } from "./turn.ts";
 import type { Army } from "./types/organization.ts";
+import type { ProvinceStance } from "./types/entities.ts";
 import type { StateBuildingKind, ProvinceBuildingKind } from "./types/building.ts";
 import type { DiplomaticActionKind, VassalType } from "./types/diplomacy.ts";
 import type { GameState } from "./types/state.ts";
@@ -130,6 +132,24 @@ export class GameEngine extends GameCore {
 
     attack(armyId: number, target: number): boolean {
         return this.canCommand(armyId) && attack(this, armyId, target);
+    }
+
+    // ---- province-level troops (game/provinceArmy.ts) ----
+
+    recruitUnit(kind: UnitKind, site: number): boolean {
+        return recruitRegiment(this, 0, kind, site);
+    }
+
+    setProvinceStance(site: number, stance: ProvinceStance): boolean {
+        return setProvinceStanceOf(this, site, stance);
+    }
+
+    clearProvinceTroops(site: number): boolean {
+        return clearProvinceTroopsOf(this, site);
+    }
+
+    disbandRegiment(site: number, kind: UnitKind): boolean {
+        return disbandRegiment(this, site, kind);
     }
 
     cancelAttack(armyId: number): boolean {

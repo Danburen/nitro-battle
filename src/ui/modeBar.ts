@@ -1,6 +1,6 @@
 import type { GameEngine } from "../game/engine.ts";
 import { t } from "../i18n/index.ts";
-import { DEFAULT_HINT } from "./layout.ts";
+import { defaultHint } from "./layout.ts";
 import { setGameHtml, setGameText } from "./text.ts";
 
 const COMMAND_HINT = t("misc.modeBar.commandHint");
@@ -14,7 +14,7 @@ export function renderModeBar(engine: GameEngine, modeBar: HTMLElement, hintEl: 
     hintEl.classList.toggle("hidden", active);
     if (!active) {
         setGameHtml(modeBar, "");
-        setGameText(hintEl, commandMode ? COMMAND_HINT : DEFAULT_HINT, "plain");
+        setGameText(hintEl, commandMode ? COMMAND_HINT : defaultHint(), "plain");
         return;
     }
     const army = state.armies.get(armyId);

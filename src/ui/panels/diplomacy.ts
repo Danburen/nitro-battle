@@ -2,93 +2,594 @@ import type { GameEngine } from "../../game/engine.ts";
 import type { SoundManager } from "../../audio/index.ts";
 import {
     DIPLOMATIC_PROFILES, canDeclareWar, canPrepareDiplomaticAction, cancelRefund,
-    decidePeace, isAtWar, nationPower, truceDays, warDuration,
+    decidePeace, isAtWar, truceDays, warDuration,
 } from "../../game/diplomacy.ts";
 import { nationArmyCount, nationProvinceCount } from "../../game/rules.ts";
 import { warGoalProgress } from "../../game/settlement.ts";
 import { tendencyProfileOf } from "../../game/ai/tendencies.ts";
 import {
-    ALLIANCE_CREATE_COST, ALLIANCE_HELP_BODY, allianceOf, canCreateAlliance, canInviteToAlliance,
+    ALLIANCE_CREATE_COST, allianceOf, canCreateAlliance, canInviteToAlliance,
     decideAllianceInvite, decideJoinRequest,
 } from "../../game/alliance.ts";
-import {
-    VASSAL_HELP_BODY, VASSAL_PROFILES, VASSAL_UPGRADE_COST, aidCandidates,
-    canAnnexVassal, canBecomeVassal, canRequestAid, canRequestUpgrade, decideAid,
-    decideUpgrade, decideVassalDemand, decideVassalOffer,
-    tributeRateOf, upgradeTargetOf,
-} from "../../game/vassal.ts";
-import { nationDisplayColor, overlordOf, vassalTypeOf, vassalsOf } from "../../game/access.ts";
+import { VASSAL_PROFILES, VASSAL_UPGRADE_COST } from "../../game/vassal.ts";
+import { nationDisplayColor, overlordOf, vassalTypeOf } from "../../game/access.ts";
 import { REQUEST_COOLDOWN_DAYS, requestCooldownDays } from "../../game/requests.ts";
 import { TRADE_AGREEMENT_DAYS, tradePartners, tradeResourceKinds } from "../../game/trade.ts";
 import type { DiplomaticAction, DiplomaticActionKind, DiplomaticRequest, DiplomaticRequestKind } from "../../game/types/diplomacy.ts";
 import type { GameState } from "../../game/types/state.ts";
-import { escapeGameText, escapeHtml, iconMaskStyle, gameText, setGameHtml, game } from "../text.ts";
+import { escapeGameText, game, html, iconMaskStyle, rawHtml, setGameHtml } from "../text.ts";
 import { tooltipAttrs } from "../tooltip.ts";
 import { decisionTooltipAttrs } from "../decision-tip.ts";
-import { helpButton, panelHead } from "../panel.ts";
+import { panelHead, PanelShell } from "../panel.ts";
+import type { PanelView } from "../panel.ts";
 import { nationOverviewBody, nationStats } from "../nation-info.ts";
-import { vassalIndependenceIcon, vassalTypeIcon } from "../vassal.ts";
 import { nationFlagHtmlFor } from "../flags.ts";
 import { TRADE_KIND_LABEL, cadenceToken, proposalCooldownTip, resourceNames, transferList } from "../trade.ts";
+import { gameHtml, scopedTexts } from "../view.ts";
 import { t } from "../../i18n/index.ts";
 
+function diplomacyTexts() {
+    const s = scopedTexts("panels.diplomacy.", {
+        title: ["title"],
+        helpTitle: ["help.title"],
+        helpBody: ["help.body"],
+        nationFallback: ["nation.fallback"],
+        nationTargetFallback: ["nation.targetFallback"],
+        enemyFallback: ["enemy.fallback"],
+        overlordFallback: ["overlord.fallback"],
+        requestDemand: ["request.demand"],
+        requestContract: ["request.contract"],
+        requestAccept: ["request.accept"],
+        requestReject: ["request.reject"],
+        requestHead: ["request.head"],
+        requestTooFrequent: ["request.tooFrequent"],
+        tradeGive: ["trade.request.give"],
+        tradeProvides: ["trade.provides"],
+        tradeWeProvide: ["trade.weProvide"],
+        statusLabel: ["status.label"],
+        statusDead: ["status.dead"],
+        statusAtWar: ["status.atWar"],
+        statusTruce: ["status.truce"],
+        statusAi: ["status.ai"],
+        vassalGeneric: ["vassal.generic"],
+        vassalHelpTitle: ["vassal.help.title"],
+        vassalTributeLabel: ["vassal.tributeLabel"],
+        vassalExpand: ["vassal.expand"],
+        vassalCollapse: ["vassal.collapse"],
+        vassalView: ["vassal.view"],
+        vassalReleaseLabel: ["vassal.release.label"],
+        vassalReleaseTip: ["vassal.release.tip"],
+        vassalChangeTypeLabel: ["vassal.changeType.label"],
+        vassalChangeTypeTip: ["vassal.changeType.tip"],
+        vassalAnnexLabel: ["vassal.annex.label"],
+        vassalAnnexTip: ["vassal.annex.tip"],
+        vassalOfferLabel: ["vassal.offer.label"],
+        vassalOfferButton: ["vassal.offer.button"],
+        vassalOfferSubmit: ["vassal.offer.submit"],
+        vassalOfferSubmitTip: ["vassal.offer.submitTip"],
+        vassalOfferCooperativeNote: ["vassal.offer.cooperativeNote"],
+        vassalOfferAutonomousNote: ["vassal.offer.autonomousNote"],
+        vassalDemandLabel: ["vassal.demand.label"],
+        vassalTypeCooperative: ["vassal.type.cooperative"],
+        vassalTypeAutonomous: ["vassal.type.autonomous"],
+        allianceLabel: ["alliance.label"],
+        allianceNone: ["alliance.none"],
+        allianceHelpTitle: ["alliance.help.title"],
+        allianceLeave: ["alliance.leave"],
+        allianceAllyNote: ["alliance.allyNote"],
+        allianceSection: ["alliance.section"],
+        allianceInviteLabel: ["alliance.invite.label"],
+        allianceJoinLabel: ["alliance.join.label"],
+        allianceLeaderFallback: ["alliance.leaderFallback"],
+        allianceCreateLabel: ["alliance.create.label"],
+        overviewTargets: ["overview.targets"],
+        overviewEnded: ["overview.ended"],
+        overviewNoTarget: ["overview.noTarget"],
+        stateUnspecified: ["state.unspecified"],
+        stateInvalid: ["state.invalid"],
+        projectAnnex: ["project.annex"],
+        projectExpired: ["project.expired"],
+        projectTipExpired: ["project.tip.expired"],
+        projectTipPreparing: ["project.tip.preparing"],
+        projectTipReady: ["project.tip.ready"],
+        projectCancelHint: ["project.cancelHint"],
+        aidLabel: ["aid.label"],
+        declareLabel: ["declare.label"],
+        declareTargetFallback: ["declare.targetFallback"],
+        declareTipReady: ["declare.tip.ready"],
+        declareClose: ["declare.close"],
+        declareHint: ["declare.hint"],
+        declareConfirm: ["declare.confirm"],
+        craftStart: ["craft.start"],
+        craftStop: ["craft.stop"],
+        craftTipStart: ["craft.tip.start"],
+        craftTipStop: ["craft.tip.stop"],
+        craftTipAtWar: ["craft.tip.atWar"],
+        craftAnnex: ["craft.annex"],
+        craftConquest: ["craft.conquest"],
+        craftBlockWar: ["craft.block.war"],
+        craftBlockEnded: ["craft.block.ended"],
+        craftBlockBusy: ["craft.block.busy"],
+        goalAnnex: ["goal.annex"],
+        goalOurs: ["goal.ours"],
+        goalTheirs: ["goal.theirs"],
+        goalRequirementAnnex: ["goal.requirement.annex"],
+        goalRequirementConquest: ["goal.requirement.conquest"],
+        goalEnforceNote: ["goal.enforceNote"],
+        goalTitle: ["goal.title"],
+        goalEnforceLabel: ["goal.enforce.label"],
+        goalEnforceTip: ["goal.enforce.tip"],
+        goalEnforceButton: ["goal.enforce.button"],
+        goalVassalizeLabel: ["goal.vassalize.label"],
+        goalVassalizeTip: ["goal.vassalize.tip"],
+        actionsHead: ["actions.head"],
+        peaceAcceptLabel: ["peace.accept.label"],
+        peaceAcceptTip: ["peace.accept.tip"],
+        peaceRejectLabel: ["peace.reject.label"],
+        peaceRejectTip: ["peace.reject.tip"],
+        peaceRejectButton: ["peace.reject.button"],
+        peaceProposeLabel: ["peace.propose.label"],
+        peaceProposeDisabledTip: ["peace.propose.disabledTip"],
+        refundClear: ["refund.clear"],
+        refundAbandon: ["refund.abandon"],
+        menuClose: ["menu.close"],
+        menuConfirm: ["menu.confirm"],
+        menuCancel: ["menu.cancel"],
+        menuNote: ["menu.note"],
+        menuSectionCurrent: ["menu.section.current"],
+        menuSectionNew: ["menu.section.new"],
+        menuEmptyCurrent: ["menu.empty.current"],
+        menuEmptyClaims: ["menu.empty.claims"],
+        toastCrafted: ["toast.crafted"],
+        toastNone: ["toast.none"],
+        toastSeparator: ["toast.separator"],
+        upgradeLabel: ["upgrade.label"],
+    });
+    return {
+        ...s,
+        craftConquest: (name: string) => t("panels.diplomacy.craft.conquest", { name }),
+        craftAnnex: (name: string) => t("panels.diplomacy.craft.annex", { name }),
+        requestTitleDemand: (from: string) => t("panels.diplomacy.request.title.demand", { from }),
+        requestTitleOffer: (from: string) => t("panels.diplomacy.request.title.offer", { from }),
+        requestTitleAlliance: (from: string) => t("panels.diplomacy.request.title.alliance", { from }),
+        requestTitleUpgrade: (from: string) => t("panels.diplomacy.request.title.upgrade", { from }),
+        requestTitleCall: (from: string) => t("panels.diplomacy.request.title.call", { from }),
+        requestTitleAid: (from: string) => t("panels.diplomacy.request.title.aid", { from }),
+        requestTitleTrade: (from: string, kind: string) => t("panels.diplomacy.request.title.trade", { from, kind }),
+        requestDetailVassal: (demand: string, profile: string, blurb: string) =>
+            t("panels.diplomacy.request.detail.vassal", { demand, profile, blurb }),
+        requestDetailAlliance: (leader: string, count: number) =>
+            t("panels.diplomacy.request.detail.alliance", { leader, count }),
+        requestDetailUpgrade: (profile: string, blurb: string, cost: number) =>
+            t("panels.diplomacy.request.detail.upgrade", { profile, blurb, cost }),
+        requestDetailCall: (enemy: string) => t("panels.diplomacy.request.detail.call", { enemy }),
+        requestDetailAid: (overlordNote: string, contract: string) =>
+            t("panels.diplomacy.request.detail.aid", { overlordNote, contract }),
+        requestDetailTrade: (kind: string) => t("panels.diplomacy.request.detail.trade", { kind }),
+        tradeNote: (cadence: string, days: number) => t("panels.diplomacy.trade.request.note", { cadence, days }),
+        statusWarAll: (name: string, enemies: string) => t("panels.diplomacy.status.war.all", { name, enemies }),
+        statusWarOne: (name: string, enemy: string) => t("panels.diplomacy.status.war.one", { name, enemy }),
+        statusTrade: (name: string, partner: string, count: number, kinds: string) =>
+            t("panels.diplomacy.status.trade", { name, partner, count, kinds }),
+        statusVassalOf: (name: string, lord: string, type: string) =>
+            t("panels.diplomacy.status.vassal.of", { name, lord, type }),
+        statusAtWarDays: (days: number) => t("panels.diplomacy.status.atWarDays", { days }),
+        statusTruceDays: (days: number) => t("panels.diplomacy.status.truceDays", { days }),
+        vassalContract: (name: string) => t("panels.diplomacy.vassal.contract", { name }),
+        aidOverlord: (name: string) => t("panels.diplomacy.aid.overlord", { name }),
+        aidTip: (nation: string, overlord: string, days: number) =>
+            t("panels.diplomacy.aid.tip", { nation, overlord, days }),
+        vassalVassalOf: (name: string) => t("panels.diplomacy.vassal.vassalOf", { name }),
+        vassalOwned: (count: number) => t("panels.diplomacy.vassal.owned", { count }),
+        vassalViewTip: (name: string) => t("panels.diplomacy.vassal.viewTip", { name }),
+        vassalOfferTip: (name: string) => t("panels.diplomacy.vassal.offer.tip", { name }),
+        vassalDemandTip: (name: string) => t("panels.diplomacy.vassal.demand.tip", { name }),
+        upgradeConfirmBody: (lord: string, profile: string, cost: number) =>
+            t("panels.diplomacy.upgrade.confirmBody", { lord, profile, cost }),
+        upgradeRequirement: (cost: number, profile: string) =>
+            t("panels.diplomacy.upgrade.requirement", { cost, profile }),
+        allianceMemberCount: (count: number) => t("panels.diplomacy.alliance.memberCount", { count }),
+        allianceSummary: (leader: string, members: string) => t("panels.diplomacy.alliance.summary", { leader, members }),
+        allianceLeaveTip: (days: number) => t("panels.diplomacy.alliance.leave.tip", { days }),
+        allianceCreateNote: (cost: number) => t("panels.diplomacy.alliance.create.note", { cost }),
+        allianceCreateTip: (cost: number) => t("panels.diplomacy.alliance.create.tip", { cost }),
+        allianceInviteTip: (name: string) => t("panels.diplomacy.alliance.invite.tip", { name }),
+        allianceJoinTip: (leader: string, days: number) => t("panels.diplomacy.alliance.join.tip", { leader, days }),
+        nationSwatchLabel: (name: string, status: string) =>
+            t("panels.diplomacy.nation.swatchLabel", { name, status }),
+        nationTip: (status: string, tendency: string, armies: number, states: number, provinces: number) =>
+            t("panels.diplomacy.nation.tip", { status, tendency, armies, states, provinces }),
+        overviewAnnexed: (count: number, total: number) => t("panels.diplomacy.overview.annexed", { count, total }),
+        overviewWars: (count: number) => t("panels.diplomacy.overview.wars", { count }),
+        overviewReady: (count: number) => t("panels.diplomacy.overview.ready", { count }),
+        actionFullLabel: (label: string, scope: string) => t("panels.diplomacy.action.fullLabel", { label, scope }),
+        projectConquest: (name: string) => t("panels.diplomacy.project.conquest", { name }),
+        projectTip: (label: string, status: string, cancelHint: string) =>
+            t("panels.diplomacy.project.tip", { label, status, cancelHint }),
+        timeRemaining: (days: number) => t("panels.diplomacy.time.remaining", { days }),
+        timeReadyRemaining: (days: number) => t("panels.diplomacy.time.readyRemaining", { days }),
+        timePreparingRemaining: (days: number) => t("panels.diplomacy.time.preparingRemaining", { days }),
+        declareTipTruce: (days: number) => t("panels.diplomacy.declare.tip.truce", { days }),
+        declareTipNone: (count: number) => t("panels.diplomacy.declare.tip.none", { count }),
+        declareAriaLabel: (name: string) => t("panels.diplomacy.declare.ariaLabel", { name }),
+        declareValid: (days: number) => t("panels.diplomacy.declare.valid", { days }),
+        declareTitle: (name: string) => t("panels.diplomacy.declare.title", { name }),
+        craftCost: (cost: number, days: number, upkeep: number) =>
+            t("panels.diplomacy.craft.cost", { cost, days, upkeep }),
+        craftCostAnnex: (cost: number, days: number, upkeep: number) =>
+            t("panels.diplomacy.craft.costAnnex", { cost, days, upkeep }),
+        goalConquest: (name: string) => t("panels.diplomacy.goal.conquest", { name }),
+        goalSummary: (side: string, goal: string, held: number, total: number, enforceNote: string) =>
+            t("panels.diplomacy.goal.summary", { side, goal, held, total, enforceNote }),
+        peaceProposeWhite: (name: string) => t("panels.diplomacy.peace.propose.white", { name }),
+        actionsDialogLabel: (name: string) => t("panels.diplomacy.actions.dialogLabel", { name }),
+        menuDelta: (sign: string, amount: number) => t("panels.diplomacy.menu.delta", { sign, amount }),
+        refundCancel: (refund: number, spent: number) => t("panels.diplomacy.refund.cancel", { refund, spent }),
+        toastCancelled: (count: number) => t("panels.diplomacy.toast.cancelled", { count }),
+    };
+}
+type DiplomacyTexts = ReturnType<typeof diplomacyTexts>;
+
 /** Pending-request copy: one row per kind, so a new request never means a new branch. */
-const REQUEST_TITLE: Record<DiplomaticRequestKind, (from: string, request: DiplomaticRequest) => string> = {
-    vassalize: (from, request) => request.demand
-        ? t("panels.diplomacy.request.title.demand", { from })
-        : t("panels.diplomacy.request.title.offer", { from }),
-    alliance: (from) => t("panels.diplomacy.request.title.alliance", { from }),
-    upgrade: (from) => t("panels.diplomacy.request.title.upgrade", { from }),
-    call: (from) => t("panels.diplomacy.request.title.call", { from }),
-    aid: (from) => t("panels.diplomacy.request.title.aid", { from }),
-    trade: (from, request) => t("panels.diplomacy.request.title.trade", {
-        from, kind: TRADE_KIND_LABEL[request.tradeKind ?? "exchange"],
-    }),
+const REQUEST_TITLE: Record<DiplomaticRequestKind, (from: string, request: DiplomaticRequest, text: DiplomacyTexts) => string> = {
+    vassalize: (from, request, text) => request.demand ? text.requestTitleDemand(from) : text.requestTitleOffer(from),
+    alliance: (from, _request, text) => text.requestTitleAlliance(from),
+    upgrade: (from, _request, text) => text.requestTitleUpgrade(from),
+    call: (from, _request, text) => text.requestTitleCall(from),
+    aid: (from, _request, text) => text.requestTitleAid(from),
+    trade: (from, request, text) => text.requestTitleTrade(from, TRADE_KIND_LABEL[request.tradeKind ?? "exchange"]),
 };
 
-const REQUEST_DETAIL: Record<DiplomaticRequestKind, (state: GameState, request: DiplomaticRequest) => string> = {
-    vassalize: (_state, request) => {
+const REQUEST_DETAIL: Record<DiplomaticRequestKind, (state: GameState, request: DiplomaticRequest, text: DiplomacyTexts) => string> = {
+    vassalize: (_state, request, text) => {
         const profile = VASSAL_PROFILES[request.vassalType ?? "autonomous"];
-        const demand = request.demand
-            ? t("panels.diplomacy.request.demand")
-            : t("panels.diplomacy.request.contract");
-        return t("panels.diplomacy.request.detail.vassal", {
-            demand, profile: profile.name, blurb: profile.blurb,
-        });
+        const demand = request.demand ? text.requestDemand : text.requestContract;
+        return text.requestDetailVassal(demand, profile.name, profile.blurb);
     },
-    alliance: (state, request) => {
+    alliance: (state, request, text) => {
         const alliance = state.alliances.find((entry) => entry.id === request.allianceId);
         const leader = alliance
             ? state.nations[alliance.leader]?.name ?? "?"
             : state.nations[request.from]?.name ?? "?";
-        return t("panels.diplomacy.request.detail.alliance", { leader, count: alliance?.members.length ?? 0 });
+        return text.requestDetailAlliance(leader, alliance?.members.length ?? 0);
     },
-    upgrade: (_state, request) => {
+    upgrade: (_state, request, text) => {
         const profile = VASSAL_PROFILES[request.vassalType ?? "cooperative"];
-        return t("panels.diplomacy.request.detail.upgrade", {
-            profile: profile.name, blurb: profile.blurb, cost: VASSAL_UPGRADE_COST,
-        });
+        return text.requestDetailUpgrade(profile.name, profile.blurb, VASSAL_UPGRADE_COST);
     },
-    call: (state, request) => {
-        const fallback = t("panels.diplomacy.enemy.fallback");
-        const enemy = typeof request.enemy === "number" ? state.nations[request.enemy]?.name ?? fallback : fallback;
-        return t("panels.diplomacy.request.detail.call", { enemy });
+    call: (state, request, text) => {
+        const enemy = typeof request.enemy === "number" ? state.nations[request.enemy]?.name ?? text.enemyFallback : text.enemyFallback;
+        return text.requestDetailCall(enemy);
     },
-    aid: (state, request) => {
+    aid: (state, request, text) => {
         const overlord = overlordOf(state, request.from);
         const type = vassalTypeOf(state, request.from);
-        const contract = type
-            ? t("panels.diplomacy.vassal.contract", { name: VASSAL_PROFILES[type].name })
-            : t("panels.diplomacy.vassal.generic");
-        const overlordNote = overlord >= 0
-            ? t("panels.diplomacy.aid.overlord", { name: state.nations[overlord].name })
-            : "";
-        return t("panels.diplomacy.request.detail.aid", { overlordNote, contract });
+        const contract = type ? text.vassalContract(VASSAL_PROFILES[type].name) : text.vassalGeneric;
+        const overlordNote = overlord >= 0 ? text.aidOverlord(state.nations[overlord].name) : "";
+        return text.requestDetailAid(overlordNote, contract);
     },
-    trade: (_state, request) => t("panels.diplomacy.request.detail.trade", {
-        kind: TRADE_KIND_LABEL[request.tradeKind ?? "exchange"],
-    }),
+    trade: (_state, request, text) => text.requestDetailTrade(TRADE_KIND_LABEL[request.tradeKind ?? "exchange"]),
 };
+
+function requestTitle(state: GameState, request: DiplomaticRequest, text: DiplomacyTexts): string {
+    const from = state.nations[request.from]?.name ?? text.nationFallback;
+    return REQUEST_TITLE[request.kind](from, request, text);
+}
+
+function requestDetail(state: GameState, request: DiplomaticRequest, text: DiplomacyTexts): string {
+    return REQUEST_DETAIL[request.kind](state, request, text);
+}
+
+/** Trade requests carry structured transfers; render them as coloured resource rows. */
+function tradeRequestDetailHtml(request: DiplomaticRequest, text: DiplomacyTexts): string {
+    const give = request.tradeGive ?? [];
+    const receive = request.tradeReceive ?? [];
+    const giveLabel = text.tradeGive;
+    const providesLabel = text.tradeProvides;
+    const weProvideLabel = text.tradeWeProvide;
+    const note = text.tradeNote(cadenceToken("monthly"), TRADE_AGREEMENT_DAYS);
+    const lines: string[] = [];
+    if (request.tradeKind === "aid") {
+        lines.push(html`<div class="trade-request-line"><span class="trade-side-label">${giveLabel}</span>${rawHtml(transferList(receive, "out"))}</div>`);
+    } else {
+        if (give.length) lines.push(html`<div class="trade-request-line"><span class="trade-side-label">${providesLabel}</span>${rawHtml(transferList(give, "in"))}</div>`);
+        if (receive.length) lines.push(html`<div class="trade-request-line"><span class="trade-side-label">${weProvideLabel}</span>${rawHtml(transferList(receive, "out"))}</div>`);
+    }
+    lines.push(html`<p class="trade-request-note">${note}</p>`);
+    return lines.join("");
+}
+
+/** Compact war / trade / vassal relationship strip between nation stats and 外交行动. */
+function statusBarHtml(state: GameState, nationId: number, text: DiplomacyTexts): string {
+    const nation = state.nations[nationId];
+    if (!nation) return "";
+    const enemies = state.nations.filter((other) => other.id !== nationId && isAtWar(state, nationId, other.id));
+    const partners = tradePartners(state, nationId);
+    const listSep = t("common.listSeparator");
+    const label = text.statusLabel;
+    const rows: string[] = [];
+    if (enemies.length) {
+        const allTip = text.statusWarAll(nation.name, enemies.map((enemy) => enemy.name).join(listSep));
+        const self = html`<span class="diplo-status-flag" ${rawHtml(tooltipAttrs(escapeGameText(nation.name), escapeGameText(allTip)))}>${rawHtml(nationFlagHtmlFor(state, nationId, 18))}</span>`;
+        const flags = enemies.map((enemy) => {
+            const oneTip = text.statusWarOne(nation.name, enemy.name);
+            return html`<span class="diplo-status-flag" ${rawHtml(tooltipAttrs(escapeGameText(enemy.name), escapeGameText(oneTip)))}>${rawHtml(nationFlagHtmlFor(state, enemy.id, 18))}</span>`;
+        }).join("");
+        rows.push(html`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--war" aria-hidden="true" ${rawHtml(iconMaskStyle("war"))}></span><span class="diplo-status-items">${rawHtml(self)}${rawHtml(flags)}</span></div>`);
+    }
+    if (partners.length) {
+        const flags = partners.map((partnerId) => {
+            const partner = state.nations[partnerId];
+            if (!partner) return "";
+            const kinds = tradeResourceKinds(state, nationId, partnerId);
+            const body = text.statusTrade(nation.name, partner.name, kinds.length, resourceNames(kinds));
+            return html`<span class="diplo-status-flag" ${rawHtml(tooltipAttrs(escapeGameText(partner.name), escapeGameText(body)))}>${rawHtml(nationFlagHtmlFor(state, partnerId, 18))}</span>`;
+        }).join("");
+        rows.push(html`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--trade" aria-hidden="true" ${rawHtml(iconMaskStyle("trade"))}></span><span class="diplo-status-items">${rawHtml(flags)}</span></div>`);
+    }
+    return rows.length ? html`<div class="diplo-status" aria-label="${label}">${rawHtml(rows.join(""))}</div>` : "";
+}
+
+function requestsHtml(state: GameState, text: DiplomacyTexts): string {
+    const requests = state.diplomaticRequests.filter((request) => request.to === 0 && request.expiresDay > state.day);
+    if (!requests.length) return "";
+    const headLabel = text.requestHead;
+    const acceptLabel = text.requestAccept;
+    const rejectLabel = text.requestReject;
+    const rows = requests.map((request) => {
+        const from = state.nations[request.from];
+        if (!from) return "";
+        const title = requestTitle(state, request, text);
+        const remaining = text.timeRemaining(Math.max(0, request.expiresDay - state.day));
+        const detail = request.kind === "trade" ? tradeRequestDetailHtml(request, text) : html`${requestDetail(state, request, text)}`;
+        const disabled = state.winner === null ? "" : " disabled";
+        return html`<div class="diplo-request" data-request-id="${request.id}">
+            <div class="diplo-request-head">${rawHtml(nationFlagHtmlFor(state, request.from, 20))}<b>${title}</b>
+                <span class="diplo-request-days">${remaining}</span></div>
+            <div class="diplo-request-body">${rawHtml(detail)}</div>
+            <div class="diplo-request-actions">
+                <button class="btn btn-primary" data-action="respond-request" data-request="${request.id}" data-accept="1" ${rawHtml(disabled)}>${acceptLabel}</button>
+                <button class="btn btn-outline" data-action="respond-request" data-request="${request.id}" data-accept="0" ${rawHtml(disabled)}>${rejectLabel}</button>
+            </div>
+        </div>`;
+    }).join("");
+    return html`<div class="diplo-requests"><div class="diplo-requests-head">${headLabel}</div>${rawHtml(rows)}</div>`;
+}
+
+function readyActions(state: GameState, nationId: number): DiplomaticAction[] {
+    return state.diplomaticActions.filter((action) => action.nation === 0 && action.target === nationId
+        && state.day >= action.readyDay && state.day < action.expiresDay
+        && canDeclareWar(state, 0, nationId, action.id));
+}
+
+function stateName(state: GameState, stateId: number | null, text: DiplomacyTexts): string {
+    return stateId === null ? text.stateUnspecified : state.states[stateId]?.name ?? text.stateInvalid;
+}
+
+function actionLabel(state: GameState, action: DiplomaticAction, text: DiplomacyTexts): string {
+    const scope = action.kind === "annex"
+        ? state.nations[action.target]?.name ?? text.nationTargetFallback
+        : stateName(state, action.stateId, text);
+    return text.actionFullLabel(DIPLOMATIC_PROFILES[action.kind].label, scope);
+}
+
+function projectsHtml(state: GameState, nationId: number, text: DiplomacyTexts): string {
+    const projects = state.diplomaticActions.filter((action) => action.nation === 0 && action.target === nationId);
+    if (!projects.length) return "";
+    const cancelHint = text.projectCancelHint;
+    const chips = projects.map((action) => {
+        const preparing = state.day < action.readyDay;
+        const expired = state.day >= action.expiresDay;
+        const ready = !preparing && !expired;
+        const short = action.kind === "annex" ? text.projectAnnex : text.projectConquest(stateName(state, action.stateId, text));
+        const time = expired ? text.projectExpired
+            : preparing ? text.timeRemaining(action.readyDay - state.day)
+                : text.timeReadyRemaining(action.expiresDay - state.day);
+        const status = expired ? text.projectTipExpired
+            : preparing ? text.projectTipPreparing : text.projectTipReady;
+        const tip = text.projectTip(actionLabel(state, action, text), status, cancelHint);
+        return html`<span class="diplo-project-chip${ready ? " ready" : ""}${expired ? " expired" : ""}" ${rawHtml(tooltipAttrs(escapeGameText(short), tip))}>${short} · ${time}</span>`;
+    }).join("");
+    return html`<div class="diplo-projects">${rawHtml(chips)}</div>`;
+}
+
+/** Cooldown wins over the normal tooltip; the button stays visible but inert. */
+function requestGate(
+    state: GameState, kind: DiplomaticRequestKind, nationId: number, normalTip: string, text: DiplomacyTexts,
+): { readonly blocked: boolean; readonly attrs: string; readonly tip: string } {
+    const days = requestCooldownDays(state, kind, nationId);
+    return days > 0
+        ? {
+            blocked: true,
+            attrs: 'aria-disabled="true"',
+            tip: tooltipAttrs(text.requestTooFrequent, proposalCooldownTip(days)),
+        }
+        : { blocked: false, attrs: "", tip: normalTip };
+}
+
+/** Preview authorization as if the marked cancellations (and their refunds) had already been applied. */
+function craftAllowed(
+    state: GameState, cancels: ReadonlySet<number>, kind: DiplomaticActionKind, target: number, stateId: number | null,
+): boolean {
+    const refund = state.diplomaticActions.reduce(
+        (sum, action) => sum + (cancels.has(action.id) ? cancelRefund(state, action) : 0), 0);
+    const nations = state.nations.slice();
+    nations[0] = { ...nations[0], politicalPower: nations[0].politicalPower + refund };
+    const preview = {
+        ...state,
+        nations,
+        diplomaticActions: state.diplomaticActions.filter((action) => !cancels.has(action.id)),
+    };
+    return canPrepareDiplomaticAction(preview, 0, kind, target, stateId);
+}
+
+/** Alliance actions rendered inline with the other diplomatic actions. */
+function allianceActionsHtml(state: GameState, nationId: number, text: DiplomacyTexts): string {
+    if (state.winner !== null) return "";
+    const myAlliance = allianceOf(state, 0);
+    const targetAlliance = allianceOf(state, nationId);
+    const buttons: string[] = [];
+    if (!myAlliance) {
+        if (canCreateAlliance(state, 0)) {
+            const label = text.allianceCreateLabel;
+            buttons.push(html`<button class="btn btn-outline" data-action="create-alliance" ${rawHtml(tooltipAttrs(label, text.allianceCreateTip(ALLIANCE_CREATE_COST)))}>${label}</button>`);
+        }
+        if (targetAlliance && overlordOf(state, 0) < 0) {
+            const leader = state.nations[targetAlliance.leader];
+            const joinTip = decisionTooltipAttrs(
+                text.allianceJoinTip(escapeGameText(leader?.name ?? text.allianceLeaderFallback), REQUEST_COOLDOWN_DAYS),
+                [{ decision: decideJoinRequest(state, targetAlliance.leader, 0) }],
+            );
+            const gate = requestGate(state, "alliance", targetAlliance.leader, joinTip, text);
+            const joinLabel = text.allianceJoinLabel;
+            buttons.push(html`<button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="join-alliance" data-leader="${targetAlliance.leader}" ${rawHtml(gate.attrs)} ${rawHtml(gate.tip)}>${joinLabel}</button>`);
+        }
+    } else {
+        if (myAlliance.leader === 0 && canInviteToAlliance(state, 0, nationId)) {
+            const inviteTip = decisionTooltipAttrs(
+                text.allianceInviteTip(escapeGameText(state.nations[nationId].name)),
+                [{ decision: decideAllianceInvite(state, 0, nationId) }],
+            );
+            const gate = requestGate(state, "alliance", nationId, inviteTip, text);
+            const inviteLabel = text.allianceInviteLabel;
+            buttons.push(html`<button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="invite-alliance" data-nation="${nationId}" ${rawHtml(gate.attrs)} ${rawHtml(gate.tip)}>${inviteLabel}</button>`);
+        }
+        const leaveLabel = text.allianceLeave;
+        buttons.push(html`<button class="btn btn-outline" data-action="leave-alliance" ${rawHtml(tooltipAttrs(leaveLabel, text.allianceLeaveTip(REQUEST_COOLDOWN_DAYS)))}>${leaveLabel}</button>`);
+    }
+    return buttons.join("");
+}
+
+function nationHtml(state: GameState, nationId: number, text: DiplomacyTexts): string {
+    const nation = state.nations[nationId];
+    const atWar = isAtWar(state, 0, nationId);
+    const hasOffer = state.peaceOffers.includes(nationId);
+    const truce = truceDays(state, 0, nationId);
+    const status = !nation.alive ? text.statusDead
+        : atWar ? text.statusAtWarDays(warDuration(state, 0, nationId))
+            : truce > 0 ? text.statusTruceDays(truce) : text.statusAi;
+    const summary = nationStats(state, nationId);
+    const pillClass = !nation.alive ? "dead" : atWar ? "war" : "idle";
+    const head = html`<div class="diplo-head">${rawHtml(nationFlagHtmlFor(state, nation.id, 26))}<span class="diplo-name">${nation.name}</span><span class="status-pill ${pillClass}">${status}</span></div>`;
+    const stats = nationOverviewBody(state, summary, " diplo-kv");
+    const base = html`${rawHtml(head)}${rawHtml(stats)}<div class="diplo-divider"></div>`;
+    if (!nation.alive) {
+        return html`<div class="diplo-row dead diplo-card" data-diplo-card="${nationId}" tabindex="-1">${rawHtml(base)}${rawHtml(projectsHtml(state, nationId, text))}</div>`;
+    }
+
+    const ready = readyActions(state, nationId);
+    const claimCount = state.claims.filter((claim) => claim.nation === 0 &&
+        state.states[claim.stateId]?.provinces.some((site) => state.provinces[site].legalOwner === nationId)).length;
+    const declareTip = ready.length ? text.declareTipReady
+        : truce > 0 ? text.declareTipTruce(truce) : text.declareTipNone(claimCount);
+    const declareLabel = text.declareLabel;
+    const declareBtn = html`<button class="btn btn-primary" data-action="declare-open" data-nation="${nationId}" data-diplo-focus="declare-${nationId}" ${rawHtml(ready.length && state.winner === null ? "" : " disabled")} ${rawHtml(tooltipAttrs(declareLabel, declareTip))}>${declareLabel}</button>`;
+
+    const preparing = state.diplomaticActions.some((action) => action.nation === 0 && action.target === nationId && state.day < action.readyDay);
+    const craftLabel = preparing ? text.craftStop : text.craftStart;
+    const craftTip = preparing ? text.craftTipStop : text.craftTipStart;
+    const craftBtn = html`<button class="btn btn-outline" data-action="diplo-menu-open" data-nation="${nationId}" data-diplo-focus="menu-${nationId}" ${rawHtml(atWar || state.winner !== null ? " disabled" : "")} ${rawHtml(tooltipAttrs(craftLabel, atWar ? text.craftTipAtWar : craftTip))}>${craftLabel}</button>`;
+
+    let goalHtml = "";
+    const actionButtons: string[] = [craftBtn];
+    if (atWar) {
+        const war = state.wars.find((item) => (item.aggressor === 0 && item.defender === nationId) || (item.aggressor === nationId && item.defender === 0));
+        if (war) {
+            const progress = warGoalProgress(state, war);
+            const ours = war.aggressor === 0;
+            const goal = war.goal === "annex" ? text.goalAnnex : text.goalConquest(stateName(state, war.stateId, text));
+            const requirement = war.goal === "annex" ? text.goalRequirementAnnex : text.goalRequirementConquest;
+            const summary = text.goalSummary(
+                ours ? text.goalOurs : text.goalTheirs, goal, progress.held, progress.total,
+                progress.canEnforce ? text.goalEnforceNote : "",
+            );
+            goalHtml = html`<div class="diplo-goal" ${rawHtml(tooltipAttrs(text.goalTitle, escapeGameText(requirement)))}>${summary}</div>`;
+            if (ours) actionButtons.push(html`<button class="btn btn-outline" data-action="enforce-war-goal" data-nation="${nationId}" data-diplo-focus="enforce-${nationId}" ${rawHtml(progress.canEnforce && state.winner === null ? "" : " disabled")} ${rawHtml(tooltipAttrs(text.goalEnforceLabel, text.goalEnforceTip))}>${text.goalEnforceButton}</button>`);
+        }
+        const peaceEnabled = state.winner === null ? "" : " disabled";
+        actionButtons.push(hasOffer
+            ? html`<button class="btn btn-outline" data-action="accept-peace" data-nation="${nationId}" data-diplo-focus="accept-${nationId}" ${rawHtml(peaceEnabled)} ${rawHtml(tooltipAttrs(text.peaceAcceptLabel, text.peaceAcceptTip))}>${text.peaceAcceptLabel}</button><button class="btn btn-outline" data-action="reject-peace" data-nation="${nationId}" data-diplo-focus="reject-${nationId}" ${rawHtml(peaceEnabled)} ${rawHtml(tooltipAttrs(text.peaceRejectLabel, text.peaceRejectTip))}>${text.peaceRejectButton}</button>`
+            : html`<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" ${rawHtml(peaceEnabled)} ${rawHtml(decisionTooltipAttrs(text.peaceProposeWhite(escapeGameText(nation.name)), [{ decision: decidePeace(state, nationId, 0) }]))}>${text.peaceProposeLabel}</button>`);
+    } else {
+        actionButtons.push(html`<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" disabled ${rawHtml(tooltipAttrs(text.peaceProposeLabel, text.peaceProposeDisabledTip))}>${text.peaceProposeLabel}</button>`);
+        actionButtons.push(declareBtn);
+    }
+
+    actionButtons.push(allianceActionsHtml(state, nationId, text));
+    return html`<div class="diplo-row diplo-card${hasOffer ? " offer" : ""}" data-diplo-card="${nationId}" tabindex="-1">
+        ${rawHtml(base)}
+        ${rawHtml(statusBarHtml(state, nationId, text))}
+        <div class="diplo-actions-head">${text.actionsHead}</div>
+        <div class="diplo-button-row">${rawHtml(actionButtons.join(""))}</div>
+        ${rawHtml(goalHtml)}${rawHtml(projectsHtml(state, nationId, text))}
+    </div>`;
+}
+
+function relationsHtml(state: GameState, target: number | null, text: DiplomacyTexts): string {
+    const others = state.nations.filter((nation) => !nation.isPlayer);
+    const conquered = others.filter((nation) => !nation.alive).length;
+    const wars = others.filter((nation) => nation.alive && isAtWar(state, 0, nation.id)).length;
+    const ready = state.diplomaticActions.filter((action) => action.nation === 0
+        && state.day >= action.readyDay && state.day < action.expiresDay
+        && canDeclareWar(state, 0, action.target, action.id)).length;
+    const annexed = text.overviewAnnexed(conquered, others.length);
+    const warsText = text.overviewWars(wars);
+    const readyText = text.overviewReady(ready);
+    const tabs = others.map((nation) => {
+        const selected = target === nation.id;
+        const war = nation.alive && isAtWar(state, 0, nation.id);
+        const truce = nation.alive && !war && truceDays(state, 0, nation.id) > 0;
+        const status = !nation.alive ? text.statusDead
+            : war ? text.statusAtWar : truce ? text.statusTruce : text.statusAi;
+        const controlledStates = state.states.filter((region) =>
+            region.provinces.some((site) => state.provinces[site].owner === nation.id)).length;
+        const tip = text.nationTip(
+            status, tendencyProfileOf(nation.tendency).name,
+            nationArmyCount(state, nation.id), controlledStates, nationProvinceCount(state, nation.id),
+        );
+        const label = text.nationSwatchLabel(nation.name, status);
+        const color = nationDisplayColor(state, nation.id);
+        return html`<button class="diplo-swatch${selected ? " selected" : ""}${nation.alive ? "" : " dead"}${war ? " war" : ""}${truce ? " truce" : ""}" role="tab" aria-selected="${selected}"
+            aria-label="${label}" style="--pc:${color}"
+            data-action="diplo-target" data-nation="${nation.id}" data-diplo-focus="nation-${nation.id}"
+            ${rawHtml(tooltipAttrs(escapeGameText(nation.name), tip))}>${rawHtml(nationFlagHtmlFor(state, nation.id, 22))}</button>`;
+    }).join("");
+    return html`
+        <div class="diplo-overview-stats">
+            <span class="status-pill ready">${annexed}</span>
+            <span class="status-pill ${wars ? "war" : "idle"}">${warsText}</span>
+            <span class="status-pill ${ready ? "ready" : "idle"}">${readyText}</span>
+        </div>
+        ${rawHtml(requestsHtml(state, text))}
+        <div class="diplo-swatches" role="tablist" aria-label="${text.overviewTargets}">${rawHtml(tabs)}</div>
+        ${rawHtml(state.winner !== null ? html`<p class="diplo-requirement">${text.overviewEnded}</p>` : "")}
+        ${rawHtml(target !== null ? nationHtml(state, target, text) : html`<p class="diplo-note">${text.overviewNoTarget}</p>`)}
+    `;
+}
+
+export interface DiplomacyViewContext {
+    readonly state: GameState;
+    readonly target: number | null;
+}
+
+/** Pure view builder: the static diplomacy panel body, head and focus contract. */
+export function diplomacyView(ctx: DiplomacyViewContext): PanelView {
+    const { state, target } = ctx;
+    const text = diplomacyTexts();
+    const player = state.nations[0];
+    const status = gameHtml(game`[[politics:${Math.floor(player.politicalPower)}]]`);
+    return {
+        head: panelHead({
+            title: text.title,
+            help: { title: text.helpTitle, body: text.helpBody },
+            helpAttrs: 'data-diplo-focus="objective"',
+            status,
+        }),
+        bodyClass: "diplo-body",
+        focusAttr: "data-diplo-focus",
+        body: html`${rawHtml(relationsHtml(state, target, text))}`,
+    };
+}
 
 export interface DiplomacyHooks {
     toast(message: string): void;
@@ -104,7 +605,8 @@ interface CraftPick {
 export class DiplomacyPanel {
     private readonly engine: GameEngine;
     private readonly hooks: DiplomacyHooks;
-    private readonly el = document.querySelector<HTMLElement>("#diplomacy-panel") as HTMLElement;
+    private readonly shell = new PanelShell(document.querySelector<HTMLElement>("#diplomacy-panel") as HTMLElement);
+    private readonly el = this.shell.el;
     private readonly hud = this.el.closest<HTMLElement>("#hud") as HTMLElement;
     private scrollTop = 0;
     private target: number | null = null;
@@ -117,11 +619,12 @@ export class DiplomacyPanel {
     private menuNation: number | null = null;
     private menuCancels = new Set<number>();
     private menuCraft: CraftPick | null = null;
-    private vassalListCollapsed = false;
 
     constructor(engine: GameEngine, hooks: DiplomacyHooks) {
         this.engine = engine;
         this.hooks = hooks;
+        this.el.addEventListener("keydown", this.onPanelKeyDown);
+        this.el.addEventListener("click", this.onPanelClick);
     }
 
     setTarget(nationId: number): void {
@@ -139,9 +642,11 @@ export class DiplomacyPanel {
         if (hidden) {
             this.closeDeclare();
             this.closeActionMenu();
+            this.shell.hide();
+        } else {
+            this.shell.show();
+            if (body) body.scrollTop = this.scrollTop;
         }
-        this.el.classList.toggle("hidden", hidden);
-        if (!hidden && body) body.scrollTop = this.scrollTop;
     }
 
     destroy(): void {
@@ -158,7 +663,6 @@ export class DiplomacyPanel {
         const focusCard = active?.closest<HTMLElement>("[data-diplo-card]")?.dataset.diploCard;
 
         const state = this.engine.state;
-        const player = state.nations[0];
         const others = state.nations.filter((nation) => !nation.isPlayer);
         if (this.target === null || !others.some((nation) => nation.id === this.target)) {
             this.target = others.find((nation) => nation.alive && isAtWar(state, 0, nation.id))?.id
@@ -166,539 +670,43 @@ export class DiplomacyPanel {
         }
 
         const signature = `${this.target}:${this.target !== null && isAtWar(state, 0, this.target)}`;
-        if (signature !== this.viewSignature) this.scrollTop = 0;
+        if (signature !== this.viewSignature) {
+            this.scrollTop = 0;
+            if (oldBody) oldBody.scrollTop = 0;
+        }
         this.viewSignature = signature;
 
-        setGameHtml(this.el, `
-            ${panelHead({
-                title: t("panels.diplomacy.title"),
-                help: { title: t("panels.diplomacy.help.title"), body: t("panels.diplomacy.help.body") },
-                helpAttrs: 'data-diplo-focus="objective"',
-                status: gameText(`[[politics:${Math.floor(player.politicalPower)}]]`),
-            })}
-            <div class="panel-body diplo-body">
-                ${this.relationsHtml()}
-            </div>`);
+        this.shell.render(diplomacyView({
+            state,
+            target: this.target,
+        }));
 
-        for (const tab of this.el.querySelectorAll<HTMLElement>("[data-action='diplo-target']")) {
-            tab.onkeydown = (event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                event.stopPropagation();
-                this.setTarget(Number(tab.dataset.nation));
-            };
+        // renderPanel restores data-diplo-focus; the old card fallback is still needed.
+        if (active && focusCard !== undefined) {
+            const restored = focusKey !== undefined && document.activeElement instanceof HTMLElement
+                && document.activeElement.getAttribute("data-diplo-focus") === focusKey;
+            if (!restored) {
+                [...this.el.querySelectorAll<HTMLElement>("[data-diplo-card]")]
+                    .find((element) => element.dataset.diploCard === focusCard)
+                    ?.focus({ preventScroll: true });
+            }
         }
-        for (const toggle of this.el.querySelectorAll<HTMLElement>("[data-vassal-collapse]")) {
-            toggle.onclick = () => {
-                this.vassalListCollapsed = !this.vassalListCollapsed;
-                this.hooks.sound.play("select");
-                this.render();
-            };
-        }
-        if (active) {
-            const next = [...this.el.querySelectorAll<HTMLElement>("[data-diplo-focus]")]
-                .find((element) => element.dataset.diploFocus === focusKey && !element.matches(":disabled"));
-            const card = [...this.el.querySelectorAll<HTMLElement>("[data-diplo-card]")]
-                .find((element) => element.dataset.diploCard === focusCard);
-            (next ?? card)?.focus({ preventScroll: true });
-        }
-        this.el.querySelector<HTMLElement>(".diplo-body")!.scrollTop = this.scrollTop;
         this.syncDeclare();
         this.syncActionMenu();
     }
 
-    private requestTitle(request: DiplomaticRequest): string {
-        const from = this.engine.state.nations[request.from]?.name ?? t("panels.diplomacy.nation.fallback");
-        return REQUEST_TITLE[request.kind](from, request);
-    }
+    private readonly onPanelKeyDown = (event: KeyboardEvent): void => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const tab = (event.target as HTMLElement).closest<HTMLElement>("[data-action='diplo-target']");
+        if (!tab || !this.el.contains(tab)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.setTarget(Number(tab.dataset.nation));
+    };
 
-    private requestDetail(request: DiplomaticRequest): string {
-        return REQUEST_DETAIL[request.kind](this.engine.state, request);
-    }
-
-    /** Trade requests carry structured transfers; render them as coloured resource rows. */
-    private tradeRequestDetailHtml(request: DiplomaticRequest): string {
-        const give = request.tradeGive ?? [];
-        const receive = request.tradeReceive ?? [];
-        const lines: string[] = [];
-        if (request.tradeKind === "aid") {
-            lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.request.give")}</span>${transferList(receive, "out")}</div>`);
-        } else {
-            if (give.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.provides")}</span>${transferList(give, "in")}</div>`);
-            if (receive.length) lines.push(`<div class="trade-request-line"><span class="trade-side-label">${t("panels.diplomacy.trade.weProvide")}</span>${transferList(receive, "out")}</div>`);
-        }
-        lines.push(game`<p class="trade-request-note">${t("panels.diplomacy.trade.request.note", {
-            cadence: cadenceToken("monthly"), days: TRADE_AGREEMENT_DAYS,
-        })}</p>`);
-        return lines.join("");
-    }
-
-    /** Compact war / trade / vassal relationship strip between nation stats and 外交行动. */
-    private statusBarHtml(nationId: number): string {
-        const state = this.engine.state;
-        const nation = state.nations[nationId];
-        if (!nation) return "";
-        const enemies = state.nations.filter((other) => other.id !== nationId && isAtWar(state, nationId, other.id));
-        const partners = tradePartners(state, nationId);
-        const overlord = overlordOf(state, nationId);
-        const vassals = vassalsOf(state, nationId);
-
-        const rows: string[] = [];
-        if (enemies.length) {
-            const self = `<span class="diplo-status-flag" ${tooltipAttrs(
-                escapeGameText(nation.name),
-                escapeGameText(t("panels.diplomacy.status.war.all", {
-                    name: nation.name,
-                    enemies: enemies.map((enemy) => enemy.name).join(t("common.listSeparator")),
-                })),
-            )}>${nationFlagHtmlFor(state, nationId, 18)}</span>`;
-            const flags = enemies.map((enemy) => `<span class="diplo-status-flag" ${tooltipAttrs(
-                escapeGameText(enemy.name),
-                escapeGameText(t("panels.diplomacy.status.war.one", { name: nation.name, enemy: enemy.name })),
-            )}>${nationFlagHtmlFor(state, enemy.id, 18)}</span>`).join("");
-            rows.push(`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--war" aria-hidden="true" ${iconMaskStyle("war")}></span><span class="diplo-status-items">${self}${flags}</span></div>`);
-        }
-        if (partners.length) {
-            const flags = partners.map((partnerId) => {
-                const partner = state.nations[partnerId];
-                if (!partner) return "";
-                const kinds = tradeResourceKinds(state, nationId, partnerId);
-                const body = t("panels.diplomacy.status.trade", {
-                    name: nation.name, partner: partner.name, count: kinds.length, kinds: resourceNames(kinds),
-                });
-                return `<span class="diplo-status-flag" ${tooltipAttrs(escapeGameText(partner.name), escapeGameText(body))}>${nationFlagHtmlFor(state, partnerId, 18)}</span>`;
-            }).join("");
-            rows.push(`<div class="diplo-status-row"><span class="icon-glyph diplo-status-icon diplo-status-icon--trade" aria-hidden="true" ${iconMaskStyle("trade")}></span><span class="diplo-status-items">${flags}</span></div>`);
-        }
-        if (overlord >= 0 || vassals.length) {
-            const bits: string[] = [];
-            if (overlord >= 0) {
-                const lord = state.nations[overlord];
-                bits.push(`<span class="diplo-status-vassal">${vassalTypeIcon(state, nationId)}<span class="diplo-status-flag" ${tooltipAttrs(
-                    escapeGameText(lord?.name ?? t("panels.diplomacy.overlord.fallback")),
-                    escapeGameText(t("panels.diplomacy.status.vassal.of", {
-                        name: nation.name,
-                        lord: lord?.name ?? "?",
-                        type: VASSAL_PROFILES[vassalTypeOf(state, nationId) ?? "autonomous"].name,
-                    })),
-                )}>${nationFlagHtmlFor(state, overlord, 18)}</span></span>`);
-            }
-            for (const vassalId of vassals) {
-                const vassal = state.nations[vassalId];
-                if (!vassal) continue;
-                bits.push(`<span class="diplo-status-vassal">${vassalTypeIcon(state, vassalId)}<span class="diplo-status-flag" ${tooltipAttrs(
-                    escapeGameText(vassal.name),
-                    escapeGameText(t("panels.diplomacy.status.vassal.of", {
-                        name: vassal.name,
-                        lord: nation.name,
-                        type: VASSAL_PROFILES[vassalTypeOf(state, vassalId) ?? "autonomous"].name,
-                    })),
-                )}>${nationFlagHtmlFor(state, vassalId, 18)}</span></span>`);
-            }
-            rows.push(`<div class="diplo-status-row"><span class="diplo-status-items">${bits.join("")}</span></div>`);
-        }
-        return rows.length ? `<div class="diplo-status" aria-label="${t("panels.diplomacy.status.label")}">${rows.join("")}</div>` : "";
-    }
-
-    private requestsHtml(): string {
-        const state = this.engine.state;
-        const requests = state.diplomaticRequests.filter((request) => request.to === 0 && request.expiresDay > state.day);
-        if (!requests.length) return "";
-        const rows = requests.map((request) => {
-            const from = state.nations[request.from];
-            if (!from) return "";
-            return game`<div class="diplo-request" data-request-id="${request.id}">
-                <div class="diplo-request-head">${nationFlagHtmlFor(state, request.from, 20)}<b>${escapeHtml(this.requestTitle(request))}</b>
-                    <span class="diplo-request-days">${t("panels.diplomacy.time.remaining", { days: Math.max(0, request.expiresDay - state.day) })}</span></div>
-                <div class="diplo-request-body">${request.kind === "trade" ? this.tradeRequestDetailHtml(request) : escapeHtml(this.requestDetail(request))}</div>
-                <div class="diplo-request-actions">
-                    <button class="btn btn-primary" data-action="respond-request" data-request="${request.id}" data-accept="1" ${state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.request.accept")}</button>
-                    <button class="btn btn-outline" data-action="respond-request" data-request="${request.id}" data-accept="0" ${state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.request.reject")}</button>
-                </div>
-            </div>`;
-        }).join("");
-        return `<div class="diplo-requests"><div class="diplo-requests-head">${t("panels.diplomacy.request.head")}</div>${rows}</div>`;
-    }
-
-    /** Player-side vassal contract: independence, tribute and contract upgrade. */
-    private selfVassalHtml(): string {
-        const state = this.engine.state;
-        const overlord = overlordOf(state, 0);
-        if (overlord >= 0) {
-            const type = vassalTypeOf(state, 0) ?? "autonomous";
-            const profile = VASSAL_PROFILES[type];
-            const rate = tributeRateOf(state, 0);
-            const upgradeTarget = upgradeTargetOf(type);
-            const canUpgrade = canRequestUpgrade(state, 0);
-            const upgradeCooldown = requestCooldownDays(state, "upgrade", overlord);
-            let upgradeTip = "";
-            if (upgradeCooldown > 0) {
-                upgradeTip = tooltipAttrs(t("panels.diplomacy.upgrade.label"), proposalCooldownTip(upgradeCooldown));
-            } else if (upgradeTarget) {
-                upgradeTip = canUpgrade
-                    ? decisionTooltipAttrs(
-                        t("panels.diplomacy.upgrade.confirmBody", {
-                            lord: escapeGameText(state.nations[overlord]?.name ?? t("panels.diplomacy.overlord.fallback")),
-                            profile: VASSAL_PROFILES[upgradeTarget].name,
-                            cost: VASSAL_UPGRADE_COST,
-                        }),
-                        [{ decision: decideUpgrade(state, overlord, 0) }],
-                    )
-                    : tooltipAttrs(t("panels.diplomacy.upgrade.label"), t("panels.diplomacy.upgrade.requirement", {
-                        cost: VASSAL_UPGRADE_COST, profile: VASSAL_PROFILES[upgradeTarget].name,
-                    }));
-            }
-            const upgrade = upgradeTarget
-                ? `<button class="btn btn-outline${upgradeCooldown > 0 ? " cooldown" : ""}" data-action="request-upgrade" ${upgradeCooldown > 0 ? 'aria-disabled="true"' : canUpgrade ? "" : "disabled"} ${upgradeTip}>${t("panels.diplomacy.upgrade.label")}</button>`
-                : "";
-            const tributeControl = type === "cooperative"
-                ? `<div class="diplo-vassal-tribute"><span class="vassal-tribute-label">${t("panels.diplomacy.vassal.tributeLabel")}</span> ${Math.round(rate * 100)}%
-                    <button class="btn btn-outline" data-action="tribute-rate" data-delta="-0.05" ${rate <= profile.resourceMin + 1e-9 ? "disabled" : ""}>-5%</button>
-                    <button class="btn btn-outline" data-action="tribute-rate" data-delta="0.05" ${rate >= profile.resourceMax - 1e-9 ? "disabled" : ""}>+5%</button></div>`
-                : "";
-            return `<div class="diplo-vassal-self">
-                <div class="diplo-vassal-head">${nationFlagHtmlFor(state, overlord, 22)}
-                    <b>${t("panels.diplomacy.vassal.vassalOf", { name: escapeHtml(state.nations[overlord].name) })}</b>
-                    ${vassalTypeIcon(state, 0)}
-                    ${vassalIndependenceIcon(state, 0)}
-                    ${helpButton({ title: t("panels.diplomacy.vassal.help.title"), body: VASSAL_HELP_BODY })}
-                </div>
-                ${tributeControl}
-                ${upgrade ? `<div class="diplo-button-row">${upgrade}</div>` : ""}
-            </div>`;
-        }
-        const vassals = vassalsOf(state, 0);
-        if (!vassals.length) return "";
-        const rows = vassals.map((id) => `
-            <div class="diplo-vassal-row">
-                ${nationFlagHtmlFor(state, id, 20)}
-                <span class="diplo-vassal-name">${escapeHtml(state.nations[id].name)}</span>
-                ${vassalTypeIcon(state, id)}
-                ${vassalIndependenceIcon(state, id)}
-                <button class="btn btn-outline" data-action="diplo-target" data-nation="${id}" data-diplo-focus="vassal-view-${id}" ${tooltipAttrs(t("panels.diplomacy.vassal.view"), t("panels.diplomacy.vassal.viewTip", { name: state.nations[id].name }))}>${t("panels.diplomacy.vassal.view")}</button>
-            </div>`).join("");
-        return `<div class="diplo-vassal-self">
-            <div class="diplo-vassal-head">
-                <b>${t("panels.diplomacy.vassal.owned", { count: vassals.length })}</b>
-                ${helpButton({ title: t("panels.diplomacy.vassal.help.title"), body: VASSAL_HELP_BODY })}
-                <button type="button" class="diplo-vassal-caret" data-vassal-collapse data-diplo-focus="vassal-collapse" aria-label="${this.vassalListCollapsed ? t("panels.diplomacy.vassal.expand") : t("panels.diplomacy.vassal.collapse")}">${this.vassalListCollapsed ? "▸" : "▾"}</button>
-            </div>
-            <div class="diplo-vassal-list${this.vassalListCollapsed ? " hidden" : ""}">${rows}</div>
-        </div>`;
-    }
-
-    /** Player-side alliance: current camp or the create button. */
-    private selfAllianceHtml(): string {
-        const state = this.engine.state;
-        const alliance = allianceOf(state, 0);
-        if (alliance) {
-            const leader = state.nations[alliance.leader];
-            const members = alliance.members.map((id) => state.nations[id]?.name ?? "?").join(t("common.listSeparator"));
-            return `<div class="diplo-alliance">
-                <div class="diplo-alliance-head"><b>${t("panels.diplomacy.alliance.label")}</b><span class="status-pill ready">${t("panels.diplomacy.alliance.memberCount", { count: alliance.members.length })}</span>${helpButton({ title: t("panels.diplomacy.alliance.help.title"), body: ALLIANCE_HELP_BODY })}</div>
-                <p class="diplo-note">${t("panels.diplomacy.alliance.summary", { leader: escapeHtml(leader?.name ?? "?"), members: escapeHtml(members) })}</p>
-                <button class="btn btn-outline" data-action="leave-alliance" ${tooltipAttrs(t("panels.diplomacy.alliance.leave"), t("panels.diplomacy.alliance.leave.tip", { days: REQUEST_COOLDOWN_DAYS }))}>${t("panels.diplomacy.alliance.leave")}</button>
-            </div>`;
-        }
-        if (!canCreateAlliance(state, 0)) return "";
-        return `<div class="diplo-alliance">
-            <div class="diplo-alliance-head"><b>${t("panels.diplomacy.alliance.none")}</b>${helpButton({ title: t("panels.diplomacy.alliance.help.title"), body: ALLIANCE_HELP_BODY })}</div>
-            <p class="diplo-note">${t("panels.diplomacy.alliance.create.note", { cost: ALLIANCE_CREATE_COST })}</p>
-            <button class="btn btn-outline" data-action="create-alliance" ${tooltipAttrs(t("panels.diplomacy.alliance.create.label"), t("panels.diplomacy.alliance.create.tip", { cost: ALLIANCE_CREATE_COST }))}>${t("panels.diplomacy.alliance.create.label")}</button>
-        </div>`;
-    }
-
-
-    private relationsHtml(): string {
-        const state = this.engine.state;
-        const others = state.nations.filter((nation) => !nation.isPlayer);
-        const conquered = others.filter((nation) => !nation.alive).length;
-        const wars = others.filter((nation) => nation.alive && isAtWar(state, 0, nation.id)).length;
-        const ready = state.diplomaticActions.filter((action) => action.nation === 0
-            && state.day >= action.readyDay && state.day < action.expiresDay
-            && canDeclareWar(state, 0, action.target, action.id)).length;
-        const tabs = others.map((nation) => {
-            const selected = this.target === nation.id;
-            const war = nation.alive && isAtWar(state, 0, nation.id);
-            const truce = nation.alive && !war && truceDays(state, 0, nation.id) > 0;
-            const status = !nation.alive ? t("panels.diplomacy.status.dead")
-                : war ? t("panels.diplomacy.status.atWar")
-                    : truce ? t("panels.diplomacy.status.truce") : t("panels.diplomacy.status.ai");
-            const controlledStates = state.states.filter((region) =>
-                region.provinces.some((site) => state.provinces[site].owner === nation.id)).length;
-            const tip = t("panels.diplomacy.nation.tip", {
-                status,
-                tendency: tendencyProfileOf(nation.tendency).name,
-                armies: nationArmyCount(state, nation.id),
-                states: controlledStates,
-                provinces: nationProvinceCount(state, nation.id),
-            });
-            const color = nationDisplayColor(state, nation.id);
-            return `<button class="diplo-swatch${selected ? " selected" : ""}${nation.alive ? "" : " dead"}${war ? " war" : ""}${truce ? " truce" : ""}" role="tab" aria-selected="${selected}"
-                aria-label="${escapeHtml(t("panels.diplomacy.nation.swatchLabel", { name: nation.name, status }))}" style="--pc:${escapeHtml(color)}"
-                data-action="diplo-target" data-nation="${nation.id}" data-diplo-focus="nation-${nation.id}"
-                ${tooltipAttrs(escapeGameText(nation.name), tip)}>${nationFlagHtmlFor(state, nation.id, 22)}</button>`;
-        }).join("");
-        return `
-            <div class="diplo-overview-stats">
-                <span class="status-pill ready">${t("panels.diplomacy.overview.annexed", { count: conquered, total: others.length })}</span>
-                <span class="status-pill ${wars ? "war" : "idle"}">${t("panels.diplomacy.overview.wars", { count: wars })}</span>
-                <span class="status-pill ${ready ? "ready" : "idle"}">${t("panels.diplomacy.overview.ready", { count: ready })}</span>
-            </div>
-            ${this.requestsHtml()}
-            ${this.selfVassalHtml()}
-            ${this.selfAllianceHtml()}
-            <div class="diplo-swatches" role="tablist" aria-label="${t("panels.diplomacy.overview.targets")}">${tabs}</div>
-            ${state.winner !== null ? `<p class="diplo-requirement">${t("panels.diplomacy.overview.ended")}</p>` : ""}
-            ${this.target !== null ? this.nationHtml(this.target) : `<p class="diplo-note">${t("panels.diplomacy.overview.noTarget")}</p>`}`;
-    }
-
-    private stateName(stateId: number | null): string {
-        return stateId === null ? t("panels.diplomacy.state.unspecified")
-            : this.engine.state.states[stateId]?.name ?? t("panels.diplomacy.state.invalid");
-    }
-
-    private actionLabel(action: DiplomaticAction): string {
-        const scope = action.kind === "annex"
-            ? this.engine.state.nations[action.target]?.name ?? t("panels.diplomacy.nation.targetFallback")
-            : this.stateName(action.stateId);
-        return t("panels.diplomacy.action.fullLabel", { label: DIPLOMATIC_PROFILES[action.kind].label, scope });
-    }
-
-    private projectsHtml(target: number): string {
-        const state = this.engine.state;
-        const projects = state.diplomaticActions.filter((action) => action.nation === 0 && action.target === target);
-        if (!projects.length) return "";
-        const chips = projects.map((action) => {
-            const preparing = state.day < action.readyDay;
-            const expired = state.day >= action.expiresDay;
-            const ready = !preparing && !expired;
-            const short = action.kind === "annex"
-                ? t("panels.diplomacy.project.annex")
-                : t("panels.diplomacy.project.conquest", { name: this.stateName(action.stateId) });
-            const time = expired ? t("panels.diplomacy.project.expired")
-                : preparing ? t("panels.diplomacy.time.remaining", { days: action.readyDay - state.day })
-                    : t("panels.diplomacy.time.readyRemaining", { days: action.expiresDay - state.day });
-            const status = expired ? t("panels.diplomacy.project.tip.expired")
-                : preparing ? t("panels.diplomacy.project.tip.preparing")
-                    : t("panels.diplomacy.project.tip.ready");
-            const tip = t("panels.diplomacy.project.tip", {
-                label: this.actionLabel(action), status,
-                cancelHint: t("panels.diplomacy.project.cancelHint"),
-            });
-            return `<span class="diplo-project-chip${ready ? " ready" : ""}${expired ? " expired" : ""}" ${tooltipAttrs(escapeGameText(short), tip)}>${escapeHtml(short)} · ${time}</span>`;
-        }).join("");
-        return `<div class="diplo-projects">${chips}</div>`;
-    }
-
-    /** Cooldown wins over the normal tooltip; the button stays visible but inert. */
-    private requestGate(
-        kind: DiplomaticRequestKind, nationId: number, normalTip: string,
-    ): { readonly blocked: boolean; readonly attrs: string; readonly tip: string } {
-        const days = requestCooldownDays(this.engine.state, kind, nationId);
-        return days > 0
-            ? {
-                blocked: true,
-                attrs: 'aria-disabled="true"',
-                tip: tooltipAttrs(t("panels.diplomacy.request.tooFrequent"), proposalCooldownTip(days)),
-            }
-            : { blocked: false, attrs: "", tip: normalTip };
-    }
-
-    /** Aid tooltip: qualitative reasons plus the verdict from the request's own decision function. */
-    private aidTooltipAttrs(nationId: number): string {
-        const state = this.engine.state;
-        const nation = state.nations[nationId];
-        const overlord = overlordOf(state, 0);
-        const fallback = t("panels.diplomacy.overlord.fallback");
-        const overlordName = overlord >= 0 ? state.nations[overlord]?.name ?? fallback : fallback;
-        const description = t("panels.diplomacy.aid.tip", {
-            nation: escapeGameText(nation.name),
-            overlord: escapeGameText(overlordName),
-            days: REQUEST_COOLDOWN_DAYS,
-        });
-        return decisionTooltipAttrs(description, [{ decision: decideAid(state, 0, nationId) }]);
-    }
-
-    private nationHtml(nationId: number): string {
-        const state = this.engine.state;
-        const nation = state.nations[nationId];
-        const atWar = isAtWar(state, 0, nationId);
-        const hasOffer = state.peaceOffers.includes(nationId);
-        const truce = truceDays(state, 0, nationId);
-        const status = !nation.alive ? t("panels.diplomacy.status.dead")
-            : atWar ? t("panels.diplomacy.status.atWarDays", { days: warDuration(state, 0, nationId) })
-                : truce > 0 ? t("panels.diplomacy.status.truceDays", { days: truce })
-                    : t("panels.diplomacy.status.ai");
-        const summary = nationStats(state, nationId);
-        const head = `<div class="diplo-head">${nationFlagHtmlFor(state, nation.id, 26)}<span class="diplo-name">${escapeHtml(nation.name)}</span><span class="status-pill ${!nation.alive ? "dead" : atWar ? "war" : "idle"}">${status}</span></div>`;
-        const stats = nationOverviewBody(state, summary, " diplo-kv");
-        const base = `${head}${stats}<div class="diplo-divider"></div>`;
-        if (!nation.alive) return `<div class="diplo-row dead diplo-card" data-diplo-card="${nationId}" tabindex="-1">${base}${this.projectsHtml(nationId)}</div>`;
-
-        const ready = this.readyActions(nationId);
-        const claimCount = state.claims.filter((claim) => claim.nation === 0 &&
-            state.states[claim.stateId]?.provinces.some((site) => state.provinces[site].legalOwner === nationId)).length;
-        const declareTip = ready.length
-            ? t("panels.diplomacy.declare.tip.ready")
-            : truce > 0 ? t("panels.diplomacy.declare.tip.truce", { days: truce })
-                : t("panels.diplomacy.declare.tip.none", { count: claimCount });
-        const declareBtn = `<button class="btn btn-primary" data-action="declare-open" data-nation="${nationId}" data-diplo-focus="declare-${nationId}" ${ready.length && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.declare.label"), declareTip)}>${t("panels.diplomacy.declare.label")}</button>`;
-
-        const preparing = state.diplomaticActions.some((action) => action.nation === 0 && action.target === nationId && state.day < action.readyDay);
-        const craftLabel = preparing ? t("panels.diplomacy.craft.stop") : t("panels.diplomacy.craft.start");
-        const craftTip = preparing
-            ? t("panels.diplomacy.craft.tip.stop")
-            : t("panels.diplomacy.craft.tip.start");
-        const craftBtn = `<button class="btn btn-outline" data-action="diplo-menu-open" data-nation="${nationId}" data-diplo-focus="menu-${nationId}" ${atWar || state.winner !== null ? "disabled" : ""} ${tooltipAttrs(craftLabel, atWar ? t("panels.diplomacy.craft.tip.atWar") : craftTip)}>${craftLabel}</button>`;
-
-        let goalHtml = "";
-        const actionButtons: string[] = [craftBtn];
-        if (atWar) {
-            const war = state.wars.find((item) => (item.aggressor === 0 && item.defender === nationId) || (item.aggressor === nationId && item.defender === 0));
-            if (war) {
-                const progress = warGoalProgress(state, war);
-                const ours = war.aggressor === 0;
-                const goal = war.goal === "annex" ? t("panels.diplomacy.goal.annex")
-                    : t("panels.diplomacy.goal.conquest", { name: this.stateName(war.stateId) });
-                const requirement = war.goal === "annex"
-                    ? t("panels.diplomacy.goal.requirement.annex")
-                    : t("panels.diplomacy.goal.requirement.conquest");
-                goalHtml = `<div class="diplo-goal" ${tooltipAttrs(t("panels.diplomacy.goal.title"), escapeGameText(requirement))}>${t("panels.diplomacy.goal.summary", {
-                    side: ours ? t("panels.diplomacy.goal.ours") : t("panels.diplomacy.goal.theirs"),
-                    goal: escapeHtml(goal), held: progress.held, total: progress.total,
-                    enforceNote: progress.canEnforce ? t("panels.diplomacy.goal.enforceNote") : "",
-                })}</div>`;
-                if (ours) actionButtons.push(`<button class="btn btn-outline" data-action="enforce-war-goal" data-nation="${nationId}" data-diplo-focus="enforce-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.goal.enforce.label"), t("panels.diplomacy.goal.enforce.tip"))}>${t("panels.diplomacy.goal.enforce.button")}</button>`);
-                if (ours && war.goal === "annex") actionButtons.push(`<button class="btn btn-outline" data-action="enforce-vassal" data-nation="${nationId}" data-diplo-focus="enforce-vassal-${nationId}" ${progress.canEnforce && state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.goal.vassalize.label"), t("panels.diplomacy.goal.vassalize.tip"))}>${t("panels.diplomacy.goal.vassalize.label")}</button>`);
-            }
-            actionButtons.push(hasOffer
-                ? `<button class="btn btn-outline" data-action="accept-peace" data-nation="${nationId}" data-diplo-focus="accept-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.peace.accept.label"), t("panels.diplomacy.peace.accept.tip"))}>${t("panels.diplomacy.peace.accept.label")}</button><button class="btn btn-outline" data-action="reject-peace" data-nation="${nationId}" data-diplo-focus="reject-${nationId}" ${state.winner === null ? "" : "disabled"} ${tooltipAttrs(t("panels.diplomacy.peace.reject.label"), t("panels.diplomacy.peace.reject.tip"))}>${t("panels.diplomacy.peace.reject.button")}</button>`
-                : `<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" ${state.winner === null ? "" : "disabled"} ${decisionTooltipAttrs(t("panels.diplomacy.peace.propose.white", { name: escapeGameText(nation.name) }), [{ decision: decidePeace(state, nationId, 0) }])}>${t("panels.diplomacy.peace.propose.label")}</button>`);
-        } else {
-            actionButtons.push(`<button class="btn btn-outline" data-action="propose-peace" data-nation="${nationId}" data-diplo-focus="peace-${nationId}" disabled ${tooltipAttrs(t("panels.diplomacy.peace.propose.label"), t("panels.diplomacy.peace.propose.disabledTip"))}>${t("panels.diplomacy.peace.propose.label")}</button>`);
-            actionButtons.push(declareBtn);
-        }
-        // All vassal and alliance actions share the card's single 外交行动 row.
-        actionButtons.push(...this.vassalActionsHtml(nationId));
-        // A vassal's foreign-aid request targets the nation on this card. Only
-        // valid helpers qualify — the overlord is never a candidate.
-        if (canRequestAid(state, 0) && aidCandidates(state, 0).includes(nationId)) {
-            const gate = this.requestGate("aid", nationId, this.aidTooltipAttrs(nationId));
-            actionButtons.push(`<button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="request-aid" data-nation="${nationId}" ${gate.blocked ? gate.attrs : state.winner === null ? "" : "disabled"} ${gate.tip}>${t("panels.diplomacy.aid.label")}</button>`);
-        }
-
-        return `<div class="diplo-row diplo-card${hasOffer ? " offer" : ""}" data-diplo-card="${nationId}" tabindex="-1">
-            ${base}
-            ${this.statusBarHtml(nationId)}
-            <div class="diplo-actions-head">${t("panels.diplomacy.actions.head")}</div>
-            <div class="diplo-button-row">${actionButtons.join("")}</div>
-            ${goalHtml}${this.projectsHtml(nationId)}
-            ${this.allianceActionsHtml(nationId)}
-        </div>`;
-    }
-
-    /** Vassal actions merged into the card's 外交行动 row — no separate section. */
-    private vassalActionsHtml(nationId: number): string[] {
-        const state = this.engine.state;
-        if (state.winner !== null) return [];
-        const overlord = overlordOf(state, 0);
-        const targetOverlord = overlordOf(state, nationId);
-        const type = vassalTypeOf(state, nationId);
-
-        if (targetOverlord === 0) {
-            const actions = [
-                `<button class="btn btn-outline" data-action="release-vassal" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.release.label"), t("panels.diplomacy.vassal.release.tip"))}>${t("panels.diplomacy.vassal.release.label")}</button>`,
-                `<button class="btn btn-outline" data-action="vassal-type-open" data-nation="${nationId}" data-type="${type ?? ""}" ${tooltipAttrs(t("panels.diplomacy.vassal.changeType.label"), t("panels.diplomacy.vassal.changeType.tip"))}>${t("panels.diplomacy.vassal.changeType.label")}</button>`,
-            ];
-            if (canAnnexVassal(state, 0, nationId)) {
-                actions.push(`<button class="btn btn-outline" data-action="annex-vassal" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.annex.label"), t("panels.diplomacy.vassal.annex.tip"))}>${t("panels.diplomacy.vassal.annex.label")}</button>`);
-            }
-            return actions;
-        }
-        if (overlord === nationId || targetOverlord >= 0 || vassalsOf(state, nationId).length > 0 || overlord >= 0) return [];
-        const canOffer = canBecomeVassal(state, 0, nationId, "cooperative");
-        const canDemand = canBecomeVassal(state, nationId, 0, "oppressive") &&
-            nationPower(state, 0) >= nationPower(state, nationId) * 1.5;
-        const actions: string[] = [];
-        if (canOffer) {
-            const cooldown = requestCooldownDays(state, "vassalize", nationId);
-            if (cooldown > 0) {
-                actions.push(`<button class="btn btn-outline cooldown" data-action="vassal-request" data-nation="${nationId}" aria-disabled="true" ${tooltipAttrs(t("panels.diplomacy.vassal.offer.label"), proposalCooldownTip(cooldown))}>${t("panels.diplomacy.vassal.offer.button")}</button>`);
-            } else {
-                const offerTip = decisionTooltipAttrs(
-                    t("panels.diplomacy.vassal.offer.tip", { name: escapeGameText(state.nations[nationId].name) }),
-                    [
-                        { title: t("panels.diplomacy.vassal.type.cooperative"), decision: decideVassalOffer(state, nationId, 0, "cooperative") },
-                        { title: t("panels.diplomacy.vassal.type.autonomous"), decision: decideVassalOffer(state, nationId, 0, "autonomous") },
-                    ],
-                );
-                actions.push(`<details class="diplo-submenu">
-                    <summary ${offerTip}>${t("panels.diplomacy.vassal.offer.button")}</summary>
-                    <div class="diplo-submenu-body">
-                        <label class="diplo-radio"><input type="radio" name="vassal-type-${nationId}" value="cooperative" checked />
-                            <span><b>${t("panels.diplomacy.vassal.type.cooperative")}</b>${t("panels.diplomacy.vassal.offer.cooperativeNote")}</span></label>
-                        <label class="diplo-radio"><input type="radio" name="vassal-type-${nationId}" value="autonomous" />
-                            <span><b>${t("panels.diplomacy.vassal.type.autonomous")}</b>${t("panels.diplomacy.vassal.offer.autonomousNote")}</span></label>
-                        <button class="btn btn-primary" data-action="vassal-request" data-nation="${nationId}" ${tooltipAttrs(t("panels.diplomacy.vassal.offer.label"), t("panels.diplomacy.vassal.offer.submitTip"))}>${t("panels.diplomacy.vassal.offer.submit")}</button>
-                    </div>
-                </details>`);
-            }
-        }
-        if (canDemand) {
-            const cooldown = requestCooldownDays(state, "vassalize", nationId);
-            const demandTip = cooldown > 0
-                ? tooltipAttrs(t("panels.diplomacy.vassal.demand.label"), proposalCooldownTip(cooldown))
-                : decisionTooltipAttrs(
-                    t("panels.diplomacy.vassal.demand.tip", { name: escapeGameText(state.nations[nationId].name) }),
-                    [{ decision: decideVassalDemand(state, 0, nationId) }],
-                );
-            actions.push(`<button class="btn btn-outline${cooldown > 0 ? " cooldown" : ""}" data-action="vassal-demand" data-nation="${nationId}" ${cooldown > 0 ? 'aria-disabled="true"' : ""} ${demandTip}>${t("panels.diplomacy.vassal.demand.label")}</button>`);
-        }
-        return actions;
-    }
-
-    private allianceActionsHtml(nationId: number): string {
-        const state = this.engine.state;
-        if (state.winner !== null) return "";
-        const myAlliance = allianceOf(state, 0);
-        const targetAlliance = allianceOf(state, nationId);
-        if (myAlliance && targetAlliance && myAlliance.id === targetAlliance.id) {
-            return `<p class="diplo-note">${t("panels.diplomacy.alliance.allyNote")}</p>`;
-        }
-        if (myAlliance && myAlliance.leader === 0 && canInviteToAlliance(state, 0, nationId)) {
-            const inviteTip = decisionTooltipAttrs(
-                t("panels.diplomacy.alliance.invite.tip", { name: escapeGameText(state.nations[nationId].name) }),
-                [{ decision: decideAllianceInvite(state, 0, nationId) }],
-            );
-            const gate = this.requestGate("alliance", nationId, inviteTip);
-            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">${t("panels.diplomacy.alliance.section")}</div>
-                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="invite-alliance" data-nation="${nationId}" ${gate.attrs} ${gate.tip}>${t("panels.diplomacy.alliance.invite.label")}</button>
-            </div>`;
-        }
-        if (!myAlliance && targetAlliance && overlordOf(state, 0) < 0) {
-            const leader = state.nations[targetAlliance.leader];
-            const joinTip = decisionTooltipAttrs(
-                t("panels.diplomacy.alliance.join.tip", {
-                    leader: escapeGameText(leader?.name ?? t("panels.diplomacy.alliance.leaderFallback")),
-                    days: REQUEST_COOLDOWN_DAYS,
-                }),
-                [{ decision: decideJoinRequest(state, targetAlliance.leader, 0) }],
-            );
-            const gate = this.requestGate("alliance", targetAlliance.leader, joinTip);
-            return `<div class="diplo-alliance-section"><div class="diplo-actions-head">${t("panels.diplomacy.alliance.section")}</div>
-                <button class="btn btn-outline${gate.blocked ? " cooldown" : ""}" data-action="join-alliance" data-leader="${targetAlliance.leader}" ${gate.attrs} ${gate.tip}>${t("panels.diplomacy.alliance.join.label")}</button>
-            </div>`;
-        }
-        return "";
-    }
-
-    private readyActions(nationId: number): DiplomaticAction[] {
-        const state = this.engine.state;
-        return state.diplomaticActions.filter((action) => action.nation === 0 && action.target === nationId
-            && state.day >= action.readyDay && state.day < action.expiresDay
-            && canDeclareWar(state, 0, nationId, action.id));
-    }
+    private readonly onPanelClick = (event: MouseEvent): void => {
+        if (!this.el.contains(event.target as Node)) return;
+    };
 
     /* ---- centered diplomatic-action menu ---- */
 
@@ -710,12 +718,14 @@ export class DiplomacyPanel {
         this.closeActionMenu();
         const nation = this.engine.state.nations[nationId];
         if (!nation || nation.isPlayer || !nation.alive) return;
+        const text = diplomacyTexts();
         this.menuNation = nationId;
         this.menuCancels.clear();
         this.menuCraft = null;
         const scrim = document.createElement("div");
         scrim.className = "diplo-menu-scrim";
-        setGameHtml(scrim, `<div class="diplo-menu" role="dialog" aria-label="${t("panels.diplomacy.actions.dialogLabel", { name: escapeHtml(nation.name) })}" tabindex="-1"></div>`);
+        const label = text.actionsDialogLabel(nation.name);
+        setGameHtml(scrim, html`<div class="diplo-menu" role="dialog" aria-label="${label}" tabindex="-1"></div>`);
         this.hud.appendChild(scrim);
         this.menuEl = scrim;
         scrim.addEventListener("click", this.onMenuClick);
@@ -764,24 +774,10 @@ export class DiplomacyPanel {
         this.menuEl?.querySelector<HTMLInputElement>(key)?.focus({ preventScroll: true });
     };
 
-    /** Preview authorization as if the marked cancellations (and their refunds) had already been applied. */
-    private craftAllowed(kind: DiplomaticActionKind, target: number, stateId: number | null): boolean {
-        const state = this.engine.state;
-        const refund = state.diplomaticActions.reduce(
-            (sum, action) => sum + (this.menuCancels.has(action.id) ? cancelRefund(state, action) : 0), 0);
-        const nations = state.nations.slice();
-        nations[0] = { ...nations[0], politicalPower: nations[0].politicalPower + refund };
-        const preview = {
-            ...state,
-            nations,
-            diplomaticActions: state.diplomaticActions.filter((action) => !this.menuCancels.has(action.id)),
-        };
-        return canPrepareDiplomaticAction(preview, 0, kind, target, stateId);
-    }
-
     private fillActionMenu(): void {
         if (!this.menuEl || this.menuNation === null) return;
         const state = this.engine.state;
+        const text = diplomacyTexts();
         const nationId = this.menuNation;
         const nation = state.nations[nationId];
         const card = this.menuEl.querySelector<HTMLElement>(".diplo-menu");
@@ -795,16 +791,16 @@ export class DiplomacyPanel {
             const expired = state.day >= action.expiresDay;
             const refund = cancelRefund(state, action);
             const spent = action.upkeepSpent ?? 0;
-            const time = expired ? t("panels.diplomacy.project.expired")
-                : preparing ? t("panels.diplomacy.time.preparingRemaining", { days: action.readyDay - state.day })
-                    : t("panels.diplomacy.time.readyRemaining", { days: action.expiresDay - state.day });
-            const refundNote = expired ? t("panels.diplomacy.refund.clear")
-                : preparing ? t("panels.diplomacy.refund.cancel", { refund, spent })
-                    : t("panels.diplomacy.refund.abandon");
+            const time = expired ? text.projectExpired
+                : preparing ? text.timePreparingRemaining(action.readyDay - state.day)
+                    : text.timeReadyRemaining(action.expiresDay - state.day);
+            const refundNote = expired ? text.refundClear
+                : preparing ? text.refundCancel(refund, spent) : text.refundAbandon;
             const checked = this.menuCancels.has(action.id);
-            return `<label class="diplo-menu-row">
-                <input type="checkbox" data-role="cancel" data-id="${action.id}" ${checked ? "checked" : ""} ${state.winner !== null ? "disabled" : ""} />
-                <span class="diplo-menu-main"><b>${escapeHtml(this.actionLabel(action))}</b><span>${time} · ${refundNote}</span></span>
+            const label = actionLabel(state, action, text);
+            return html`<label class="diplo-menu-row">
+                <input type="checkbox" data-role="cancel" data-id="${action.id}" ${rawHtml(checked ? "checked" : "")} ${rawHtml(state.winner !== null ? " disabled" : "")} />
+                <span class="diplo-menu-main"><b>${label}</b><span>${time} · ${refundNote}</span></span>
             </label>`;
         }).join("");
 
@@ -812,52 +808,62 @@ export class DiplomacyPanel {
             state.states[claim.stateId]?.provinces.some((site) => state.provinces[site].legalOwner === nationId));
         const craftRows = claims.map((claim) => {
             const region = state.states[claim.stateId];
-            const allowed = !atWar && this.craftAllowed("conquest", nationId, region.id);
+            const allowed = !atWar && craftAllowed(state, this.menuCancels, "conquest", nationId, region.id);
             const picked = this.menuCraft?.kind === "conquest" && this.menuCraft.stateId === region.id;
             const profile = DIPLOMATIC_PROFILES.conquest;
-            return game`<label class="diplo-menu-row">
-                <input type="checkbox" data-role="craft" data-kind="conquest" data-state="${region.id}" ${picked ? "checked" : ""} ${allowed ? "" : "disabled"} />
-                <span class="diplo-menu-main"><b>${t("panels.diplomacy.craft.conquest", { name: escapeHtml(region.name) })}</b><span>${t("panels.diplomacy.craft.cost", { cost: profile.cost, days: profile.days, upkeep: profile.upkeep })}</span></span>
+            const label = text.craftConquest(region.name);
+            const cost = text.craftCost(profile.cost, profile.days, profile.upkeep);
+            return html`<label class="diplo-menu-row">
+                <input type="checkbox" data-role="craft" data-kind="conquest" data-state="${region.id}" ${rawHtml(picked ? "checked" : "")} ${rawHtml(allowed ? "" : " disabled")} />
+                <span class="diplo-menu-main"><b>${label}</b><span>${cost}</span></span>
             </label>`;
         }).join("");
-        const annexAllowed = !atWar && this.craftAllowed("annex", nationId, null);
+        const annexAllowed = !atWar && craftAllowed(state, this.menuCancels, "annex", nationId, null);
         const annexPicked = this.menuCraft?.kind === "annex";
         const annexProfile = DIPLOMATIC_PROFILES.annex;
-        const annexRow = game`<label class="diplo-menu-row">
-            <input type="checkbox" data-role="craft" data-kind="annex" ${annexPicked ? "checked" : ""} ${annexAllowed ? "" : "disabled"} />
-            <span class="diplo-menu-main"><b>${t("panels.diplomacy.craft.annex", { name: escapeHtml(nation?.name ?? "?") })}</b><span>${t("panels.diplomacy.craft.costAnnex", { cost: annexProfile.cost, days: annexProfile.days, upkeep: annexProfile.upkeep })}</span></span>
+        const annexLabel = text.craftAnnex(nation?.name ?? "?");
+        const annexCost = text.craftCostAnnex(annexProfile.cost, annexProfile.days, annexProfile.upkeep);
+        const annexRow = html`<label class="diplo-menu-row">
+            <input type="checkbox" data-role="craft" data-kind="annex" ${rawHtml(annexPicked ? "checked" : "")} ${rawHtml(annexAllowed ? "" : " disabled")} />
+            <span class="diplo-menu-main"><b>${annexLabel}</b><span>${annexCost}</span></span>
         </label>`;
 
-        const craftBlockReason = atWar ? t("panels.diplomacy.craft.block.war")
-            : state.winner !== null ? t("panels.diplomacy.craft.block.ended")
+        const craftBlockReason = atWar ? text.craftBlockWar
+            : state.winner !== null ? text.craftBlockEnded
                 : projects.some((action) => state.day < action.readyDay && !this.menuCancels.has(action.id))
-                    ? t("panels.diplomacy.craft.block.busy")
-                    : "";
+                    ? text.craftBlockBusy : "";
         const delta = (this.menuCraft ? -DIPLOMATIC_PROFILES[this.menuCraft.kind].cost : 0)
             + [...this.menuCancels].reduce((sum, id) => {
                 const action = projects.find((item) => item.id === id);
                 return sum + (action ? cancelRefund(state, action) : 0);
             }, 0);
         const changed = this.menuCancels.size > 0 || this.menuCraft !== null;
-
-        setGameHtml(card, `
-            <div class="diplo-menu-head"><span>${t("panels.diplomacy.actions.dialogLabel", { name: escapeHtml(nation?.name ?? "?") })}</span><button class="diplo-menu-x" data-menu-close aria-label="${t("panels.diplomacy.menu.close")}">×</button></div>
-            <p class="diplo-menu-note">${t("panels.diplomacy.menu.note")}</p>
-            <div class="diplo-menu-section">${t("panels.diplomacy.menu.section.current")}</div>
-            ${projectRows || `<p class="diplo-menu-empty">${t("panels.diplomacy.menu.empty.current")}</p>`}
-            <div class="diplo-menu-section">${t("panels.diplomacy.menu.section.new")}</div>
-            ${craftBlockReason ? `<p class="diplo-menu-empty">${escapeHtml(craftBlockReason)}</p>` : ""}
-            ${craftRows || `<p class="diplo-menu-empty">${t("panels.diplomacy.menu.empty.claims")}</p>`}
-            ${annexRow}
+        const dialogLabel = text.actionsDialogLabel(nation?.name ?? "?");
+        const closeLabel = text.menuClose;
+        const deltaText = text.menuDelta(delta > 0 ? "+" : "", delta);
+        const confirmEnabled = changed && state.winner === null ? "" : " disabled";
+        const emptyCurrent = html`<p class="diplo-menu-empty">${text.menuEmptyCurrent}</p>`;
+        const emptyClaims = html`<p class="diplo-menu-empty">${text.menuEmptyClaims}</p>`;
+        const blockReason = craftBlockReason ? html`<p class="diplo-menu-empty">${craftBlockReason}</p>` : "";
+        setGameHtml(card, html`
+            <div class="diplo-menu-head"><span>${dialogLabel}</span><button class="diplo-menu-x" data-menu-close aria-label="${closeLabel}">×</button></div>
+            <p class="diplo-menu-note">${text.menuNote}</p>
+            <div class="diplo-menu-section">${text.menuSectionCurrent}</div>
+            ${rawHtml(projectRows || emptyCurrent)}
+            <div class="diplo-menu-section">${text.menuSectionNew}</div>
+            ${rawHtml(blockReason)}
+            ${rawHtml(craftRows || emptyClaims)}
+            ${rawHtml(annexRow)}
             <div class="diplo-menu-foot">
-                <span class="diplo-menu-delta ${delta > 0 ? "pos" : delta < 0 ? "neg" : ""}">${t("panels.diplomacy.menu.delta", { sign: delta > 0 ? "+" : "", amount: delta })}</span>
-                <button class="btn btn-primary" data-menu-confirm ${changed && state.winner === null ? "" : "disabled"}>${t("panels.diplomacy.menu.confirm")}</button>
-                <button class="btn" data-menu-close>${t("panels.diplomacy.menu.cancel")}</button>
+                <span class="diplo-menu-delta ${delta > 0 ? "pos" : delta < 0 ? "neg" : ""}">${deltaText}</span>
+                <button class="btn btn-primary" data-menu-confirm ${rawHtml(confirmEnabled)}>${text.menuConfirm}</button>
+                <button class="btn" data-menu-close>${text.menuCancel}</button>
             </div>`);
     }
 
     private confirmActionMenu(): void {
         if (this.menuNation === null) return;
+        const text = diplomacyTexts();
         const nationId = this.menuNation;
         let cancelled = 0;
         let crafted = 0;
@@ -865,9 +871,9 @@ export class DiplomacyPanel {
         if (this.menuCraft && this.engine.prepareDiplomaticAction(this.menuCraft.kind, nationId, this.menuCraft.stateId)) crafted++;
         this.hooks.sound.play(crafted ? "recruit" : "select");
         const parts: string[] = [];
-        if (cancelled) parts.push(t("panels.diplomacy.toast.cancelled", { count: cancelled }));
-        if (crafted) parts.push(t("panels.diplomacy.toast.crafted"));
-        this.hooks.toast(parts.length ? parts.join(t("panels.diplomacy.toast.separator")) : t("panels.diplomacy.toast.none"));
+        if (cancelled) parts.push(text.toastCancelled(cancelled));
+        if (crafted) parts.push(text.toastCrafted);
+        this.hooks.toast(parts.length ? parts.join(text.toastSeparator) : text.toastNone);
         this.closeActionMenu();
     }
 
@@ -885,20 +891,22 @@ export class DiplomacyPanel {
     /* ---- declare-war popover ---- */
 
     openDeclare(nationId: number): void {
+        const text = diplomacyTexts();
         if (this.declarePop && this.declareNation === nationId) {
             this.closeDeclare();
             return;
         }
         this.closeDeclare();
-        if (!this.readyActions(nationId).length) return;
+        const ready = readyActions(this.engine.state, nationId);
+        if (!ready.length) return;
         this.declareNation = nationId;
-        this.declarePick = null;
+        // Preselect the first ready casus belli so a single confirm click can declare.
+        this.declarePick = ready[0].id;
         const pop = document.createElement("div");
         pop.className = "declare-pop";
         pop.setAttribute("role", "dialog");
-        pop.setAttribute("aria-label", t("panels.diplomacy.declare.ariaLabel", {
-            name: this.engine.state.nations[nationId]?.name ?? t("panels.diplomacy.declare.targetFallback"),
-        }));
+        const name = this.engine.state.nations[nationId]?.name ?? text.declareTargetFallback;
+        pop.setAttribute("aria-label", text.declareAriaLabel(name));
         this.hud.appendChild(pop);
         this.declarePop = pop;
         pop.addEventListener("click", this.onPopClick);
@@ -959,22 +967,26 @@ export class DiplomacyPanel {
     private fillDeclare(): void {
         if (!this.declarePop || this.declareNation === null) return;
         const state = this.engine.state;
+        const text = diplomacyTexts();
         const nation = state.nations[this.declareNation];
-        const actions = this.readyActions(this.declareNation);
+        const actions = readyActions(state, this.declareNation);
         if (this.declarePick !== null && !actions.some((action) => action.id === this.declarePick)) this.declarePick = null;
         const options = actions.map((action) => {
             const picked = this.declarePick === action.id;
-            const scope = action.kind === "annex" ? t("panels.diplomacy.goal.annex")
-                : t("panels.diplomacy.goal.conquest", { name: this.stateName(action.stateId) });
-            return game`<button class="declare-option${picked ? " picked" : ""}" data-pick="${action.id}" aria-pressed="${picked}">
-                <b>${escapeHtml(scope)}</b><span>${t("panels.diplomacy.declare.valid", { days: action.expiresDay - state.day })}</span>
+            const scope = action.kind === "annex" ? text.goalAnnex : text.goalConquest(stateName(state, action.stateId, text));
+            const valid = text.declareValid(action.expiresDay - state.day);
+            return html`<button class="declare-option${picked ? " picked" : ""}" data-pick="${action.id}" aria-pressed="${picked}">
+                <b>${scope}</b><span>${valid}</span>
             </button>`;
         }).join("");
-        setGameHtml(this.declarePop, `
-            <div class="declare-head"><span>${t("panels.diplomacy.declare.title", { name: escapeHtml(nation?.name ?? "?") })}</span><button class="declare-x" data-close aria-label="${t("panels.diplomacy.declare.close")}">×</button></div>
-            <p class="declare-hint">${t("panels.diplomacy.declare.hint")}</p>
-            <div class="declare-options">${options}</div>
-            <button class="btn btn-primary declare-confirm" data-action="declare" data-nation="${this.declareNation}" ${this.declarePick === null ? "disabled" : `data-diplomatic-id="${this.declarePick}"`}>${t("panels.diplomacy.declare.confirm")}</button>`);
+        const title = text.declareTitle(nation?.name ?? "?");
+        const closeLabel = text.declareClose;
+        const confirmAttrs = this.declarePick === null ? " disabled" : `data-diplomatic-id="${this.declarePick}"`;
+        setGameHtml(this.declarePop, html`
+            <div class="declare-head"><span>${title}</span><button class="declare-x" data-close aria-label="${closeLabel}">×</button></div>
+            <p class="declare-hint">${text.declareHint}</p>
+            <div class="declare-options">${rawHtml(options)}</div>
+            <button class="btn btn-primary declare-confirm" data-action="declare" data-nation="${this.declareNation}" ${rawHtml(confirmAttrs)}>${text.declareConfirm}</button>`);
     }
 
     private positionDeclare(): void {
@@ -995,7 +1007,7 @@ export class DiplomacyPanel {
     private syncDeclare(): void {
         if (!this.declarePop || this.declareNation === null) return;
         const state = this.engine.state;
-        if (state.winner !== null || isAtWar(state, 0, this.declareNation) || !this.readyActions(this.declareNation).length) {
+        if (state.winner !== null || isAtWar(state, 0, this.declareNation) || !readyActions(state, this.declareNation).length) {
             this.closeDeclare();
             return;
         }

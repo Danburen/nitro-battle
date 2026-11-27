@@ -1,18 +1,41 @@
 import type { GameEngine } from "../game/engine.ts";
 import { NEUTRAL } from "../game/types/world.ts";
 import type { Nation } from "../game/types/entities.ts";
+import type { GameState } from "../game/types/state.ts";
 import { t } from "../i18n/index.ts";
-import { escapeHtml, setGameHtml } from "./text.ts";
+import { html } from "./text.ts";
+import { renderUiView, scopedTexts, trustedParts } from "./view.ts";
+import type { UiView } from "./view.ts";
 import { NationPanel } from "./panels/nation.ts";
 import { nationFlagHtmlFor } from "./flags.ts";
 
-const BRIEF_TIP = t("misc.briefing.tip");
+function briefTip(): string {
+    return t("misc.briefing.tip");
+}
 
 export interface BriefingHooks {
     /** Highlight the nation's borders; the camera stays where the player put it. */
     inspect(nationId: number): void;
     /** Commit the current selection and start the campaign. */
     start(nationId: number): void;
+}
+
+/** Pure builder: the highlighted nation line shown above the nation panel. */
+export function briefHintView(state: GameState, nation: Nation): UiView {
+    const text = scopedTexts("misc.briefing.", {
+        before: ["hintBefore"],
+        after: ["hintAfter"],
+    });
+    const parts = trustedParts({ flag: nationFlagHtmlFor(state, nation.id, 18) });
+    return {
+        html: html`<span>${text.before}<b>${parts.flag}${nation.name}</b>${text.after}</span>`,
+    };
+}
+
+/** Pure builder: the end-turn button switches to a start label during briefing. */
+export function endTurnLabelView(started: boolean): UiView {
+    const label = started ? t("misc.common.startGame") : t("misc.common.endTurn");
+    return { html: html`${label} <kbd>E</kbd>` };
 }
 
 /** Pre-game nation picker: map + one nation panel, everything else hidden. */
@@ -32,7 +55,7 @@ export class Briefing {
         this.engine = engine;
         this.hooks = hooks;
         this.panel = new NationPanel(engine, this.el, {
-            help: { title: t("misc.briefing.title"), body: BRIEF_TIP },
+            help: { title: t("misc.briefing.title"), body: briefTip() },
             footer: t("misc.briefing.footer"),
         });
     }
@@ -45,7 +68,7 @@ export class Briefing {
         this.active = true;
         this.hud.classList.add("briefing-mode");
         this.shell.classList.add("briefing-mode");
-        setGameHtml(this.endTurnBtn, `${t("misc.common.startGame")} <kbd>E</kbd>`);
+        renderUiView(this.endTurnBtn, endTurnLabelView(true));
         this.el.classList.remove("hidden");
         this.hintEl.classList.remove("hidden");
         this.selectNation(nationId);
@@ -81,21 +104,17 @@ export class Briefing {
         if (!nation) return;
         this.selected = nationId;
         this.panel.show(nationId);
-        this.renderHint(nation);
+        renderUiView(this.hintEl, briefHintView(this.engine.state, nation));
         this.hooks.inspect(nationId);
-    }
-
-    private renderHint(nation: Nation): void {
-        setGameHtml(this.hintEl, `<span>${t("misc.briefing.hintBefore")}<b>${nationFlagHtmlFor(this.engine.state, nation.id, 18)}${escapeHtml(nation.name)}</b>${t("misc.briefing.hintAfter")}</span>`);
     }
 
     private close(): void {
         this.active = false;
         this.hud.classList.remove("briefing-mode");
         this.shell.classList.remove("briefing-mode");
-        setGameHtml(this.endTurnBtn, `${t("misc.common.endTurn")} <kbd>E</kbd>`);
+        renderUiView(this.endTurnBtn, endTurnLabelView(false));
         this.hintEl.classList.add("hidden");
-        setGameHtml(this.hintEl, "");
+        renderUiView(this.hintEl, { html: html`` });
         this.el.classList.add("hidden");
         this.panel.destroy();
     }

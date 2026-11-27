@@ -37,7 +37,7 @@ function markerHtml(item: LegendItem): string {
     const style = item.overlay
         ? ` style="--legend-fill:${escapeHtml(item.overlay)}"`
         : item.color && !item.ring ? ` style="background:${escapeHtml(item.color)}"` : "";
-    return `<i class="${item.pulse ? "pulse" : ""}${item.ring ? "ring" : ""}${item.overlay ? " overlay" : ""}"${style}></i>`;
+    return `<i class="${item.pulse ? "pulse" : ""}${item.ring ? "ring" : ""}${item.overlay ? " claimed" : ""}"${style}></i>`;
 }
 
 /** Simple map legend on the left edge; showed only while a panel-driven map render mode is active. */

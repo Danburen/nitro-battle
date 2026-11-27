@@ -1,7 +1,9 @@
+import { persistLocale } from "./i18n/bootstrap.ts";
 import "./style/index.css";
 import { GameEngine } from "./game/engine.ts";
 import type { EngineEvent } from "./game/types/events.ts";
 import type { GameState } from "./game/types/state.ts";
+import type { UnitKind } from "./game/types/unit.ts";
 import type { GameSettings, TerrainTuning } from "./types/settings.ts";
 import { mapSizeForCells } from "./types/settings.ts";
 import { generateWorld, buildWorld } from "./game/generator/index.ts";
@@ -14,11 +16,10 @@ import { SoundManager } from "./audio/index.ts";
 import type { SoundContext } from "./audio/index.ts";
 import { desktop } from "./desktop.ts";
 import { initGuide } from "./guide.ts";
-import { t } from "./i18n/index.ts";
+import { getLocale, isLocale, setLocale, t } from "./i18n/index.ts";
 import { escapeHtml, setGameHtml, setGameText } from "./ui/text.ts";
 import { nationFlagHtmlFor } from "./ui/flags.ts";
 import { nationDisplayColor } from "./game/access.ts";
-import { armyAt, isHostileProvince, marchPath } from "./game/rules.ts";
 import { createDebug } from "./debug/bootstrap.ts";
 import { DebugEventLog } from "./debug/services/eventLog.ts";
 import { DebugJournal } from "./debug/services/journal.ts";
@@ -36,6 +37,70 @@ if (desktop) {
 
 const sound = new SoundManager();
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas") as HTMLCanvasElement;
+
+let draggedKind: UnitKind | null = null;
+let dragSite = -1;
+let dragSiteSince = 0;
+let lastAutoRecruit = 0;
+let autoRecruited = false;
+
+function resetDragState(): void {
+    draggedKind = null;
+    dragSite = -1;
+    dragSiteSince = 0;
+    lastAutoRecruit = 0;
+    autoRecruited = false;
+    canvas.classList.remove("unit-drop-target");
+    renderer?.setDropSite(null);
+}
+
+document.addEventListener("dragstart", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-drag-kind]");
+    const kind = button ? Number(button.dataset.dragKind) : NaN;
+    draggedKind = kind === 0 || kind === 1 || kind === 2 ? kind : null;
+    dragSite = -1;
+    dragSiteSince = 0;
+    lastAutoRecruit = 0;
+    autoRecruited = false;
+});
+document.addEventListener("dragend", resetDragState);
+
+canvas.addEventListener("dragover", (event) => {
+    if (!engine || !renderer || draggedKind === null) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    canvas.classList.add("unit-drop-target");
+    const site = renderer.siteAtClient(event.clientX, event.clientY);
+    renderer.setDropSite(site);
+    const now = performance.now();
+    if (site !== dragSite) {
+        dragSite = site;
+        dragSiteSince = now;
+        lastAutoRecruit = 0;
+        return;
+    }
+    // Hold over one province for two seconds: keep raising regiments until release.
+    if (site >= 0 && now - dragSiteSince >= 2000 && now - lastAutoRecruit >= 450) {
+        lastAutoRecruit = now;
+        if (engine.recruitUnit(draggedKind, site)) autoRecruited = true;
+    }
+});
+canvas.addEventListener("dragleave", resetDragState);
+canvas.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const kind = draggedKind;
+    const already = autoRecruited;
+    const site = renderer && kind !== null ? renderer.siteAtClient(event.clientX, event.clientY) : -1;
+    resetDragState();
+    if (!engine || kind === null || site < 0 || already) return;
+    if (engine.recruitUnit(kind, site)) {
+        sound.play("recruit");
+        ui?.toast(t("actions.economy.train.success"));
+    } else {
+        sound.play("error");
+        ui?.toast(t("actions.economy.train.fail"));
+    }
+});
 const startOverlay = document.querySelector<HTMLElement>("#start-overlay") as HTMLElement;
 const newgameOverlay = document.querySelector<HTMLElement>("#newgame-overlay") as HTMLElement;
 const seedInput = document.querySelector<HTMLInputElement>("#seed-input") as HTMLInputElement;
@@ -190,7 +255,6 @@ function soundContext(province: number | null, playerInvolved: boolean): SoundCo
 function handleCellClick(site: number): void {
     if (!engine || engine.state.winner !== null) return;
     const game = engine;
-    const state = game.state;
 
     if (ui?.briefing.isActive()) {
         if (site >= 0) ui.briefing.showSite(site);
@@ -212,41 +276,6 @@ function handleCellClick(site: number): void {
     if (ui?.isClaimsOpen()) {
         ui.handleClaimsMapClick(site);
         return;
-    }
-
-    if (state.redeployArmyId !== null) {
-        if (game.redeploy(state.redeployArmyId, site)) {
-            sound.play("move");
-            return;
-        }
-        game.cancelRedeploy();
-    }
-
-    const army = game.selectedArmy();
-    if (army && army.province !== site) {
-        if (game.reachFor(army).cost.has(site)) {
-            if (game.moveArmy(army.id, site)) return;
-        }
-        if (game.targetsFor(army).includes(site)) {
-            if (game.attack(army.id, site)) return;
-        }
-        const occupant = armyAt(state, site);
-        if (occupant && occupant.nation === 0) {
-            game.select(site);
-            sound.play("select");
-            return;
-        }
-        if (!army.moved && !army.acted) {
-            const hostile = isHostileProvince(state, army.nation, site);
-            const own = state.provinces[site].owner === army.nation;
-            if ((hostile || own) && marchPath(state, army, site) !== null) {
-                if (game.orderMarch(army.id, site, hostile)) {
-                    sound.play("select");
-                    ui?.toast(t(hostile ? "misc.main.march.attack" : "misc.main.march.order"));
-                    return;
-                }
-            }
-        }
     }
 
     game.select(site);
@@ -490,6 +519,19 @@ document.querySelector<HTMLButtonElement>("#btn-help")?.addEventListener("click"
     sound.unlock();
     guide.open();
 });
+
+const languageSelect = document.querySelector<HTMLSelectElement>("#language-select");
+if (languageSelect) {
+    languageSelect.value = getLocale();
+    languageSelect.addEventListener("change", () => {
+        const locale = languageSelect.value;
+        if (!isLocale(locale)) return;
+        setLocale(locale);
+        persistLocale(locale);
+        document.documentElement.lang = locale;
+        window.location.reload();
+    });
+}
 
 document.querySelector<HTMLButtonElement>("#zoom-in")?.addEventListener("click", () => renderer?.zoomBy(1.3));
 document.querySelector<HTMLButtonElement>("#zoom-out")?.addEventListener("click", () => renderer?.zoomBy(1 / 1.3));

@@ -1,23 +1,19 @@
 import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
-import { autoFillClaimedBorder, autoMergeManagedArmies, isArmyAutoManaged } from "./auto.ts";
-import { claimedDefenseSites } from "./defense.ts";
 import type { AIAction } from "./ai/index.ts";
-import { advanceMarches, moveArmy, orderMarch } from "./armies.ts";
 import { garrisonRecoveryRate } from "./battle.ts";
-import { attack, resolveBattles } from "./combat.ts";
+import { recruitRegiment, resolveProvinceClashes } from "./provinceArmy.ts";
+import { moveArmy } from "./armies.ts";
 import { advanceDiplomacy, runAIDiplomacy, tickDiplomaticUpkeep } from "./diplomacy.ts";
 import { runAIAlliances, tickAlliances } from "./alliance.ts";
-import {
-    expireDiplomaticRequests, runAIVassalPolitics, tickVassalIndependence, tickVassalTribute,
-} from "./vassal.ts";
+import { expireDiplomaticRequests } from "./vassal.ts";
 import { runAITrade, tickTradeAgreements } from "./trade.ts";
 import { resolveWarOutcomes } from "./settlement.ts";
 import { resolvePlayerProposals } from "./proposals.ts";
 import { clampResources, occupationGrowth, resourceChain } from "./economy.ts";
 import type { ResourceChain } from "./economy.ts";
 import { advancePolicySwitches, tickPolicyUpkeep } from "./policy.ts";
-import { enqueueBuild, enqueueProvinceBuild, enqueueTrain, processConstruction, processDeployments, reinforceArmy, setFactoryProduction } from "./production.ts";
+import { enqueueBuild, enqueueProvinceBuild, processConstruction, processDeployments, reinforceArmy, setFactoryProduction } from "./production.ts";
 import { computeSupply, supplyLevel, supplyOrgFactor } from "./supply.ts";
 import { DAYS_PER_SEASON, NEUTRAL, SEASONS } from "./types/world.ts";
 import { ORG_MAX, ORG_REGEN, REINFORCE_MIN_SUPPLY, UNPAID_UPKEEP_ORG_PENALTY } from "./types/organization.ts";
@@ -31,7 +27,6 @@ export function endTurn(core: GameCore): void {
         const nation = core.state.nations[controller.nationId];
         if (!nation.alive) continue;
         runAIAlliances(core, controller.nationId);
-        runAIVassalPolitics(core, controller.nationId);
         runAITrade(core, controller.nationId);
         runAIDiplomacy(core, controller.nationId);
         if (core.state.winner !== null) return;
@@ -43,21 +38,7 @@ export function endTurn(core: GameCore): void {
     // 托管: the player's managed corps use the exact same army planner as an AI
     // nation, plus an automatic consolidation pass; manual corps stay untouched.
     // This also covers partial trusteeship with the master switch off.
-    const hasManaged = [...core.state.armies.values()].some((army) => isArmyAutoManaged(core.state, army));
-    if (hasManaged) {
-        // Keep claimed-border garrisons in place while consolidating the rest,
-        // then split spare regiments into any border province still vacant.
-        const border = claimedDefenseSites(core.state, 0);
-        autoMergeManagedArmies(core, border);
-        autoFillClaimedBorder(core);
-        const actions = core.playerAuto.takeArmyTurn(
-            core.state,
-            (army) => isArmyAutoManaged(core.state, army),
-        );
-        for (const action of actions) applyAIAction(core, action, 0);
-    }
-
-    resolveBattles(core);
+    resolveProvinceClashes(core);
     resolveWarOutcomes(core);
     if (core.state.winner === null) advanceDay(core);
     resolveWarOutcomes(core);
@@ -67,23 +48,10 @@ export function endTurn(core: GameCore): void {
 
 function applyAIAction(core: GameCore, action: AIAction, nationId: number): void {
     switch (action.kind) {
-        case "move": {
-            const army = core.state.armies.get(action.armyId);
-            if (army && army.nation === nationId) moveArmy(core, action.armyId, action.to);
-            break;
-        }
-        case "attack": {
-            const army = core.state.armies.get(action.armyId);
-            if (army && army.nation === nationId) attack(core, action.armyId, action.target);
-            break;
-        }
-        case "march": {
-            const army = core.state.armies.get(action.armyId);
-            if (army && army.nation === nationId) orderMarch(core, action.armyId, action.target, action.attack);
-            break;
-        }
         case "train": {
-            enqueueTrain(core, nationId, action.unitKind, action.province);
+            const fallback = core.state.nations[nationId].capital;
+            const site = action.province ?? fallback;
+            recruitRegiment(core, nationId, action.unitKind, site);
             break;
         }
         case "build": {
@@ -92,6 +60,11 @@ function applyAIAction(core: GameCore, action: AIAction, nationId: number): void
         }
         case "provinceBuild": {
             enqueueProvinceBuild(core, nationId, action.site, action.buildingKind);
+            break;
+        }
+        case "move": {
+            const army = core.state.armies.get(action.armyId);
+            if (army?.nation === nationId) moveArmy(core, action.armyId, action.to);
             break;
         }
         case "factoryProduction": {
@@ -180,9 +153,7 @@ function advanceDay(core: GameCore): void {
             core.log(t("game.turn.rawShortage", { nation: core.nationChip(nation.id) }), "econ", nation.id);
         }
     }
-    tickVassalTribute(core);
     tickTradeAgreements(core);
-    tickVassalIndependence(core);
     tickAlliances(core);
     expireDiplomaticRequests(core);
     tickDiplomaticUpkeep(core);
@@ -192,11 +163,9 @@ function advanceDay(core: GameCore): void {
     state.supply = computeSupply(state);
     state.supplyDirty = false;
 
-    // Garrisons recover except where a battle rages.
-    const battleSites = new Set(state.battles.map((battle) => battle.province));
+    // Garrisons recover everywhere: province clashes are resolved instantly.
     for (const province of state.provinces) {
         if (province.garrisonMax <= 0 || province.garrison >= province.garrisonMax) continue;
-        if (battleSites.has(province.site)) continue;
         province.garrison = Math.min(
             province.garrisonMax,
             province.garrison + Math.ceil(province.garrisonMax * garrisonRecoveryRate(province)),
@@ -217,7 +186,6 @@ function advanceDay(core: GameCore): void {
     }
 
     processDeployments(core);
-    advanceMarches(core);
 
     state.redeployArmyId = null;
     if (state.selectedArmyId !== null && !state.armies.has(state.selectedArmyId)) {
