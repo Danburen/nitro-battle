@@ -71,13 +71,15 @@ export function registerGameCommands(registry: CommandRegistry<DebugContext>): v
     registry.register({
         name: "army",
         usage: "army <军团ID>",
-        help: "选中我方军团，打开指挥界面",
+        help: "选中军团所在的省份",
         run(args, ctx) {
+            const engine = requireEngine(ctx);
             const id = Number(args[0]);
-            if (!Number.isInteger(id)) throw new Error("军团 ID 无效");
-            requireEngine(ctx).selectArmy(id);
+            const army = engine.state.armies.get(id);
+            if (!army) throw new Error("军团 ID 无效");
+            engine.select(army.province);
             requireUI(ctx).refresh();
-            return `已选中军团 ${id}`;
+            return `已选中军团 ${id} 所在省份 ${army.province}`;
         },
     });
 
@@ -88,7 +90,7 @@ export function registerGameCommands(registry: CommandRegistry<DebugContext>): v
         run(_args, ctx) {
             const state = requireEngine(ctx).state;
             const lines = [...state.armies.values()].map((army) =>
-                `#${army.id} 国${army.nation} ${army.name} @${army.province} 团${army.regiments.length} 组织${army.org}${army.autoManaged ? " [托管]" : ""}`);
+                `#${army.id} 国${army.nation} ${army.name} @${army.province} 团${army.regiments.length} 组织${army.org}`);
             return lines.length ? lines.join("\n") : "当前没有军团";
         },
     });
@@ -115,18 +117,6 @@ export function registerGameCommands(registry: CommandRegistry<DebugContext>): v
             if (!requireEngine(ctx).proposePeace(id)) throw new Error(`无法与 ${id} 议和`);
             requireUI(ctx).refresh();
             return `已向 ${id} 提出白和平`;
-        },
-    });
-
-    registry.register({
-        name: "auto",
-        usage: "auto [on|off]",
-        help: "开启或关闭玩家军团全局托管",
-        run(args, ctx) {
-            const enabled = args[0] !== "off";
-            requireEngine(ctx).setAutoManageArmies(enabled);
-            requireUI(ctx).refresh();
-            return `军团托管：${enabled ? "开" : "关"}`;
         },
     });
 

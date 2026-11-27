@@ -325,7 +325,6 @@ export function resolveProvinceClashes(core: GameCore): void {
             if (province.stance === "defend") continue;
             const army = armyAt(state, province.site);
             if (!army || army.nation !== nation.id || army.regiments.length === 0) continue;
-            if (core.inBattle(army.id)) continue;
 
             let best: number | null = null;
             let bestScore = Infinity;
@@ -356,7 +355,6 @@ export function resolveProvinceClashes(core: GameCore): void {
     const ordered = [...attacks.values()].sort((a, b) =>
         a.target - b.target || a.nation - b.nation);
     for (const group of ordered) resolveClash(core, group.target, group.sites, group.nation);
-    core.invalidateReach();
 }
 
 /** Kept for UI names: a province pool uses the same roster naming as old corps. */

@@ -253,7 +253,6 @@ export function setVassal(core: GameCore, vassalId: number, overlordId: number, 
     vassal.vassalType = type;
     vassal.independence = profile.independenceStart;
     vassal.tributeRate = profile.resourceShare;
-    core.invalidateReach();
     state.supplyDirty = true;
     core.log(t("game.vassal.became", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId), type: profile.name }), "diplo", vassalId, true, {
         kind: "peace",
@@ -277,7 +276,6 @@ export function releaseVassal(core: GameCore, vassalId: number, peaceful = true)
         state.truce[vassalId][overlord] = until;
         state.truce[overlord][vassalId] = until;
     }
-    core.invalidateReach();
     core.log(t("game.vassal.independent", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlord) }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,
@@ -604,7 +602,6 @@ function rebelVassal(core: GameCore, vassalId: number, overlordId: number): void
     clearVassalFields(nation);
     removePairRequests(state, vassalId, overlordId);
     setWar(state, vassalId, overlordId, true);
-    core.invalidateReach();
     core.log(t("game.vassal.rebelled", { vassal: core.nationChip(vassalId), overlord: core.nationChip(overlordId) }), "diplo", vassalId, true, {
         kind: "war",
         nation: vassalId,
@@ -939,7 +936,6 @@ const REQUEST_HANDLERS: Record<DiplomaticRequestKind, RequestHandler> = {
                 kind: "war",
                 nation: 0,
             });
-            core.invalidateReach();
             core.emit({ type: "war", aggressor: 0, defender: enemy });
             core.emit({ type: "state" });
             return true;
@@ -1049,7 +1045,6 @@ function defectVassal(core: GameCore, vassalId: number, overlordId: number): boo
         setWar(state, vassalId, overlordId, true);
         core.emit({ type: "war", aggressor: vassalId, defender: overlordId });
     }
-    core.invalidateReach();
     core.log(t("game.vassal.defection.defected", { vassal: core.nationChip(vassalId), protector: core.nationChip(protector), overlord: core.nationChip(overlordId) }), "diplo", vassalId, true, {
         kind: "peace",
         nation: vassalId,

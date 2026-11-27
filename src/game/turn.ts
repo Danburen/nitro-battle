@@ -3,7 +3,6 @@ import type { GameCore } from "./core.ts";
 import type { AIAction } from "./ai/index.ts";
 import { garrisonRecoveryRate } from "./battle.ts";
 import { recruitRegiment, resolveProvinceClashes } from "./provinceArmy.ts";
-import { moveArmy } from "./armies.ts";
 import { advanceDiplomacy, runAIDiplomacy, tickDiplomaticUpkeep } from "./diplomacy.ts";
 import { runAIAlliances, tickAlliances } from "./alliance.ts";
 import { expireDiplomaticRequests } from "./vassal.ts";
@@ -35,14 +34,11 @@ export function endTurn(core: GameCore): void {
         }
     }
 
-    // 托管: the player's managed corps use the exact same army planner as an AI
-    // nation, plus an automatic consolidation pass; manual corps stay untouched.
-    // This also covers partial trusteeship with the master switch off.
+    // All combat happens between province garrisons; there are no independent armies.
     resolveProvinceClashes(core);
     resolveWarOutcomes(core);
     if (core.state.winner === null) advanceDay(core);
     resolveWarOutcomes(core);
-    core.invalidateReach();
     core.emit({ type: "state" });
 }
 
@@ -60,11 +56,6 @@ function applyAIAction(core: GameCore, action: AIAction, nationId: number): void
         }
         case "provinceBuild": {
             enqueueProvinceBuild(core, nationId, action.site, action.buildingKind);
-            break;
-        }
-        case "move": {
-            const army = core.state.armies.get(action.armyId);
-            if (army?.nation === nationId) moveArmy(core, action.armyId, action.to);
             break;
         }
         case "factoryProduction": {
@@ -172,23 +163,13 @@ function advanceDay(core: GameCore): void {
         );
     }
 
-    // Org regen, paid reinforcement, and the daily action reset.
+    // Org regen and paid reinforcement for every province army.
     for (const army of state.armies.values()) {
-        const locked = core.inBattle(army.id);
-        if (!locked) {
-            army.org = Math.min(ORG_MAX, army.org + ORG_REGEN * supplyOrgFactor(state, army.province));
-            if (!unpaid.has(army.nation) && supplyLevel(state, army.province) >= REINFORCE_MIN_SUPPLY) {
-                reinforceArmy(core, army);
-            }
-            army.moved = false;
-            army.acted = false;
+        army.org = Math.min(ORG_MAX, army.org + ORG_REGEN * supplyOrgFactor(state, army.province));
+        if (!unpaid.has(army.nation) && supplyLevel(state, army.province) >= REINFORCE_MIN_SUPPLY) {
+            reinforceArmy(core, army);
         }
     }
 
     processDeployments(core);
-
-    state.redeployArmyId = null;
-    if (state.selectedArmyId !== null && !state.armies.has(state.selectedArmyId)) {
-        state.selectedArmyId = null;
-    }
 }

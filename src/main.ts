@@ -263,7 +263,6 @@ function handleCellClick(site: number): void {
 
     if (site === -1) {
         if (ui?.cancelConstructionSelection()) return;
-        game.cancelModes();
         game.select(null);
         return;
     }
@@ -325,13 +324,6 @@ function startGame(state: GameState, options: { briefing?: boolean; nation?: num
     });
     soundUnsub = engine.subscribe((event: EngineEvent) => {
         switch (event.type) {
-            case "move": {
-                const army = engine?.state.armies.get(event.armyId);
-                const site = event.path[event.path.length - 1] ?? army?.province ?? null;
-                sound.play("move", soundContext(site, army?.nation === 0));
-                break;
-            }
-            case "battle-start":
             case "combat":
                 sound.play("attack", soundContext(
                     event.province,

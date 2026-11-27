@@ -302,7 +302,6 @@ export function cancelDiplomaticAction(core: GameCore, nation: number, id: numbe
         nation: core.nationChip(nation), kind: DIPLOMATIC_PROFILES[action.kind].label,
         refund: refund > 0 ? t("game.diplomacy.refund", { amount: refund }) : "",
     }), "diplo", nation);
-    core.invalidateReach();
     core.emit({ type: "state" });
     return true;
 }
@@ -350,7 +349,6 @@ export function advanceDiplomacy(core: GameCore): void {
     const ids = new Set(state.diplomaticActions.map((action) => action.id));
     for (const id of notified) if (!ids.has(id)) notified.delete(id);
     if (changed) {
-        core.invalidateReach();
         core.emit({ type: "state" });
     }
 }
@@ -465,11 +463,6 @@ export function startWar(core: GameCore, aggressor: number, defender: number, ac
     for (const id of applyVassalCallToArms(core, aggressor, defender, true)) participants.add(id);
     participants.delete(aggressor);
     participants.delete(defender);
-    // Existing peacetime orders must not pin armies to an obsolete front.
-    for (const army of state.armies.values()) {
-        if (army.nation === aggressor || army.nation === defender) army.march = null;
-    }
-    core.invalidateReach();
     const joined = [...participants];
     const named = joined.slice(0, 3).map((id) => core.nationChip(id)).join("、");
     const suffix = joined.length === 0 ? ""

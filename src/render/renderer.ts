@@ -13,7 +13,6 @@ import { claimableStateIds, isAtWar, stateSummary } from "../game/diplomacy.ts";
 import { provinceResourceOutput, resourceYieldMultiplier } from "../game/economy.ts";
 import { provincePopulationView } from "../game/stability.ts";
 import { nationDisplayColor } from "../game/access.ts";
-import { pathTo } from "../game/rules.ts";
 import { BUILDING_PROFILES } from "../game/types/building.ts";
 import { MAX_HP } from "../game/types/unit.ts";
 import { NEUTRAL } from "../game/types/world.ts";
@@ -51,13 +50,6 @@ import { chipToken, escapeGameText, peopleCount } from "../ui/text.ts";
 import { t } from "../i18n/index.ts";
 import { MAP_TOOLTIP_DISMISS_EVENT, MAP_TOOLTIP_EVENT } from "../ui/tooltip.ts";
 import type { MapTooltipRequest } from "../ui/tooltip.ts";
-
-interface MoveAnim {
-    armyId: number;
-    points: Vec2[];
-    start: number;
-    dur: number;
-}
 
 interface ProvinceFx {
     kind: "combat" | "capture" | "recruit";
@@ -142,7 +134,6 @@ export class MapRenderer {
     private raf = 0;
     private destroyed = false;
 
-    private moveAnims: MoveAnim[] = [];
     private fx: ProvinceFx[] = [];
     private floats: FloatText[] = [];
     private flakes: { x: number; y: number; r: number; vy: number; drift: number; phase: number }[] = [];
@@ -765,29 +756,6 @@ export class MapRenderer {
                 this.baseDirty = true;
                 break;
             }
-            case "move": {
-                if (event.path.length < 2) break;
-                const points: Vec2[] = [];
-                let prev: Vec2 = { x: graph.sites[event.path[0]].x, y: graph.sites[event.path[0]].y };
-                points.push(prev);
-                for (let i = 1; i < event.path.length; i++) {
-                    const site = graph.sites[event.path[i]];
-                    const delta = periodicDelta(prev, site, graph.domain);
-                    prev = { x: prev.x + delta.x, y: prev.y + delta.y };
-                    points.push(prev);
-                }
-                this.moveAnims.push({
-                    armyId: event.armyId,
-                    points,
-                    start: now,
-                    dur: Math.min(700, Math.max(220, 110 * (event.path.length - 1))),
-                });
-                break;
-            }
-            case "battle-start": {
-                this.fx.push({ kind: "combat", province: event.province, start: now, dur: 420, color: "#f85149" });
-                break;
-            }
             case "combat": {
                 const site = graph.sites[event.province];
                 this.fx.push({ kind: "combat", province: event.province, start: now, dur: 420, color: "#f85149" });
@@ -1127,7 +1095,6 @@ export class MapRenderer {
         const dt = this.lastFrame === 0 ? 16 : Math.min(50, now - this.lastFrame);
         this.lastFrame = now;
 
-        this.moveAnims = this.moveAnims.filter((anim) => now - anim.start < anim.dur);
         this.fx = this.fx.filter((effect) => now - effect.start < effect.dur);
         this.floats = this.floats.filter((text) => now - text.start < text.dur);
 
@@ -1174,40 +1141,11 @@ export class MapRenderer {
         const state = this.engine.state;
         const selected = state.selected;
         const tactical = this.currentMapMode === "province";
-        const selectedArmy = this.engine.selectedArmy();
-        const playerArmy = tactical && selectedArmy && selectedArmy.nation === 0 && state.winner === null ? selectedArmy : null;
-        const reach = playerArmy ? this.engine.reachFor(playerArmy) : null;
-        const targets = playerArmy ? this.engine.targetsFor(playerArmy) : [];
-        const redeployArmy = tactical && state.redeployArmyId !== null
-            ? state.armies.get(state.redeployArmyId) ?? null
-            : null;
-        const redeploySet = redeployArmy ? this.engine.redeployTargetsFor(redeployArmy) : null;
-        const battleByProvince = new Map(state.battles.map((battle) => [battle.province, battle]));
 
         this.counterHits = [];
         for (const [ox, oy] of offsets) {
             ctx.save();
             ctx.translate(ox, oy);
-
-            if (reach) {
-                ctx.fillStyle = "rgba(31, 111, 235, 0.22)";
-                for (const site of reach.cost.keys()) {
-                    const cell = graph.cells[site];
-                    if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
-                }
-            }
-            if (redeploySet) {
-                ctx.fillStyle = "rgba(63, 185, 80, 0.24)";
-                for (const site of redeploySet) {
-                    const cell = graph.cells[site];
-                    if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
-                }
-            }
-            ctx.fillStyle = "rgba(248, 81, 73, 0.28)";
-            for (const site of targets) {
-                const cell = graph.cells[site];
-                if (cell.bounded) fillWrappedPolygon(ctx, cell.polygon, graph, width, height);
-            }
 
             for (const effect of this.fx) {
                 const cell = graph.cells[effect.province];
@@ -1254,24 +1192,10 @@ export class MapRenderer {
                 ctx.restore();
                 continue;
             }
-            this.drawMarchOrders(ctx, now);
-            this.drawBattles(ctx, now, battleByProvince);
-
-            if (reach && this.hover !== null && reach.cost.has(this.hover) && playerArmy) {
-                const path = pathTo(reach, this.hover);
-                ctx.strokeStyle = "rgba(230, 237, 243, 0.9)";
-                ctx.lineWidth = 2;
-                ctx.setLineDash([6, 6]);
-                ctx.beginPath();
-                for (let i = 0; i + 1 < path.length; i++) {
-                    drawWrappedLine(ctx, graph.sites[path[i]], graph.sites[path[i + 1]], width, height);
-                }
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
 
             for (const army of state.armies.values()) {
-                this.drawArmyCounter(ctx, army, now, battleByProvince.has(army.province) || this.isAttacking(army.id), ox, oy);
+                const fighting = this.fx.some((effect) => effect.kind === "combat" && effect.province === army.province);
+                this.drawArmyCounter(ctx, army, fighting, ox, oy);
             }
 
             for (const text of this.floats) {
@@ -1295,86 +1219,6 @@ export class MapRenderer {
         this.drawSnow(ctx, now, dt);
         this.drawMinimap(ctx, minX, maxX, minY, maxY);
     };
-
-    private isAttacking(armyId: number): boolean {
-        return this.engine.state.battles.some((battle) => battle.attackerId === armyId);
-    }
-
-    private drawMarchOrders(ctx: CanvasRenderingContext2D, now: number): void {
-        const state = this.engine.state;
-        const { graph } = state;
-        const { width, height } = graph.domain;
-        for (const army of state.armies.values()) {
-            if (army.nation !== 0 || !army.march) continue;
-            const from = graph.sites[army.province];
-            const to = graph.sites[army.march.target];
-            const color = army.march.attack ? "#f85149" : "#58a6ff";
-            ctx.save();
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = 2.2;
-            ctx.setLineDash([9, 6]);
-            ctx.lineDashOffset = -((now / 55) % 15);
-            ctx.beginPath();
-            drawWrappedLine(ctx, from, to, width, height);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            const delta = periodicDelta(from, to, graph.domain);
-            const end = { x: from.x + delta.x, y: from.y + delta.y };
-            const angle = Math.atan2(delta.y, delta.x);
-            ctx.beginPath();
-            ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(end.x, end.y);
-            ctx.lineTo(end.x - 13 * Math.cos(angle - 0.42), end.y - 13 * Math.sin(angle - 0.42));
-            ctx.lineTo(end.x - 13 * Math.cos(angle + 0.42), end.y - 13 * Math.sin(angle + 0.42));
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-
-    private drawBattles(
-        ctx: CanvasRenderingContext2D,
-        now: number,
-        battleByProvince: Map<number, { province: number; attackerId: number; rounds: number }>,
-    ): void {
-        const state = this.engine.state;
-        const { graph } = state;
-        const { width, height } = graph.domain;
-        for (const battle of battleByProvince.values()) {
-            const attacker = state.armies.get(battle.attackerId);
-            const target = graph.sites[battle.province];
-            ctx.save();
-            if (attacker) {
-                const from = graph.sites[attacker.province];
-                ctx.strokeStyle = "rgba(248, 81, 73, 0.75)";
-                ctx.lineWidth = 2;
-                ctx.setLineDash([4, 4]);
-                ctx.beginPath();
-                drawWrappedLine(ctx, from, target, width, height);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-            const pulse = 16 + 3 * Math.sin(now / 180);
-            ctx.strokeStyle = "#f85149";
-            ctx.lineWidth = 2.4;
-            ctx.beginPath();
-            ctx.arc(target.x, target.y, pulse, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.font = "700 10px system-ui, sans-serif";
-            ctx.textAlign = "center";
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "rgba(13,17,23,0.9)";
-            const label = t("misc.render.battleLabel", { rounds: battle.rounds });
-            ctx.strokeText(label, target.x, target.y - 24);
-            ctx.fillStyle = "#f85149";
-            ctx.fillText(label, target.x, target.y - 24);
-            ctx.restore();
-        }
-    }
 
     private highlightSite(ctx: CanvasRenderingContext2D, site: number, selected: boolean): void {
         const { graph, provinces, states, terrain } = this.engine.state;
@@ -1441,21 +1285,6 @@ export class MapRenderer {
         }
     }
 
-    private armyPosition(army: Army, now: number): Vec2 {
-        const { graph } = this.engine.state;
-        for (const anim of this.moveAnims) {
-            if (anim.armyId !== army.id || anim.points.length < 2) continue;
-            const p = Math.min(1, Math.max(0, (now - anim.start) / anim.dur));
-            const eased = p * (2 - p);
-            const segment = eased * (anim.points.length - 1);
-            const index = Math.min(anim.points.length - 2, Math.floor(segment));
-            const t = segment - index;
-            const a = anim.points[index];
-            const b = anim.points[index + 1];
-            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-        }
-        return graph.sites[army.province];
-    }
 
     private drawArmyCounter(
         ctx: CanvasRenderingContext2D,
@@ -1466,7 +1295,7 @@ export class MapRenderer {
         oy: number,
     ): void {
         const state = this.engine.state;
-        const pos = this.armyPosition(army, now);
+        const pos = state.graph.sites[army.province];
         let x = pos.x;
         const y = pos.y;
         let scale = 1;
@@ -1484,10 +1313,9 @@ export class MapRenderer {
         const w = 30 * growth * scale;
         const h = 20 * growth * scale;
         const topY = y - h / 2;
-        const selected = state.selectedArmyId === army.id || state.selected === army.province;
+        const selected = state.selected === army.province;
 
         ctx.save();
-        ctx.globalAlpha = army.acted && !fighting ? 0.55 : 1;
 
         if (selected) {
             ctx.strokeStyle = "#e6edf3";

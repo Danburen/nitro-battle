@@ -146,7 +146,6 @@ export function mountLayout(app: HTMLElement): void {
                 <section class="panel map-legend hidden" id="map-legend" aria-label="${t("misc.layout.mapLegend")}"></section>
             </div>
 
-            <section class="panel army-detail hidden" id="army-detail"></section>
             <section class="panel brief-panel hidden" id="brief-panel" aria-label="${t("misc.layout.nationDetail")}"></section>
 
             <div class="hud-feed">
@@ -156,10 +155,6 @@ export function mountLayout(app: HTMLElement): void {
                 </div>
                 <div class="feed-live" id="feed-live"></div>
                 <div class="feed-history hidden" id="feed-history"></div>
-            </div>
-
-            <div class="hud-corner hud-tr">
-                <section class="panel dock-panel hidden" id="army-panel"></section>
             </div>
 
             <div class="hud-corner hud-bl">
@@ -173,10 +168,6 @@ export function mountLayout(app: HTMLElement): void {
                     <button class="map-layer" data-action="map-mode" data-mode="state" aria-pressed="false">${t("misc.layout.layer.state")}<span>${t("misc.layout.layer.stateHint")}</span></button>
                     <button class="map-layer" data-action="color-mode" data-color="resource" aria-pressed="false">${t("misc.colorMode.resource")}<span>${t("misc.layout.layer.resourceHint")}</span></button>
                 </div>
-            </div>
-
-            <div class="hud-corner hud-bc">
-                <div class="mode-bar hidden" id="mode-bar"></div>
             </div>
 
             <div class="hud-corner hud-br">

@@ -9,7 +9,7 @@ import type {
 import type { SupplyMap } from "./economy.ts";
 import type { Nation, Province, StateRegion } from "./entities.ts";
 import type { GameStats, LogEntry } from "./log.ts";
-import type { Army, Battle, DeploymentOrder } from "./organization.ts";
+import type { Army, DeploymentOrder } from "./organization.ts";
 import type { TradeAgreement } from "./trade.ts";
 
 export interface GameState {
@@ -22,7 +22,6 @@ export interface GameState {
     readonly armies: Map<number, Army>;
     /** province site -> army id stationed there, or null. One army per province. */
     readonly armyAt: (number | null)[];
-    readonly battles: Battle[];
     readonly deployments: DeploymentOrder[];
     readonly construction: ConstructionOrder[];
     supply: SupplyMap | null;
@@ -30,11 +29,6 @@ export interface GameState {
     day: number;
     seasonIndex: number;
     selected: number | null;
-    selectedArmyId: number | null;
-    /** Master switch for player army trusteeship; per-corps overrides live on `Army.autoManaged`. */
-    autoManageArmies?: boolean;
-    /** Army awaiting a strategic redeployment destination, if any. */
-    redeployArmyId: number | null;
     /** Symmetric war matrix; every pair starts at peace. */
     readonly war: boolean[][];
     readonly warSince: number[][];

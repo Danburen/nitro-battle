@@ -1,4 +1,4 @@
-/** Armies, regiments, deployment orders and battles — the movable military layer. */
+/** Province armies, regiments and deployment orders. */
 import type { UnitKind } from "./unit.ts";
 
 export const ORG_MAX = 100;
@@ -20,7 +20,7 @@ export interface Regiment {
     hp: number;
 }
 
-/** 军团: the only movable military entity. At most one per province. */
+/** Province troops: the only military entity, fixed to its province. */
 export interface Army {
     readonly id: number;
     readonly nation: number;
@@ -28,24 +28,6 @@ export interface Army {
     province: number;
     regiments: Regiment[];
     org: number;
-    moved: boolean;
-    acted: boolean;
-    /** Multi-day march order; attack=true means assault the target on arrival. */
-    march: { target: number; attack: boolean } | null;
-    /** Player corps handed to the AI; only meaningful while `GameState.autoManageArmies` is on. */
-    autoManaged?: boolean;
-}
-
-/** A persistent battle: one attacking army vs a province's defense, round per day. */
-export interface Battle {
-    readonly province: number;
-    readonly attackerId: number;
-    /** Defending army id, or null when only the garrison defends. */
-    defenderId: number | null;
-    rounds: number;
-    /** Cumulative casualties across every round of this battle. */
-    attackLoss?: number;
-    defenseLoss?: number;
 }
 
 export type DeploymentStatus = "training" | "ready" | "blocked";
@@ -63,4 +45,3 @@ export interface DeploymentOrder {
     readonly createdDay: number;
 }
 
-export type CombatOutcome = "ongoing" | "repelled" | "broken" | "captured";

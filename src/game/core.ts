@@ -4,10 +4,8 @@ import { LCGRandom } from "../utils/LCGRandom.ts";
 import { nationDisplayColor } from "./access.ts";
 import { StandardAI } from "./ai/index.ts";
 import type { AIController } from "./ai/index.ts";
-import { attackTargets, reachable } from "./rules.ts";
-import type { ReachResult } from "./rules.ts";
 import { NEUTRAL } from "./types/world.ts";
-import type { Army, Battle } from "./types/organization.ts";
+import type { Army } from "./types/organization.ts";
 import type { EngineEvent } from "./types/events.ts";
 import type { GameState } from "./types/state.ts";
 import type { LogEvent, LogTone } from "./types/log.ts";
@@ -20,12 +18,8 @@ const LOG_CAP = 240;
 export class GameCore {
     readonly state: GameState;
     readonly controllers: AIController[];
-    /** Reused for player army trusteeship so its seeded dice advance across turns. */
-    readonly playerAuto: StandardAI;
     readonly rand: LCGRandom;
     private readonly listeners = new Set<Listener>();
-    private reachCache: ReachResult | null = null;
-    private reachArmyId = -1;
 
     constructor(state: GameState) {
         this.state = state;
@@ -33,7 +27,6 @@ export class GameCore {
         this.controllers = state.nations
             .filter((nation) => !nation.isPlayer)
             .map((nation) => new StandardAI(nation.id, state.settings.seed));
-        this.playerAuto = new StandardAI(0, state.settings.seed);
     }
 
     subscribe(listener: Listener): () => void {
@@ -61,64 +54,11 @@ export class GameCore {
         return chipToken(nationDisplayColor(this.state, id), nation.name);
     }
 
-    invalidateReach(): void {
-        this.reachCache = null;
-        this.reachArmyId = -1;
-    }
-
-    /** Movement flood for one army, cached until the next state mutation. */
-    reachFor(army: Army): ReachResult {
-        if (this.reachCache && this.reachArmyId === army.id) return this.reachCache;
-        this.reachCache = reachable(this.state, army);
-        this.reachArmyId = army.id;
-        return this.reachCache;
-    }
-
-    targetsFor(army: Army): number[] {
-        return attackTargets(this.state, army);
-    }
-
-    battleAt(site: number): Battle | null {
-        return this.state.battles.find((battle) => battle.province === site) ?? null;
-    }
-
-    inBattle(armyId: number): boolean {
-        return this.state.battles.some(
-            (battle) => battle.attackerId === armyId || battle.defenderId === armyId,
-        );
-    }
-
     // ---- selection ----
 
     select(site: number | null): void {
-        const state = this.state;
-        state.selected = site;
-        state.selectedArmyId = null;
-        state.redeployArmyId = null;
-        this.invalidateReach();
+        this.state.selected = site;
         this.emit({ type: "state" });
-    }
-
-    selectArmy(armyId: number): void {
-        const army = this.state.armies.get(armyId);
-        if (!army) return;
-        this.state.selected = army.province;
-        this.state.selectedArmyId = army.nation === 0 ? army.id : null;
-        this.state.redeployArmyId = null;
-        this.invalidateReach();
-        this.emit({ type: "state" });
-    }
-
-    selectedArmy(): Army | null {
-        const id = this.state.selectedArmyId;
-        return id === null ? null : this.state.armies.get(id) ?? null;
-    }
-
-    cancelModes(): void {
-        if (this.state.redeployArmyId !== null) {
-            this.state.redeployArmyId = null;
-            this.emit({ type: "state" });
-        }
     }
 
     // ---- army bookkeeping ----
@@ -137,23 +77,5 @@ export class GameCore {
         state.armies.delete(army.id);
         if (countLoss && army.nation === 0) state.stats.losses += army.regiments.length;
         if (countLoss) this.emit({ type: "army-lost", armyId: army.id, province: army.province, nationId: army.nation });
-        for (let i = state.battles.length - 1; i >= 0; i--) {
-            const battle = state.battles[i];
-            if (battle.attackerId === army.id) state.battles.splice(i, 1);
-            else if (battle.defenderId === army.id) battle.defenderId = null;
-        }
-        if (state.selectedArmyId === army.id) state.selectedArmyId = null;
-        if (state.redeployArmyId === army.id) state.redeployArmyId = null;
-    }
-
-    /** Fold the moving army into the stationed one; org is strength-weighted. */
-    mergeArmies(moving: Army, target: Army): void {
-        const total = moving.regiments.length + target.regiments.length;
-        target.org = Math.round(
-            (target.org * target.regiments.length + moving.org * moving.regiments.length) / total,
-        );
-        target.regiments.push(...moving.regiments);
-        this.removeArmy(moving, false);
-        if (this.state.selectedArmyId === moving.id) this.state.selectedArmyId = target.id;
     }
 }

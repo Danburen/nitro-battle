@@ -117,7 +117,6 @@ export function joinAlliance(core: GameCore, alliance: Alliance, nationId: numbe
             core.emit({ type: "war", aggressor: nationId, defender: enemy.id });
         }
     }
-    core.invalidateReach();
     core.log(t("game.alliance.joined", { nation: core.nationChip(nationId), leader: core.nationChip(alliance.leader) }), "diplo", nationId);
     core.emit({ type: "state" });
     return true;
@@ -137,7 +136,6 @@ export function leaveAlliance(core: GameCore, nationId: number): boolean {
         alliance.leader = alliance.members[0];
     }
     setPairCooldown(state, nationId, oldLeader, state.day + ALLIANCE_INVITE_COOLDOWN);
-    core.invalidateReach();
     core.log(t("game.alliance.left", { nation: core.nationChip(nationId) }), "diplo", nationId);
     core.emit({ type: "state" });
     return true;
@@ -284,7 +282,6 @@ export function tickAlliances(core: GameCore): void {
         }
     }
     if (changed) {
-        core.invalidateReach();
         core.emit({ type: "state" });
     }
 }

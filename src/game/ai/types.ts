@@ -13,9 +13,6 @@ export interface AIController {
 }
 
 export type AIAction =
-    | { kind: "move"; armyId: number; to: number }
-    | { kind: "attack"; armyId: number; target: number }
-    | { kind: "march"; armyId: number; target: number; attack: boolean }
     | { kind: "train"; province: number | null; unitKind: UnitKind }
     | { kind: "build"; stateId: number; buildingKind: StateBuildingKind }
     | { kind: "provinceBuild"; site: number; buildingKind: ProvinceBuildingKind }

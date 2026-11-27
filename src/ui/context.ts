@@ -29,9 +29,7 @@ export interface UIDispatchOptions {
 export interface UIContext {
     readonly engine: GameEngine;
     readonly sound: SoundManager;
-    readonly multiSelect: Set<number>;
-    readonly splitChecks: Set<number>;
-    toast(text: string): void;
+        toast(text: string): void;
     /** Router for the shared confirm/cancel card. */
     confirm(spec: ConfirmSpec): void;
     refresh(): void;

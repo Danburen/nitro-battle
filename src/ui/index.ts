@@ -17,21 +17,19 @@ import { GlobalTooltip } from "./tooltip.ts";
 import { BattleReport } from "./report/feed.ts";
 import { Briefing } from "./briefing.ts";
 import { IntelPanel } from "./panels/intel.ts";
-import { ArmyListPanel } from "./panels/armies.ts";
-import { ArmyDetailPanel } from "./panels/armyDetail.ts";
 import { DeployPanel } from "./panels/deploy.ts";
 import { ConstructionPanel } from "./panels/construction.ts";
 import { PolicyPanel } from "./panels/policy.ts";
 import { DiplomacyPanel } from "./panels/diplomacy.ts";
 import { TradePanel } from "./panels/trade.ts";
 import { ExpansionPanel } from "./panels/expansion.ts";
-import { renderModeBar } from "./modeBar.ts";
 import { showEndOverlay } from "./endOverlay.ts";
-import { handleArmyAction, handleDiplomacyAction, handleEconomyAction } from "./actions.ts";
+import { handleDiplomacyAction, handleEconomyAction } from "./actions.ts";
 import { ConfirmDialog } from "./confirm.ts";
 import type { ConfirmSpec } from "./confirm.ts";
 import { MapLegend } from "./mapLegend.ts";
 import { setGameText } from "./text.ts";
+import { defaultHint } from "./layout.ts";
 import { t } from "../i18n/index.ts";
 import { clearActiveTokenContext, setActiveTokenContext } from "./tokenValues.ts";
 
@@ -41,8 +39,6 @@ const TAB_IDS: readonly TabId[] = ["deploy", "construction", "policy", "diplomac
 export class GameUI implements UIContext {
     readonly engine: GameEngine;
     readonly sound: SoundManager;
-    readonly multiSelect = new Set<number>();
-    readonly splitChecks = new Set<number>();
     private readonly callbacks: UICallbacks;
     private readonly unsubscribe: () => void;
     private toastTimer = 0;
@@ -60,8 +56,6 @@ export class GameUI implements UIContext {
     private readonly feed: BattleReport;
     readonly briefing: Briefing;
     private readonly intel: IntelPanel;
-    private readonly armies: ArmyListPanel;
-    private readonly detail: ArmyDetailPanel;
     private readonly deploy: DeployPanel;
     private readonly construction: ConstructionPanel;
     private readonly policy: PolicyPanel;
@@ -72,13 +66,10 @@ export class GameUI implements UIContext {
     private readonly legend: MapLegend;
 
     private readonly hud = document.querySelector<HTMLElement>("#hud") as HTMLElement;
-    private readonly armyPanelEl = document.querySelector<HTMLElement>("#army-panel") as HTMLElement;
-    private readonly narrowQuery = window.matchMedia("(max-width: 820px)");
     private readonly infoTabs = document.querySelector<HTMLElement>("#info-tabs") as HTMLElement;
     private readonly dockToggleBtn = document.querySelector<HTMLButtonElement>("#btn-dock") as HTMLButtonElement;
     private readonly endOverlay = document.querySelector<HTMLElement>("#end-overlay") as HTMLElement;
     private readonly toastEl = document.querySelector<HTMLElement>("#toast") as HTMLElement;
-    private readonly modeBar = document.querySelector<HTMLElement>("#mode-bar") as HTMLElement;
     private readonly hintEl = document.querySelector<HTMLElement>("#hint") as HTMLElement;
     private readonly menuBtn = document.querySelector<HTMLButtonElement>("#btn-menu");
     private readonly homeBtn = document.querySelector<HTMLButtonElement>("#btn-home");
@@ -103,7 +94,6 @@ export class GameUI implements UIContext {
                 const site = ui.engine.state.selected;
                 return site === null ? null : ui.engine.state.provinces[site]?.stateId ?? null;
             },
-            get selectedArmyId() { return ui.engine.state.selectedArmyId; },
         });
 
         this.tooltip = new GlobalTooltip();
@@ -114,8 +104,6 @@ export class GameUI implements UIContext {
             start: (nationId) => this.callbacks.onBriefingEnd(nationId),
         });
         this.intel = new IntelPanel(engine);
-        this.armies = new ArmyListPanel(engine, this.multiSelect);
-        this.detail = new ArmyDetailPanel(engine, this.splitChecks);
         this.deploy = new DeployPanel(engine);
         this.construction = new ConstructionPanel(engine);
         this.policy = new PolicyPanel(engine);
@@ -136,8 +124,6 @@ export class GameUI implements UIContext {
         window.addEventListener("resize", this.onSettingsResize);
 
         this.hud.addEventListener("click", this.handleSidebar);
-        this.narrowQuery.addEventListener("change", this.handleNarrow);
-        if (this.narrowQuery.matches) this.armyPanelEl.classList.add("army-collapsed");
         this.hud.addEventListener("change", this.handleSidebarChange);
         this.hud.addEventListener("input", this.handleSidebarInput);
         this.infoTabs.addEventListener("click", this.handleTabs);
@@ -166,7 +152,6 @@ export class GameUI implements UIContext {
         window.removeEventListener("resize", this.onSettingsResize);
         this.closeSettings();
         this.hud.removeEventListener("click", this.handleSidebar);
-        this.narrowQuery.removeEventListener("change", this.handleNarrow);
         this.hud.removeEventListener("change", this.handleSidebarChange);
         this.hud.removeEventListener("input", this.handleSidebarInput);
         this.infoTabs.removeEventListener("click", this.handleTabs);
@@ -186,13 +171,9 @@ export class GameUI implements UIContext {
         this.legend.set(null);
         this.tooltip.destroy();
         window.clearTimeout(this.toastTimer);
-        this.detail.hide();
         this.dockCollapsed = false;
         this.hud.classList.remove("dock-collapsed", "command-mode", "construction-mode", "layers-collapsed", "focus-mode");
-        this.armyPanelEl.classList.remove("army-collapsed");
         setGameText(this.dockToggleBtn, "«", "plain");
-        this.multiSelect.clear();
-        this.splitChecks.clear();
     }
 
     toast(text: string): void {
@@ -257,27 +238,9 @@ export class GameUI implements UIContext {
 
     /** Housekeeping runs up front; panel renders are returned as individual slices. */
     private buildRefreshTasks(): (() => void)[] {
-        const state = this.engine.state;
         // Briefing shows the map and one nation panel only; keep hidden HUD work off the frame.
         if (this.briefing?.isActive()) return [() => this.topbar.render()];
-        for (const id of [...this.multiSelect]) {
-            if (!state.armies.has(id)) this.multiSelect.delete(id);
-        }
-        const army = this.engine.selectedArmy();
-        if (army) {
-            const valid = new Set(army.regiments.map((regiment) => regiment.id));
-            for (const id of [...this.splitChecks]) {
-                if (!valid.has(id)) this.splitChecks.delete(id);
-            }
-        } else {
-            this.splitChecks.clear();
-        }
-
-        // Command mode: an army is selected, so the global dock and province
-        // panel yield the left side to the detail window.
-        const commandMode = army !== null && state.winner === null;
-        this.hud.classList.toggle("command-mode", commandMode);
-        if (commandMode && this.mapMode !== "province") this.changeMapMode("province");
+        this.hud.classList.remove("command-mode");
 
         const tasks: (() => void)[] = [
             () => this.topbar.render(),
@@ -286,8 +249,6 @@ export class GameUI implements UIContext {
         if (this.activeTab === "construction") tasks.push(() => this.construction.render());
         tasks.push(
             () => this.renderLayers(),
-            () => this.armies.render(),
-            () => this.detail.render(),
             () => this.deploy.render(),
             () => this.policy.render(),
             () => this.diplomacy.render(),
@@ -328,12 +289,11 @@ export class GameUI implements UIContext {
     };
 
     isConstructionOpen(): boolean {
-        return this.activeTab === "construction" && !this.dockCollapsed && this.engine.selectedArmy() === null;
+        return this.activeTab === "construction" && !this.dockCollapsed;
     }
 
     isClaimsOpen(): boolean {
-        return this.activeTab === "expansion" && !this.dockCollapsed && this.mapMode === "state"
-            && this.engine.selectedArmy() === null;
+        return this.activeTab === "expansion" && !this.dockCollapsed && this.mapMode === "state";
     }
 
     handleClaimsMapClick(site: number): void {
@@ -373,11 +333,11 @@ export class GameUI implements UIContext {
             ? selected : null;
         this.callbacks.onConstructionView(kind);
         this.callbacks.onClaimsOverlay(this.isClaimsOpen() && this.engine.state.winner === null);
-        renderModeBar(this.engine, this.modeBar, this.hintEl, this.hud.classList.contains("command-mode"));
         const area = t(this.mapMode === "state" ? "misc.common.area.state" : "misc.common.area.province");
         if (kind) setGameText(this.hintEl, t("misc.index.hint.selected", { name: BUILDING_PROFILES[kind].name, area }), "plain");
         else if (this.isConstructionOpen() && this.engine.state.winner === null) setGameText(this.hintEl, t("misc.index.hint.selectFirst", { area }), "plain");
         else if (this.isClaimsOpen() && this.engine.state.winner === null) setGameText(this.hintEl, t("misc.index.hint.claims"), "plain");
+        else setGameText(this.hintEl, defaultHint(), "plain");
         this.syncMapLegend();
     }
 
@@ -518,15 +478,6 @@ export class GameUI implements UIContext {
         if (this.construction.selectedKind && BUILDING_PROFILES[this.construction.selectedKind].scope !== mode) this.construction.selectedKind = null;
         this.construction.scope = mode;
         this.callbacks.onMapMode(mode);
-        if (mode === "state") {
-            this.multiSelect.clear();
-            this.splitChecks.clear();
-            if (this.engine.state.selectedArmyId !== null || this.engine.state.redeployArmyId !== null) {
-                this.engine.select(this.engine.state.selected);
-                return;
-            }
-            this.armies.render();
-        }
         this.intel.render(mode);
         if (this.activeTab === "construction") this.construction.render();
         this.renderLayers();
@@ -631,14 +582,7 @@ export class GameUI implements UIContext {
             this.engine.setTrainDestination(orderId, site);
             return;
         }
-        const check = target.closest<HTMLInputElement>("[data-action='split-check']");
-        if (check) {
-            const regimentId = Number(check.dataset.reg);
-            if (check.checked) this.splitChecks.add(regimentId);
-            else this.splitChecks.delete(regimentId);
-            this.detail.render();
-        }
-    };
+        };
 
     private readonly handleEndOverlay = (event: Event): void => {
         const target = (event.target as HTMLElement).closest<HTMLElement>("[data-end]");
@@ -691,18 +635,10 @@ export class GameUI implements UIContext {
             }
             if (this.cancelConstructionSelection()) return;
             if (this.isClaimsOpen() && this.expansion.clearFocus()) return;
-            this.multiSelect.clear();
-            this.splitChecks.clear();
-            this.engine.cancelModes();
             this.engine.select(null);
         } else if (event.key === "m" || event.key === "M") {
             this.topbar.toggleSound();
         }
-    };
-
-    private readonly handleNarrow = (event: MediaQueryListEvent): void => {
-        this.armyPanelEl.classList.toggle("army-collapsed", event.matches);
-        this.armies.render();
     };
 
     /** Policy chips go through a confirm card; a pending target click cancels its switch. */
@@ -895,15 +831,6 @@ export class GameUI implements UIContext {
             if (collapsed !== this.dockCollapsed) this.dispatchAction("dock-toggle");
             return true;
         }
-        if (action === "army-toggle") {
-            this.armyPanelEl.classList.toggle("army-collapsed");
-            this.sound.play("select");
-            this.armies.render();
-            return true;
-        }
-        if (action === "select-army" && !options.ctrlKey && !options.metaKey && this.narrowQuery.matches) {
-            this.armyPanelEl.classList.add("army-collapsed");
-        }
         if (action === "layers-toggle") {
             this.layersCollapsed = !this.layersCollapsed;
             this.renderLayers();
@@ -1025,7 +952,6 @@ export class GameUI implements UIContext {
 
         if (handleEconomyAction(this, action, data)) return true;
         if (this.trade.handleAction(action, data)) return true;
-        if (handleDiplomacyAction(this, action, data, options)) return true;
-        return handleArmyAction(this, action, data, options);
+        return handleDiplomacyAction(this, action, data, options);
     }
 }

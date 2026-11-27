@@ -15,7 +15,6 @@ export interface TokenValueContext {
     readonly player: number;
     readonly selectedSite?: number | null;
     readonly selectedState?: number | null;
-    readonly selectedArmyId?: number | null;
 }
 
 export type TokenValue = number | string | null;
@@ -86,8 +85,8 @@ export function createTokenValueResolver(context: TokenValueContext): TokenValue
             case "admin":
                 return region?.buildings.reduce((total, kind) => total + (kind === "admin" ? 1 : 0), 0) ?? null;
             case "organization": {
-                const armyId = context.selectedArmyId ?? state.selectedArmyId;
-                return armyId === null || armyId === undefined ? null : state.armies.get(armyId)?.org ?? null;
+                const armyId = site === null || site === undefined ? null : state.armyAt[site] ?? null;
+                return armyId === null ? null : state.armies.get(armyId)?.org ?? null;
             }
             default:
                 return null;

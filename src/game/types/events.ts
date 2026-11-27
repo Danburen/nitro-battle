@@ -1,12 +1,11 @@
 /** Engine events emitted to the renderer/UI layer. */
 import type { BuildingKind } from "./building.ts";
-import type { CombatOutcome } from "./organization.ts";
 import type { UnitKind } from "./unit.ts";
+
+export type CombatOutcome = "ongoing" | "repelled" | "captured";
 
 export type EngineEvent =
     | { type: "state" }
-    | { type: "move"; armyId: number; path: number[] }
-    | { type: "battle-start"; province: number; attackerNation: number; defenderNation: number }
     | {
           type: "combat";
           province: number;

@@ -39,13 +39,6 @@ export function warGoalProgress(state: GameState, war: War): { held: number; tot
 
 function endPairWar(core: GameCore, a: number, b: number): void {
     const state = core.state;
-    for (let i = state.battles.length - 1; i >= 0; i--) {
-        const battle = state.battles[i];
-        const attacker = state.armies.get(battle.attackerId)?.nation;
-        const defender = battle.defenderId === null ? state.provinces[battle.province].owner
-            : state.armies.get(battle.defenderId)?.nation;
-        if ((attacker === a && defender === b) || (attacker === b && defender === a)) state.battles.splice(i, 1);
-    }
     setWar(state, a, b, false);
     for (let i = state.wars.length - 1; i >= 0; i--) {
         const war = state.wars[i];
@@ -115,16 +108,12 @@ function repatriateArmies(core: GameCore): void {
     for (const army of displaced) if (state.armyAt[army.province] === army.id) state.armyAt[army.province] = null;
     for (const army of displaced) {
         const destinations = state.provinces.filter((province) => province.owner === army.nation &&
-            state.terrain.passable[province.site] && !core.battleAt(province.site));
+            state.terrain.passable[province.site]);
         destinations.sort((a, b) => periodicDistance(state.graph.sites[a.site], state.graph.sites[army.province], state.graph.domain) -
             periodicDistance(state.graph.sites[b.site], state.graph.sites[army.province], state.graph.domain) || a.site - b.site);
         const empty = destinations.find((province) => state.armyAt[province.site] === null);
-        army.march = null;
-        army.moved = true;
-        army.acted = true;
         if (empty) {
             core.placeArmy(army, empty.site);
-            if (state.selectedArmyId === army.id) state.selected = empty.site;
             core.log(t("game.settlement.withdraw", {
                 nation: core.nationChip(army.nation), army: army.name, province: empty.name,
             }), "diplo", army.nation);
@@ -139,9 +128,6 @@ function repatriateArmies(core: GameCore): void {
             target.org = Math.round((target.org * target.regiments.length + army.org * regiments.length) /
                 (target.regiments.length + regiments.length));
             target.regiments.push(...regiments);
-            target.march = null;
-            target.moved = true;
-            target.acted = true;
         }
         const manpower = army.regiments.reduce((sum, regiment) =>
             sum + UNIT_PROFILES[regiment.kind].manpowerCost * regiment.hp / MAX_HP, 0);
@@ -151,11 +137,6 @@ function repatriateArmies(core: GameCore): void {
         }), "diplo", army.nation);
         core.removeArmy(army, false);
     }
-    for (const army of state.armies.values()) {
-        if (!army.march) continue;
-        const target = state.provinces[army.march.target];
-        if (army.march.attack ? !isHostileProvince(state, army.nation, target.site) : target.owner !== army.nation) army.march = null;
-    }
     for (const nation of state.nations) if (nation.alive) clampResources(nation, resourceRates(state, nation.id));
 }
 
@@ -163,12 +144,6 @@ function finishTreaty(core: GameCore, originalOwners: number[], originalCapitals
     const state = core.state;
     retireLandlessNations(core);
     relocateCapitals(state);
-    for (let i = state.battles.length - 1; i >= 0; i--) {
-        const battle = state.battles[i];
-        const attacker = state.armies.get(battle.attackerId);
-        const controller = state.provinces[battle.province].owner;
-        if (!attacker || !isAtWar(state, attacker.nation, controller)) state.battles.splice(i, 1);
-    }
     repatriateArmies(core);
     for (const province of state.provinces) {
         refreshGarrisonCapacity(state, province);
@@ -177,8 +152,6 @@ function finishTreaty(core: GameCore, originalOwners: number[], originalCapitals
         }
     }
     state.supplyDirty = true;
-    state.redeployArmyId = null;
-    core.invalidateReach();
     advanceDiplomacy(core);
     core.emit({ type: "peace", a, b });
     checkVictory(core);

@@ -24,8 +24,7 @@ export function transferControl(core: GameCore, site: number, nation: number): b
     const region = state.states[province.stateId];
     for (const member of region?.provinces ?? [site]) refreshGarrisonCapacity(state, state.provinces[member]);
     state.supplyDirty = true;
-    core.invalidateReach();
-    return true;
+        return true;
 }
 
 export function claimProvince(core: GameCore, site: number, nation: number, previousOwner: number, battle?: BattleReport): void {

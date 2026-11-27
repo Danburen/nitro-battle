@@ -269,7 +269,6 @@ export function processConstruction(core: GameCore): void {
             case "infrastructure":
                 region.infrastructure++;
                 state.supplyDirty = true;
-                core.invalidateReach();
                 break;
             case "farm": case "admin": region.buildings.push(order.kind); break;
             case "supply": province.buildings.push(order.kind); state.supplyDirty = true; break;

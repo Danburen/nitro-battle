@@ -1,7 +1,6 @@
 import type { GameEngine } from "../../game/engine.ts";
 import type { GameState } from "../../game/types/state.ts";
 import { isAtWar } from "../../game/diplomacy.ts";
-import { battleForecast } from "../../game/battle.ts";
 import { infrastructureBuildMultiplier, infrastructureLevel, infrastructureMoveMultiplier, infrastructureOutputMultiplier, infrastructureSupplyMultiplier, occupationGrowth, provinceBuildingCapacity, provinceDefense, provinceFundsIncome, provinceResourceOutput, resourceYieldMultiplier, stateBuildingCapacity } from "../../game/economy.ts";
 import { supplyLevel } from "../../game/supply.ts";
 import { provincePopulationView } from "../../game/stability.ts";
@@ -9,7 +8,6 @@ import { armyAt, entryCost, regimentHp } from "../../game/rules.ts";
 import { BUILDING_PROFILES, INFRASTRUCTURE_MAX, PROVINCE_BUILDING_KINDS, STATE_BUILDING_KINDS } from "../../game/types/building.ts";
 import { NEUTRAL } from "../../game/types/world.ts";
 import { ORG_MAX } from "../../game/types/organization.ts";
-import type { Battle } from "../../game/types/organization.ts";
 import type { BuildingKind } from "../../game/types/building.ts";
 import type { Province } from "../../game/types/entities.ts";
 import { BIOME_ZH, ownerColor, ownerName } from "../common.ts";
@@ -63,8 +61,6 @@ function intelTexts() {
         fieldStateCenter: ["field.stateCenter"],
         fieldControl: ["field.control"],
         stateGoConstruction: ["state.goConstruction"],
-        battleStop: ["battle.stop"],
-        battleGarrison: ["battle.garrison"],
     });
     return {
         ...s,
@@ -99,9 +95,6 @@ function intelTexts() {
             t("panels.intel.state.rules", params),
         stateMultiplier: (effects: string) => t("panels.intel.state.multiplier", { effects }),
         stateControlValue: (value: string) => t("panels.intel.state.controlValue", { value }),
-        battleHeading: (params: { round: number; cancel: string }) => t("panels.intel.battle.heading", params),
-        battleWithGarrison: (name: string) => t("panels.intel.battle.withGarrison", { name }),
-        battleOdds: (attack: number, defense: number) => t("panels.intel.battle.odds", { attack, defense }),
     };
 }
 type IntelTexts = ReturnType<typeof intelTexts>;
@@ -200,26 +193,6 @@ function stateSectionHtml(state: GameState, province: Province, text: IntelTexts
     </div>`;
 }
 
-function battleHtml(state: GameState, battle: Battle, text: IntelTexts): string {
-    const attacker = state.armies.get(battle.attackerId);
-    const defender = battle.defenderId !== null ? state.armies.get(battle.defenderId) : null;
-    const forecast = attacker ? battleForecast(state, attacker, battle.province) : null;
-    const cancelButton = attacker && attacker.nation === 0
-        ? html`<button class="btn btn-sm" data-action="attack-cancel">${text.battleStop}</button>` : "";
-    const heading = text.battleHeading({ round: battle.rounds + 1, cancel: cancelButton });
-    const odds = forecast
-        ? html`<div class="assault-odds">${text.battleOdds(Math.round(forecast.attackPower), Math.round(forecast.defensePower))}</div>`
-        : "";
-    return html`<div class="battle-box">
-        <div class="battle-head">${rawHtml(heading)}</div>
-        <div class="battle-sides">
-            <span style="--pc:${ownerColor(state, attacker?.nation ?? NEUTRAL)}">${attacker?.name ?? "?"}（${ownerName(state, attacker?.nation ?? NEUTRAL)}）</span>
-            <span class="battle-vs">vs</span><span>${defender ? text.battleWithGarrison(defender.name) : text.battleGarrison}（${ownerName(state, state.provinces[battle.province].owner)}）</span>
-        </div>
-        ${rawHtml(odds)}
-    </div>`;
-}
-
 export interface IntelViewContext {
     readonly state: GameState;
     readonly mode: "province" | "state";
@@ -258,7 +231,6 @@ export function intelView(ctx: IntelViewContext): PanelView {
     const profile = BIOME_PROFILES[biome];
     const snow = state.terrain.snowCover[site];
     const occupant = armyAt(state, site);
-    const battle = state.battles.find((entry) => entry.province === site) ?? null;
     const kindLabel = province.isCapital ? text.kindCapital : province.isCity ? text.kindCity : text.areaProvince;
     const snowText = snow === 2 ? text.weatherDeepSnow : snow === 1 ? text.weatherLightSnow : text.weatherNone;
     const supply = supplyLevel(state, site);
@@ -282,7 +254,6 @@ export function intelView(ctx: IntelViewContext): PanelView {
         ? html`<span class="tag">${isAtWar(state, 0, province.owner) ? text.war : text.peace}</span>` : "";
     const tendencyRow = province.owner > 0 ? html`<div class="kv-row"><dt>${text.fieldTendency}</dt><dd>${rawHtml(tendencyBadge(state.nations[province.owner], state))}</dd></div>` : "";
     const modifiers = modifiersHtml(state, province, text);
-    const battleBox = battle ? battleHtml(state, battle, text) : "";
     const stateSection = stateSectionHtml(state, province, text);
     const facilities = provinceBuildingsHtml(state, province, text);
 
@@ -305,7 +276,7 @@ export function intelView(ctx: IntelViewContext): PanelView {
                 <div class="kv-row"><dt>${text.fieldEntryCost}</dt><dd>${state.terrain.passable[site] ? entryCost(state, site).toFixed(2) : text.impassable}</dd></div>
                 <div class="kv-row"><dt>${text.fieldWeather}</dt><dd>${snowText}</dd></div>
             </dl>
-            ${rawHtml(presence)}${rawHtml(battleBox)}${rawHtml(stateSection)}${rawHtml(facilities)}`,
+            ${rawHtml(presence)}${rawHtml(stateSection)}${rawHtml(facilities)}`,
     };
 }
 

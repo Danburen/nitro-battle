@@ -77,10 +77,6 @@ function guideSections(): readonly GuideSection[] {
                     body: t("guide.step.garrison.body"),
                 },
                 {
-                    title: t("guide.step.redeploy.title"),
-                    body: t("guide.step.redeploy.body"),
-                },
-                {
                     title: t("guide.step.supply.title"),
                     body: t("guide.step.supply.body"),
                 },

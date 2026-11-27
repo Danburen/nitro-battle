@@ -1,19 +1,11 @@
 import { periodicDistance } from "./terrain/voronoi/index.ts";
-import { hasMilitaryAccess } from "./access.ts";
 import { isAtWar } from "./diplomacy.ts";
 import { infrastructureLevel, infrastructureMoveMultiplier } from "./economy.ts";
 import { NEUTRAL } from "./types/world.ts";
-import { REGIMENT_CAP, UNIT_PROFILES } from "./types/unit.ts";
+import { REGIMENT_CAP } from "./types/unit.ts";
 import type { Army, Regiment } from "./types/organization.ts";
 import type { GameState } from "./types/state.ts";
 import type { UnitKind } from "./types/unit.ts";
-
-export interface ReachResult {
-    /** province -> accumulated movement cost */
-    cost: Map<number, number>;
-    /** province -> previous province on the cheapest route */
-    parent: Map<number, number>;
-}
 
 export function armyAt(state: GameState, site: number): Army | null {
     const id = state.armyAt[site];
@@ -34,15 +26,6 @@ export function regimentCountByKind(army: Army): Map<UnitKind, number> {
     return counts;
 }
 
-/** An army marches at the speed of its slowest regiment. */
-export function armyMp(army: Army): number {
-    let mp = Infinity;
-    for (const regiment of army.regiments) {
-        mp = Math.min(mp, UNIT_PROFILES[regiment.kind].mp);
-    }
-    return Number.isFinite(mp) ? mp : 0;
-}
-
 export function orgFactor(org: number): number {
     return 0.4 + 0.6 * Math.max(0, Math.min(1, org / 100));
 }
@@ -57,139 +40,6 @@ export function isHostileProvince(state: GameState, nationId: number, site: numb
     const owner = state.provinces[site].owner;
     if (owner === nationId || owner === NEUTRAL) return false;
     return isAtWar(state, nationId, owner);
-}
-
-/**
- * One Dijkstra flood per army per day. Movement stays inside friendly
- * territory free of other armies; hostile provinces are entered by battle.
- */
-export function reachable(state: GameState, army: Army): ReachResult {
-    const result: ReachResult = { cost: new Map(), parent: new Map() };
-    if (army.moved || army.acted || army.regiments.length === 0) return result;
-
-    const budget = armyMp(army);
-    const start = army.province;
-    result.cost.set(start, 0);
-    const open: { site: number; cost: number }[] = [{ site: start, cost: 0 }];
-
-    while (open.length > 0) {
-        let bestIndex = 0;
-        for (let i = 1; i < open.length; i++) {
-            if (open[i].cost < open[bestIndex].cost) bestIndex = i;
-        }
-        const current = open.splice(bestIndex, 1)[0];
-        if (current.cost > (result.cost.get(current.site) ?? Infinity)) continue;
-
-        for (const edge of state.graph.adjacency[current.site]) {
-            const next = edge.site;
-            if (!state.terrain.passable[next]) continue;
-            const owner = state.provinces[next].owner;
-            if (owner !== army.nation && !hasMilitaryAccess(state, army.nation, owner)) continue;
-            const occupant = armyAt(state, next);
-            if (occupant && occupant.id !== army.id) {
-                // Own armies may merge when there is room; enemies block.
-                if (occupant.nation !== army.nation) continue;
-                if (occupant.regiments.length + army.regiments.length > REGIMENT_CAP) continue;
-            }
-
-            const nextCost = current.cost + entryCost(state, next);
-            if (nextCost > budget + 1e-9) continue;
-            if (nextCost >= (result.cost.get(next) ?? Infinity)) continue;
-
-            result.cost.set(next, nextCost);
-            result.parent.set(next, current.site);
-            open.push({ site: next, cost: nextCost });
-        }
-    }
-
-    result.cost.delete(start);
-    return result;
-}
-
-export function pathTo(reach: ReachResult, target: number): number[] {
-    const path: number[] = [target];
-    let current = target;
-    while (reach.parent.has(current)) {
-        current = reach.parent.get(current) as number;
-        path.push(current);
-    }
-    return path.reverse();
-}
-
-/**
- * Full-route Dijkstra over own passable provinces for multi-day marches.
- * Returns the path excluding the start, or null when unreachable.
- */
-export function marchPath(state: GameState, army: Army, target: number): number[] | null {
-    if (target === army.province) return null;
-    const passableOwn = (site: number): boolean => {
-        const owner = state.provinces[site].owner;
-        return state.terrain.passable[site] === 1 &&
-            (owner === army.nation || hasMilitaryAccess(state, army.nation, owner) || site === target);
-    };
-
-    const cost = new Map<number, number>([[army.province, 0]]);
-    const parent = new Map<number, number>();
-    const open: { site: number; cost: number }[] = [{ site: army.province, cost: 0 }];
-
-    while (open.length > 0) {
-        let bestIndex = 0;
-        for (let i = 1; i < open.length; i++) {
-            if (open[i].cost < open[bestIndex].cost) bestIndex = i;
-        }
-        const current = open.splice(bestIndex, 1)[0];
-        if (current.site === target) {
-            const path: number[] = [];
-            let node = target;
-            while (node !== army.province) {
-                path.push(node);
-                node = parent.get(node) as number;
-            }
-            return path.reverse();
-        }
-        if (current.cost > (cost.get(current.site) ?? Infinity)) continue;
-
-        for (const edge of state.graph.adjacency[current.site]) {
-            const next = edge.site;
-            if (!passableOwn(next)) continue;
-            if (next !== target) {
-                const occupant = armyAt(state, next);
-                if (occupant && occupant.nation !== army.nation) continue;
-            }
-            const nextCost = current.cost + entryCost(state, next);
-            if (nextCost >= (cost.get(next) ?? Infinity)) continue;
-            cost.set(next, nextCost);
-            parent.set(next, current.site);
-            open.push({ site: next, cost: nextCost });
-        }
-    }
-    return null;
-}
-
-/** Adjacent hostile provinces this army may attack. */
-export function attackTargets(state: GameState, army: Army): number[] {
-    if (army.acted || army.regiments.length === 0) return [];
-    const targets: number[] = [];
-    for (const edge of state.graph.adjacency[army.province]) {
-        if (!state.terrain.passable[edge.site]) continue;
-        if (!isHostileProvince(state, army.nation, edge.site)) continue;
-        targets.push(edge.site);
-    }
-    return targets;
-}
-
-/** Own provinces a strategic redeployment may target. */
-export function redeployTargets(state: GameState, army: Army): Set<number> {
-    const targets = new Set<number>();
-    if (army.moved || army.acted) return targets;
-    for (const province of state.provinces) {
-        if (province.site === army.province) continue;
-        if (province.owner !== army.nation) continue;
-        if (!state.terrain.passable[province.site]) continue;
-        if (armyAt(state, province.site)) continue;
-        targets.add(province.site);
-    }
-    return targets;
 }
 
 /** Army count limit, bounded by the tax base. */

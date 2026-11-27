@@ -2,12 +2,12 @@
 
 import { t } from "../i18n/index.ts";
 import type { GameCore } from "./core.ts";
-import { decideAllianceInvite, decideJoinRequest } from "./alliance.ts";
-import { decideTrade, TRADE_AGREEMENT_DAYS } from "./trade.ts";
-import { acceptDiplomaticRequest, decideAid, decideUpgrade, decideVassalDemand, decideVassalOffer } from "./vassal.ts";
+import { decideAllianceInvite, decideJoinRequest, joinAlliance } from "./alliance.ts";
+import { acceptTradeRequest, decideTrade, TRADE_AGREEMENT_DAYS } from "./trade.ts";
 import { REQUEST_COOLDOWN_DAYS, REQUEST_LABEL, setRequestCooldown } from "./requests.ts";
 import type { DiplomaticDecision } from "./types/decision.ts";
 import type { DiplomaticRequest } from "./types/diplomacy.ts";
+import type { GameState } from "./types/state.ts";
 
 /** Re-run the same willingness rules the immediate AI path would have used. */
 function decisionFor(request: DiplomaticRequest, core: GameCore): DiplomaticDecision | null {
@@ -22,14 +22,6 @@ function decisionFor(request: DiplomaticRequest, core: GameCore): DiplomaticDeci
             return request.to === 0
                 ? decideJoinRequest(state, request.from, 0)
                 : decideAllianceInvite(state, 0, request.to);
-        case "vassalize":
-            return request.demand
-                ? decideVassalDemand(state, request.from, request.to)
-                : decideVassalOffer(state, request.to, request.from, request.vassalType ?? "cooperative");
-        case "aid":
-            return decideAid(state, request.from, request.to);
-        case "upgrade":
-            return decideUpgrade(state, request.to, request.from);
         default:
             return null;
     }

@@ -10,7 +10,7 @@ const PANELS: readonly TabId[] = ["deploy", "construction", "policy", "diplomacy
 export function registerUICommands(registry: CommandRegistry<DebugContext>): void {
     registry.register({
         name: "panel",
-        usage: "panel <deploy|construction|policy|diplomacy|trade|expansion|armies> [nation=2] [declare] [manage] [kind=farm] [site=12]",
+        usage: "panel <deploy|construction|policy|diplomacy|trade|expansion> [nation=2] [declare] [manage] [kind=farm] [site=12]",
         help: "唤起面板及常见子状态；子动作复用真实 UI 分发路径",
         run(args, ctx) {
             const ui = requireUI(ctx);
@@ -18,10 +18,6 @@ export function registerUICommands(registry: CommandRegistry<DebugContext>): voi
             const options = parseOptions(args.slice(1));
             const flags = new Set(args.slice(1));
 
-            if (panel === "armies") {
-                ui.dispatchAction("army-toggle");
-                return "已切换军团列表展开状态";
-            }
             if (!panel || !PANELS.includes(panel as TabId)) throw new Error(`未知面板：${panel ?? "空"}`);
             ui.openPanel(panel as TabId);
 
